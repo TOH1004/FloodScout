@@ -37,6 +37,8 @@ import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { useRescue } from '../context/RescueContext';
 import type { VictimStatus } from '../context/RescueContext';
+import { type LayoutNode, type PanelId, removeNode, insertNode, hasPanel, getFirstPanelId } from '../utils/layoutTree';
+export type { PanelId, LayoutNode };
 
 // ─── Map Icons ────────────────────────────────────────────────────────────────
 const robotIcon = L.divIcon({
@@ -58,9 +60,6 @@ function MapClickHandler({ onMapClick }: { onMapClick: (lat: number, lng: number
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-export type PanelId = 'camera' | 'map' | 'navigation' | 'victims' | 'status' | 'controls' | 'log';
-type LayoutMode = 'auto' | 'split' | 'focus-left' | 'quad';
-
 interface PanelDef { id: PanelId; label: string; icon: React.ElementType }
 
 const PANEL_DEFS: PanelDef[] = [
@@ -102,29 +101,40 @@ function DockButton({
 // ─── Sortable Panel Wrapper ─────────────────────────────────────────────────────
 function SortablePanel({
   id, children, onClose, dropPosition,
-}: { id: PanelId; children: React.ReactNode; onClose: () => void; dropPosition?: 'before' | 'after' | null }) {
+}: { id: PanelId; children: React.ReactNode; onClose: () => void; dropPosition?: 'top' | 'bottom' | 'left' | 'right' | null }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id });
-  const style = {
+  const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.35 : 1,
     zIndex: isDragging ? 50 : 'auto',
+    height: '100%',
+    width: '100%',
+    display: 'flex',
+    flexDirection: 'column',
+    minHeight: 0,
+    minWidth: 0,
   };
   const def = PANEL_DEFS.find(p => p.id === id)!;
   return (
     <div
       ref={setNodeRef}
-      style={style as React.CSSProperties}
-      className="bg-white border border-[#E6DFD5] rounded-sm shadow-md flex flex-col overflow-hidden h-full min-h-0 relative"
+      style={style}
+      className="bg-white border border-[#E6DFD5] rounded-sm shadow-md flex flex-col overflow-hidden h-full w-full min-h-0 relative flex-1"
     >
-      {/* Drop-before indicator */}
-      {dropPosition === 'before' && (
-        <div className="absolute top-0 left-0 right-0 h-1 bg-[#162347] z-50 rounded-t-sm pointer-events-none" />
+      {/* Drop indicators for the 4 zones */}
+      {dropPosition === 'top' && (
+        <div className="absolute top-0 left-0 right-0 h-1.5 bg-[#162347] z-50 rounded-t-sm pointer-events-none" />
       )}
-      {/* Drop-after indicator */}
-      {dropPosition === 'after' && (
-        <div className="absolute bottom-0 left-0 right-0 h-1 bg-[#162347] z-50 rounded-b-sm pointer-events-none" />
+      {dropPosition === 'bottom' && (
+        <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-[#162347] z-50 rounded-b-sm pointer-events-none" />
+      )}
+      {dropPosition === 'left' && (
+        <div className="absolute top-0 bottom-0 left-0 w-1.5 bg-[#162347] z-50 rounded-l-sm pointer-events-none" />
+      )}
+      {dropPosition === 'right' && (
+        <div className="absolute top-0 bottom-0 right-0 w-1.5 bg-[#162347] z-50 rounded-r-sm pointer-events-none" />
       )}
       <div className="bg-[#FAF7F2] px-3 py-2 border-b border-[#E6DFD5] flex items-center justify-between shrink-0 select-none">
         <div className="flex items-center gap-2 text-[#162347]">
@@ -150,22 +160,22 @@ function SortablePanel({
 }
 
 // ─── Resize Handle ────────────────────────────────────────────────────────────
-// direction='horizontal' = column divider (sits between columns, needs full HEIGHT)
-// direction='vertical'   = row divider    (sits between rows,    needs full WIDTH)
-function ResizeHandle({ direction = 'horizontal' }: { direction?: 'horizontal' | 'vertical' }) {
+// orientation='horizontal' = column divider (sits between columns, needs full HEIGHT)
+// orientation='vertical'   = row divider    (sits between rows,    needs full WIDTH)
+function ResizeHandle({ orientation = 'horizontal' }: { orientation?: 'horizontal' | 'vertical' }) {
   return (
     <PanelResizeHandle
-      className={`group relative flex items-center justify-center bg-[#E6DFD5] hover:bg-[#BED6EE] data-[resize-handle-active]:bg-[#162347] transition-colors duration-150 ${
-        direction === 'horizontal'
-          ? 'w-2 h-full cursor-col-resize'
-          : 'h-2 w-full cursor-row-resize'
+      className={`group relative flex items-center justify-center bg-[#E6DFD5] hover:bg-[#BED6EE] data-[separator=active]:bg-[#162347] transition-colors duration-150 shrink-0 select-none ${
+        orientation === 'horizontal'
+          ? 'w-2.5 h-full cursor-col-resize'
+          : 'h-2.5 w-full cursor-row-resize'
       }`}
     >
       <div className={`flex items-center justify-center gap-0.5 pointer-events-none ${
-        direction === 'horizontal' ? 'flex-col' : 'flex-row'
+        orientation === 'horizontal' ? 'flex-col' : 'flex-row'
       }`}>
         {[0,1,2].map(i => (
-          <div key={i} className="w-1.5 h-1.5 rounded-full bg-[#162347]/30 group-hover:bg-[#162347]/70 group-data-[resize-handle-active]:bg-white transition-colors" />
+          <div key={i} className="w-1.5 h-1.5 rounded-full bg-[#162347]/30 group-hover:bg-[#162347]/70 group-data-[separator=active]:bg-white transition-colors" />
         ))}
       </div>
     </PanelResizeHandle>
@@ -244,25 +254,85 @@ function PanelContent({ id }: { id: PanelId }) {
 
     case 'navigation':
       return (
-        <div className="h-full flex flex-col items-center justify-center gap-6 p-6 overflow-y-auto">
-          <div className="grid grid-cols-3 gap-2 w-44">
-            <div /><button onClick={() => moveRobot(0, 0.0003, 0)} className="h-12 rounded bg-[#FAF7F2] hover:bg-[#162347] text-[#162347] hover:text-white border border-[#E6DFD5] flex items-center justify-center transition-all active:scale-95"><ArrowUp size={20} /></button><div />
-            <button onClick={() => moveRobot(-0.0003, 0, 270)} className="h-12 rounded bg-[#FAF7F2] hover:bg-[#162347] text-[#162347] hover:text-white border border-[#E6DFD5] flex items-center justify-center transition-all active:scale-95"><ArrowLeft size={20} /></button>
-            <button onClick={() => setOperatingMode('MANUAL')} className="h-12 rounded bg-[#162347] text-[#FAF7F2] font-mono text-[10px] font-bold">STOP</button>
-            <button onClick={() => moveRobot(0.0003, 0, 90)} className="h-12 rounded bg-[#FAF7F2] hover:bg-[#162347] text-[#162347] hover:text-white border border-[#E6DFD5] flex items-center justify-center transition-all active:scale-95"><ArrowRight size={20} /></button>
-            <div /><button onClick={() => moveRobot(0, -0.0003, 180)} className="h-12 rounded bg-[#FAF7F2] hover:bg-[#162347] text-[#162347] hover:text-white border border-[#E6DFD5] flex items-center justify-center transition-all active:scale-95"><ArrowDown size={20} /></button><div />
-          </div>
-          <div className="w-full max-w-xs">
-            <div className="flex justify-between text-xs font-mono text-[#162347] mb-1"><span>THRUSTER PWM</span><span className="font-bold">{throttle}%</span></div>
-            <input type="range" min={0} max={100} value={throttle} onChange={e => setThrottle(+e.target.value)} className="w-full accent-[#162347] h-2 rounded cursor-pointer" />
-          </div>
-          <div className="grid grid-cols-2 gap-2 w-full max-w-xs">
-            {(['MANUAL', 'AUTO_SEARCH', 'RETURN_TO_BASE', 'EMERGENCY_STOP'] as const).map(mode => (
-              <button key={mode} onClick={() => setOperatingMode(mode)}
-                className={`px-2 py-1.5 rounded text-[9px] font-mono font-bold uppercase transition-all ${operatingMode === mode ? (mode === 'EMERGENCY_STOP' ? 'bg-rose-700 text-white' : 'bg-[#162347] text-white') : 'bg-[#FAF7F2] text-[#162347]/70 border border-[#E6DFD5]'}`}>
-                {mode.replace(/_/g, ' ')}
+        <div className="h-full overflow-y-auto p-4 flex flex-col items-center min-h-0">
+          <div className="m-auto flex flex-col items-center gap-4 w-full max-w-xs py-2">
+            {/* D-Pad */}
+            <div className="grid grid-cols-3 gap-2 w-40">
+              <div />
+              <button
+                onClick={() => moveRobot(0, 0.0003, 0)}
+                className="h-10 rounded bg-[#FAF7F2] hover:bg-[#162347] text-[#162347] hover:text-white border border-[#E6DFD5] flex items-center justify-center transition-all active:scale-95 shadow-sm"
+                title="Forward"
+              >
+                <ArrowUp size={18} />
               </button>
-            ))}
+              <div />
+
+              <button
+                onClick={() => moveRobot(-0.0003, 0, 270)}
+                className="h-10 rounded bg-[#FAF7F2] hover:bg-[#162347] text-[#162347] hover:text-white border border-[#E6DFD5] flex items-center justify-center transition-all active:scale-95 shadow-sm"
+                title="Port (Left)"
+              >
+                <ArrowLeft size={18} />
+              </button>
+              <button
+                onClick={() => setOperatingMode('MANUAL')}
+                className="h-10 rounded bg-[#162347] text-[#FAF7F2] font-mono text-[10px] font-bold active:scale-95 shadow-sm"
+                title="Hold Position"
+              >
+                STOP
+              </button>
+              <button
+                onClick={() => moveRobot(0.0003, 0, 90)}
+                className="h-10 rounded bg-[#FAF7F2] hover:bg-[#162347] text-[#162347] hover:text-white border border-[#E6DFD5] flex items-center justify-center transition-all active:scale-95 shadow-sm"
+                title="Starboard (Right)"
+              >
+                <ArrowRight size={18} />
+              </button>
+
+              <div />
+              <button
+                onClick={() => moveRobot(0, -0.0003, 180)}
+                className="h-10 rounded bg-[#FAF7F2] hover:bg-[#162347] text-[#162347] hover:text-white border border-[#E6DFD5] flex items-center justify-center transition-all active:scale-95 shadow-sm"
+                title="Reverse"
+              >
+                <ArrowDown size={18} />
+              </button>
+              <div />
+            </div>
+
+            {/* Thruster Slider */}
+            <div className="w-full">
+              <div className="flex justify-between text-[10px] font-mono text-[#162347] mb-1">
+                <span className="tracking-wider uppercase font-semibold">THRUSTER PWM</span>
+                <span className="font-bold">{throttle}%</span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                value={throttle}
+                onChange={e => setThrottle(+e.target.value)}
+                className="w-full accent-[#162347] h-1.5 rounded cursor-pointer bg-[#E6DFD5]"
+              />
+            </div>
+
+            {/* Mode Selectors */}
+            <div className="grid grid-cols-2 gap-1.5 w-full">
+              {(['MANUAL', 'AUTO_SEARCH', 'RETURN_TO_BASE', 'EMERGENCY_STOP'] as const).map(mode => (
+                <button
+                  key={mode}
+                  onClick={() => setOperatingMode(mode)}
+                  className={`px-2 py-1.5 rounded text-[9px] font-mono font-bold uppercase transition-all ${
+                    operatingMode === mode
+                      ? (mode === 'EMERGENCY_STOP' ? 'bg-rose-700 text-white shadow' : 'bg-[#162347] text-white shadow')
+                      : 'bg-[#FAF7F2] text-[#162347]/70 hover:bg-[#E6DFD5] border border-[#E6DFD5]'
+                  }`}
+                >
+                  {mode.replace(/_/g, ' ')}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       );
@@ -367,58 +437,18 @@ function PanelContent({ id }: { id: PanelId }) {
   }
 }
 
-// ─── Resizable Layout Renderer ────────────────────────────────────────────────
-// CRITICAL: Panel and Separator must be DIRECT children of PanelGroup (Group).
-// No wrapper divs allowed between Group and its Panel/Separator children.
-
-type DropIndicator = { panelId: PanelId; position: 'before' | 'after' } | null;
-
-function buildRowGroup(row: PanelId[], onClose: (id: PanelId) => void, dropIndicator: DropIndicator) {
-  if (row.length === 1) {
-    return (
-      <Panel key={row[0]} minSize={10} style={{ overflow: 'hidden' }}>
-        <SortablePanel id={row[0]} onClose={() => onClose(row[0])} dropPosition={dropIndicator?.panelId === row[0] ? dropIndicator.position : null}>
-          <PanelContent id={row[0]} />
-        </SortablePanel>
-      </Panel>
-    );
-  }
-  // Multiple panels in a row — wrap in a Panel containing a horizontal PanelGroup
-  return (
-    // This Panel acts as a row container; must be display:flex so the inner PanelGroup can flex:1
-    <Panel key={row.join('-')} minSize={10} style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      {/* flex:1 + minHeight:0 lets this PanelGroup fill the row Panel's allocated height */}
-      <PanelGroup direction="horizontal" style={{ flex: 1, minHeight: 0 }}>
-        {row.flatMap((pid, ci) => {
-          const panelEl = (
-            <Panel key={pid} minSize={10} style={{ overflow: 'hidden' }}>
-              <SortablePanel id={pid} onClose={() => onClose(pid)} dropPosition={dropIndicator?.panelId === pid ? dropIndicator.position : null}>
-                <PanelContent id={pid} />
-              </SortablePanel>
-            </Panel>
-          );
-          if (ci === 0) return [panelEl];
-          return [<ResizeHandle key={`h-${pid}`} direction="horizontal" />, panelEl];
-        })}
-      </PanelGroup>
-    </Panel>
-  );
-}
-
-function ResizableLayout({
-  panels,
-  layoutMode,
+function LayoutRenderer({
+  node,
   dropIndicator,
   onClose,
 }: {
-  panels: PanelId[];
-  layoutMode: LayoutMode;
-  dropIndicator: DropIndicator;
+  node: LayoutNode | null;
+  dropIndicator: { panelId: PanelId; position: 'top' | 'bottom' | 'left' | 'right' } | null;
   onClose: (id: PanelId) => void;
 }) {
-  if (panels.length === 0) {
+  if (!node) {
     return (
-      <div className="h-full flex flex-col items-center justify-center text-[#162347]/40">
+      <div className="h-full w-full flex flex-col items-center justify-center text-[#162347]/40">
         <Target size={48} className="mb-4 opacity-50" />
         <p className="font-editorial-serif text-xl">No panels active</p>
         <p className="text-xs font-mono uppercase tracking-widest mt-2">Select a feature from the dock above</p>
@@ -426,96 +456,40 @@ function ResizableLayout({
     );
   }
 
-  if (panels.length === 1) {
+  if (node.type === 'panel') {
     return (
-      <div className="h-full overflow-hidden">
-        <SortablePanel id={panels[0]} onClose={() => onClose(panels[0])} dropPosition={dropIndicator?.panelId === panels[0] ? dropIndicator.position : null}>
-          <PanelContent id={panels[0]} />
+      <div className="h-full w-full overflow-hidden flex flex-col min-h-0 min-w-0">
+        <SortablePanel id={node.id} onClose={() => onClose(node.id)} dropPosition={dropIndicator?.panelId === node.id ? dropIndicator.position : null}>
+          <PanelContent id={node.id} />
         </SortablePanel>
       </div>
     );
   }
 
-  // ── Focus-Left: large master (left 2/3), stacked panels (right 1/3) ──
-  if (layoutMode === 'focus-left') {
-    const [master, ...rest] = panels;
-    if (rest.length === 0) {
-      return (
-        <div style={{ height: '100%', overflow: 'hidden' }}>
-          <SortablePanel id={master} onClose={() => onClose(master)} dropPosition={dropIndicator?.panelId === master ? dropIndicator.position : null}>
-            <PanelContent id={master} />
-          </SortablePanel>
-        </div>
-      );
-    }
-    return (
-      <PanelGroup direction="horizontal" style={{ height: '100%' }}>
-        <Panel defaultSize={65} minSize={20} style={{ overflow: 'hidden' }}>
-          <SortablePanel id={master} onClose={() => onClose(master)} dropPosition={dropIndicator?.panelId === master ? dropIndicator.position : null}>
-            <PanelContent id={master} />
-          </SortablePanel>
-        </Panel>
-        <ResizeHandle direction="horizontal" />
-        {/* Right column — vertical stack; Panel must be flex so inner PanelGroup fills it */}
-        <Panel defaultSize={35} minSize={15} style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          <PanelGroup direction="vertical" style={{ flex: 1, minHeight: 0 }}>
-            {rest.flatMap((pid, i) => {
-              const panelEl = (
-                <Panel key={pid} minSize={10} style={{ overflow: 'hidden' }}>
-                  <SortablePanel id={pid} onClose={() => onClose(pid)} dropPosition={dropIndicator?.panelId === pid ? dropIndicator.position : null}>
-                    <PanelContent id={pid} />
-                  </SortablePanel>
-                </Panel>
-              );
-              if (i === 0) return [panelEl];
-              return [<ResizeHandle key={`v-${pid}`} direction="vertical" />, panelEl];
-            })}
-          </PanelGroup>
-        </Panel>
-      </PanelGroup>
-    );
-  }
-
-  // ── Grid layouts (Split, Quad, Auto) ──
-  // Auto: for 3 panels use 3 columns (flat, no nesting). For others, use 2-col rows.
-  const colCount =
-    layoutMode === 'split' ? Math.min(panels.length, 2) :
-    layoutMode === 'quad'  ? 2 :
-    panels.length === 3    ? 3 :   // ← flat 3-col avoids nested PanelGroup height issues
-    panels.length <= 2     ? 2 :
-    panels.length <= 4     ? 2 : 3;
-
-  const rows: PanelId[][] = [];
-  for (let i = 0; i < panels.length; i += colCount) {
-    rows.push(panels.slice(i, i + colCount));
-  }
-
-  // Single row — flat horizontal split (most reliable, no nesting)
-  if (rows.length === 1) {
-    return (
-      <PanelGroup direction="horizontal" style={{ height: '100%' }}>
-        {rows[0].flatMap((pid, ci) => {
-          const panelEl = (
-            <Panel key={pid} minSize={10} style={{ overflow: 'hidden' }}>
-              <SortablePanel id={pid} onClose={() => onClose(pid)} dropPosition={dropIndicator?.panelId === pid ? dropIndicator.position : null}>
-                <PanelContent id={pid} />
-              </SortablePanel>
-            </Panel>
-          );
-          if (ci === 0) return [panelEl];
-          return [<ResizeHandle key={`h-${pid}`} direction="horizontal" />, panelEl];
-        })}
-      </PanelGroup>
-    );
-  }
-
-  // Multiple rows — outer vertical PanelGroup (buildRowGroup handles nested horizontal groups)
+  // Group node — pass orientation (not direction) as required by react-resizable-panels v4
   return (
-    <PanelGroup direction="vertical" style={{ height: '100%' }}>
-      {rows.flatMap((row, ri) => {
-        const rowEl = buildRowGroup(row, onClose, dropIndicator);
-        if (ri === 0) return [rowEl];
-        return [<ResizeHandle key={`vr-${ri}`} direction="vertical" />, rowEl];
+    <PanelGroup
+      orientation={node.direction}
+      className="h-full w-full min-h-0 min-w-0"
+    >
+      {node.children.flatMap((child, index) => {
+        const childEl = (
+          <Panel
+            key={child.type === 'panel' ? child.id : child.id}
+            minSize={10}
+            className="h-full w-full flex flex-col overflow-hidden min-h-0 min-w-0"
+          >
+            {child.type === 'panel' ? (
+              <SortablePanel id={child.id} onClose={() => onClose(child.id)} dropPosition={dropIndicator?.panelId === child.id ? dropIndicator.position : null}>
+                <PanelContent id={child.id} />
+              </SortablePanel>
+            ) : (
+              <LayoutRenderer node={child} dropIndicator={dropIndicator} onClose={onClose} />
+            )}
+          </Panel>
+        );
+        if (index === 0) return [childEl];
+        return [<ResizeHandle key={`rh-${node.id}-${index}`} orientation={node.direction} />, childEl];
       })}
     </PanelGroup>
   );
@@ -525,18 +499,19 @@ function ResizableLayout({
 export default function Dashboard() {
   const { robotOnline, moveRobot, emergencyStop } = useRescue();
 
-  const [panels, setPanels] = useState<PanelId[]>(['camera']);
-  const [layoutMode, setLayoutMode] = useState<LayoutMode>('auto');
+  const [layout, setLayout] = useState<LayoutNode | null>({ type: 'panel', id: 'camera' });
   const [time, setTime] = useState(new Date().toLocaleTimeString());
   // Track what is being dragged: panel grip OR dock button
   const [activeDrag, setActiveDrag] = useState<{ id: string; panelId: PanelId } | null>(null);
-  // Track which panel the drag is hovering over + which half (top/bottom)
-  const [dropIndicator, setDropIndicator] = useState<{ panelId: PanelId; position: 'before' | 'after' } | null>(null);
+  // Track which panel the drag is hovering over + drop position
+  const [dropIndicator, setDropIndicator] = useState<{ panelId: PanelId; position: 'top' | 'bottom' | 'left' | 'right' } | null>(null);
 
   useEffect(() => {
     const t = setInterval(() => setTime(new Date().toLocaleTimeString()), 1000);
     return () => clearInterval(t);
   }, []);
+
+
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
@@ -557,7 +532,14 @@ export default function Dashboard() {
   );
 
   const togglePanel = useCallback((id: PanelId) => {
-    setPanels(prev => prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]);
+    setLayout(prev => {
+      if (!prev) return { type: 'panel', id };
+      if (hasPanel(prev, id)) {
+        return removeNode(prev, id);
+      }
+      // If adding from dock by clicking, split side-by-side to the right
+      return insertNode(prev, getFirstPanelId(prev), id, 'right');
+    });
   }, []);
 
   const handleDragStart = (e: DragStartEvent) => {
@@ -574,19 +556,41 @@ export default function Dashboard() {
       setDropIndicator(null);
       return;
     }
-    // Detect top/bottom half using pointer position vs panel rect
+    // Detect 4 drop zones using accurate current cursor position
     const overRect = e.over?.rect;
-    if (overRect && e.activatorEvent instanceof PointerEvent) {
-      const pointerY = (e.activatorEvent as PointerEvent).clientY;
-      // Re-read latest pointer from the event delta
-      const midY = overRect.top + overRect.height / 2;
-      const position = pointerY > midY ? 'after' : 'before';
+    if (overRect && e.activatorEvent) {
+      const activator = e.activatorEvent as MouseEvent | PointerEvent | TouchEvent;
+      let clientX = 0;
+      let clientY = 0;
+      if ('clientX' in activator) {
+        clientX = activator.clientX + (e.delta?.x || 0);
+        clientY = activator.clientY + (e.delta?.y || 0);
+      } else if ('touches' in activator && activator.touches.length > 0) {
+        clientX = activator.touches[0].clientX + (e.delta?.x || 0);
+        clientY = activator.touches[0].clientY + (e.delta?.y || 0);
+      }
+
+      const xPercent = Math.max(0, Math.min(1, (clientX - overRect.left) / overRect.width));
+      const yPercent = Math.max(0, Math.min(1, (clientY - overRect.top) / overRect.height));
+      
+      const distTop = yPercent;
+      const distBottom = 1 - yPercent;
+      const distLeft = xPercent;
+      const distRight = 1 - xPercent;
+      
+      const minDist = Math.min(distTop, distBottom, distLeft, distRight);
+      let position: 'top' | 'bottom' | 'left' | 'right' = 'top';
+      if (minDist === distBottom) position = 'bottom';
+      else if (minDist === distLeft) position = 'left';
+      else if (minDist === distRight) position = 'right';
+      
       setDropIndicator({ panelId: overId, position });
     }
   };
 
   const handleDragEnd = (e: DragEndEvent) => {
     const currentDrag = activeDrag;
+    const currentIndicator = dropIndicator;
     setActiveDrag(null);
     setDropIndicator(null);
     if (!currentDrag) return;
@@ -594,51 +598,18 @@ export default function Dashboard() {
     const { active, over } = e;
     const activeId = active.id as string;
     const overId = over?.id as PanelId | undefined;
-    const isFromDock = activeId.startsWith('dock-');
     const panelId = currentDrag.panelId;
 
-    if (isFromDock) {
-      // Drag from dock → add to workspace at the drop position
-      setPanels(prev => {
-        if (prev.includes(panelId)) {
-          // Already visible — just reorder to after the target
-          if (!overId || !prev.includes(overId)) return prev;
-          const from = prev.indexOf(panelId);
-          const to = prev.indexOf(overId);
-          const insertAt = dropIndicator?.position === 'before' ? to : to + 1;
-          const adjusted = from < insertAt ? insertAt - 1 : insertAt;
-          return arrayMove(prev, from, Math.max(0, Math.min(adjusted, prev.length - 1)));
-        }
-        // Not yet in workspace — insert at the right spot
-        if (!overId || !prev.includes(overId)) return [...prev, panelId];
-        const overIdx = prev.indexOf(overId);
-        const insertAt = dropIndicator?.position === 'before' ? overIdx : overIdx + 1;
-        const next = [...prev];
-        next.splice(insertAt, 0, panelId);
-        return next;
-      });
-      return;
-    }
+    if (!overId || !currentIndicator) return;
 
-    // Drag from panel grip → reorder
-    if (overId && activeId !== overId) {
-      setPanels(prev => {
-        const from = prev.indexOf(panelId);
-        const to = prev.indexOf(overId);
-        if (from === -1 || to === -1) return prev;
-        const insertAt = dropIndicator?.position === 'before' ? to : to + 1;
-        const adjusted = from < insertAt ? insertAt - 1 : insertAt;
-        return arrayMove(prev, from, Math.max(0, Math.min(adjusted, prev.length - 1)));
-      });
-    }
+    setLayout(prev => {
+      // First remove the panel if it's already in the tree (for moving)
+      let nextTree = removeNode(prev, panelId);
+      if (!nextTree) return { type: 'panel', id: panelId };
+      // Then insert it at the new drop location
+      return insertNode(nextTree, overId, panelId, currentIndicator.position);
+    });
   };
-
-  const layoutButtons = [
-    { mode: 'auto' as const,       icon: Layout,          title: 'Auto Flow' },
-    { mode: 'split' as const,      icon: Columns,         title: '50/50 Split' },
-    { mode: 'focus-left' as const, icon: LayoutDashboard, title: 'Focus Stack' },
-    { mode: 'quad' as const,       icon: LayoutGrid,      title: 'Quad Grid' },
-  ];
 
   const activeDragDef = activeDrag ? PANEL_DEFS.find(p => p.id === activeDrag.panelId) : null;
 
@@ -684,35 +655,21 @@ export default function Dashboard() {
             <DockButton
               key={p.id}
               def={p}
-              isActive={panels.includes(p.id)}
+              isActive={hasPanel(layout, p.id)}
               onToggle={() => togglePanel(p.id)}
             />
-          ))}
-        </div>
-        <div className="flex items-center gap-1.5 pl-4 border-l border-[#E6DFD5] ml-3 shrink-0">
-          <span className="text-[9px] uppercase tracking-widest font-bold text-[#162347]/40 mr-1 hidden lg:block">Layout</span>
-          {layoutButtons.map(({ mode, icon: Icon, title }) => (
-            <button
-              key={mode}
-              onClick={() => setLayoutMode(mode)}
-              title={title}
-              className={`p-1.5 rounded transition-all ${layoutMode === mode ? 'bg-[#162347] text-white' : 'text-[#162347]/40 hover:bg-[#E6DFD5] hover:text-[#162347]'}`}
-            >
-              <Icon size={16} />
-            </button>
           ))}
         </div>
       </div>
 
       {/* Workspace */}
-      <main className="flex-1 overflow-hidden p-3 min-h-0">
-        <SortableContext items={panels} strategy={rectSortingStrategy}>
-          <div className="h-full">
-            <ResizableLayout
-              panels={panels}
-              layoutMode={layoutMode}
+      <main className="flex-1 overflow-hidden p-3 min-h-0 relative">
+        <SortableContext items={PANEL_DEFS.filter(p => hasPanel(layout, p.id)).map(p => p.id)} strategy={rectSortingStrategy}>
+          <div className="absolute inset-3">
+            <LayoutRenderer
+              node={layout}
               dropIndicator={dropIndicator}
-              onClose={(id) => setPanels(prev => prev.filter(p => p !== id))}
+              onClose={(id) => setLayout(prev => removeNode(prev, id))}
             />
           </div>
         </SortableContext>

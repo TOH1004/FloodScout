@@ -1,0 +1,48 @@
+@import "tailwindcss";
+@config "../tailwind.config.js";
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    background-color: #FAF7F2;
+    color: #162347;
+    font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+}
+
+.font-script {
+  font-family: 'Alex Brush', cursive;
+}
+
+.font-editorial-serif {
+  font-family: 'Cinzel', 'Playfair Display', 'Cormorant Garamond', Georgia, serif;
+}
+
+.font-cormorant {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+}
+
+/* Subtle image zoom on card hover */
+.img-zoom {
+  transition: transform 0.7s cubic-bezier(0.25, 1, 0.5, 1);
+}
+.img-zoom:hover {
+  transform: scale(1.04);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 7px;
+}
+::-webkit-scrollbar-track {
+  background: #FAF7F2;
+}
+::-webkit-scrollbar-thumb {
+  background: #D4C9BC;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #162347;
+}

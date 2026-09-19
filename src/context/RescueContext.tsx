@@ -135,89 +135,11 @@ export const RescueProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     robotName: 'FloodScout-01',
   });
 
-  const [victims, setVictims] = useState<Victim[]>([
-    {
-      id: 'V-001',
-      status: 'Verified',
-      location: [3.0435, 101.5292],
-      zone: 'Sector B - House 14 Roof Area',
-      confidence: 96,
-      time: '14:22:15',
-      priority: 'Critical',
-      peopleCount: 2,
-      image: 'https://images.unsplash.com/photo-1547683905-f686c993aae5?q=80&w=600&auto=format&fit=crop',
-      waterDepthAtLocation: 2.4,
-      assignedUnit: 'Rescue Boat Unit Bravo-2',
-      notes: 'Elderly couple trapped on rooftop terrace, waving red cloth.',
-    },
-    {
-      id: 'V-002',
-      status: 'Rescue Assigned',
-      location: [3.0418, 101.5305],
-      zone: 'Sector B - Near Submerged Vehicle',
-      confidence: 91,
-      time: '14:28:40',
-      priority: 'High',
-      peopleCount: 1,
-      image: 'https://images.unsplash.com/photo-1517486808906-6ca8b3f04846?q=80&w=600&auto=format&fit=crop',
-      waterDepthAtLocation: 1.9,
-      assignedUnit: 'Hovercraft Swift-1',
-      notes: 'Adult male holding onto light pole above water level.',
-    },
-    {
-      id: 'V-003',
-      status: 'Rescued',
-      location: [3.0402, 101.5260],
-      zone: 'Sector A - Community Hall Pergola',
-      confidence: 94,
-      time: '14:18:02',
-      priority: 'Moderate',
-      peopleCount: 1,
-      image: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=600&auto=format&fit=crop',
-      waterDepthAtLocation: 1.2,
-      assignedUnit: 'Amphibious Unit 04',
-      notes: 'Safely evacuated to Evacuation Center Alpha.',
-    }
-  ]);
+  const [victims, setVictims] = useState<Victim[]>([]);
 
-  const [alerts, setAlerts] = useState<AlertNotification[]>([
-    {
-      id: 'ALT-101',
-      type: 'VICTIM_DETECTED',
-      title: 'POTENTIAL VICTIM DETECTED',
-      message: 'AI detected 2 people at Sector B (96% Confidence) near submerged rooftop.',
-      time: '14:22:15',
-      critical: true,
-      read: false,
-    },
-    {
-      id: 'ALT-102',
-      type: 'DEPTH_ALERT',
-      title: 'WATER DEPTH INCREASE',
-      message: 'Bathymetric sonar detected rapid surge to 2.4m depth.',
-      time: '14:24:50',
-      critical: false,
-      read: true,
-    },
-    {
-      id: 'ALT-103',
-      type: 'RESCUE_CONFIRMED',
-      title: 'VICTIM RESCUE CONFIRMED',
-      message: 'Victim V-003 safely extracted by Amphibious Unit 04.',
-      time: '14:30:10',
-      critical: false,
-      read: true,
-    }
-  ]);
+  const [alerts, setAlerts] = useState<AlertNotification[]>([]);
 
-  const [detectionLogs, setDetectionLogs] = useState<DetectionLog[]>([
-    {
-      id: 'LOG-1',
-      time: '14:22:15',
-      message: 'Initial scan: Possible human shape detected in Sector B.',
-      confidence: 72,
-    }
-  ]);
+  const [detectionLogs, setDetectionLogs] = useState<DetectionLog[]>([]);
 
   const [latestAlert, setLatestAlert] = useState<AlertNotification | null>(null);
 

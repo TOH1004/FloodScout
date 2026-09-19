@@ -29,6 +29,12 @@ export interface CameraStatus {
     width: number;
     height: number;
   };
+  // Streaming & detector telemetry (from upgraded pipeline)
+  streamFps?: number;
+  inferenceTimeMs?: number;
+  detectorFps?: number;
+  mode?: 'fast' | 'balanced' | 'accurate';
+  modeLabel?: string;
 }
 
 export interface DetectionHistoryItem {
@@ -41,15 +47,25 @@ export interface DetectionHistoryItem {
   confidence: number;
 }
 
+export interface PersonDetail {
+  id: number;
+  label: string;
+  imageUrl: string;
+  score?: number;
+  box?: [number, number, number, number];
+  isReturning?: boolean;
+}
+
 export interface RescueIncident {
   id: string;
   time: string;
   timestamp: string;
   personCount: number;
   highestConfidence: number;
-  imageUrl: string; // annotated frame with YOLO boxes
+  imageUrl: string; // annotated frame with HOG+SVM bounding boxes
   originalImageUrl: string; // raw clean scene
   personImages: string[]; // individual person crops
+  personDetails?: PersonDetail[]; // individual person metadata with ID (Person #1, Person #2, etc.)
   description: string;
   descriptionStatus: 'pending' | 'completed' | 'failed';
   status: 'NEW' | 'VERIFIED' | 'RESOLVED';
@@ -218,13 +234,26 @@ export function useDetectionApi() {
     };
   }, [fetchData]);
 
-  // Adjust YOLO confidence threshold
+  // Adjust HOG+SVM hit threshold (SVM score, NOT a YOLO confidence percentage)
   const setConfidenceThreshold = async (threshold: number): Promise<boolean> => {
     try {
       const res = await fetch(`${API_BASE_URL}/detection/threshold`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ threshold }),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  };
+
+  const setHogMode = async (mode: 'fast' | 'balanced' | 'accurate'): Promise<boolean> => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/detection/mode`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode }),
       });
       return res.ok;
     } catch {
@@ -251,6 +280,7 @@ export function useDetectionApi() {
     apiBaseUrl: API_BASE_URL,
     dismissActiveIncident,
     setConfidenceThreshold,
+    setHogMode,
     refresh: fetchData,
   };
 }

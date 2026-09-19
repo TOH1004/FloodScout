@@ -3,14 +3,12 @@ import { Link } from 'react-router-dom';
 import {
   ArrowLeft, Clock, Compass, MapPin, ArrowUp, ArrowDown, ArrowRight,
   Camera, Sparkles, X, Activity, Cpu, Target, FileText,
-  Layout, Columns, LayoutDashboard, LayoutGrid, GripVertical,
-  AlertTriangle, VideoOff, Eye, Image as ImageIcon
+  GripVertical, AlertTriangle, VideoOff, Eye, User, Users, ArrowUpDown, SlidersHorizontal
 } from 'lucide-react';
 import { useDetectionApi, type RescueIncident } from '../hooks/useDetectionApi';
 import { IncidentModal } from '../components/IncidentModal';
 import {
   DndContext,
-  closestCenter,
   pointerWithin,
   KeyboardSensor,
   PointerSensor,
@@ -23,7 +21,6 @@ import {
   type DragOverEvent,
 } from '@dnd-kit/core';
 import {
-  arrayMove,
   SortableContext,
   sortableKeyboardCoordinates,
   useSortable,
@@ -193,7 +190,7 @@ function PanelContent({
 }: {
   id: PanelId;
   detectionApi: ReturnType<typeof useDetectionApi>;
-  onInspectIncident: (inc: RescueIncident) => void;
+  onInspectIncident: (inc: RescueIncident, personId?: number) => void;
 }) {
   const {
     waterDepth, robotSpeed, robotLocation, robotHeading, operatingMode, trajectory,
@@ -207,6 +204,7 @@ function PanelContent({
   const [waypoint, setWaypoint] = useState<[number, number] | null>(null);
   const [localThreshold, setLocalThreshold] = useState(50);
   const [brightnessVal] = useState(50);
+  const [victimSortBy, setVictimSortBy] = useState<'person' | 'time'>('person');
 
   const floodZone: [number, number][] = [
     [3.0450, 101.5250], [3.0460, 101.5320], [3.0390, 101.5330], [3.0380, 101.5255],
@@ -214,7 +212,8 @@ function PanelContent({
 
   switch (id) {
     case 'camera': {
-      const { backendOnline, cameraStatus, detectionStatus, videoFeedUrl, activeIncident, dismissActiveIncident, apiBaseUrl } = detectionApi;
+      const { backendOnline, cameraStatus, detectionStatus, videoFeedUrl, activeIncident, dismissActiveIncident, apiBaseUrl, setHogMode } = detectionApi;
+      const currentMode = cameraStatus.mode ?? 'fast';
 
       return (
         <div className="relative h-full bg-slate-950 flex flex-col overflow-hidden select-none">
@@ -236,7 +235,7 @@ function PanelContent({
                     AI Vision Backend Offline
                   </h4>
                   <p className="text-xs text-slate-400 mt-1 max-w-sm">
-                    Start the Python computer-vision backend to begin USB camera streaming and YOLO detection.
+                    Start the Python computer-vision backend to begin USB camera streaming and OpenCV person detection.
                   </p>
                 </div>
                 <div className="font-mono text-[11px] bg-slate-900 border border-slate-700 px-3 py-1.5 rounded text-slate-300">
@@ -292,14 +291,67 @@ function PanelContent({
                 </span>
               </div>
 
-              {backendOnline && (
+              {backendOnline && cameraStatus.connected && (
+                <div className="flex flex-col items-end gap-1.5 pointer-events-none">
+                  {/* Resolution & FPS badges */}
+                  <div className="flex items-center gap-1.5 bg-slate-900/85 backdrop-blur-md border border-slate-700/60 px-2.5 py-1 rounded shadow-lg text-[10px] font-mono text-slate-300">
+                    {cameraStatus.resolution && (
+                      <>
+                        <span className="text-cyan-400 font-bold">
+                          {cameraStatus.resolution.width}×{cameraStatus.resolution.height}
+                        </span>
+                        <span className="text-slate-600">|</span>
+                      </>
+                    )}
+                    <span className="text-emerald-400 font-bold">
+                      {cameraStatus.streamFps ? `${cameraStatus.streamFps} FPS` : 'LIVE'}
+                    </span>
+                    {cameraStatus.inferenceTimeMs !== undefined && cameraStatus.inferenceTimeMs > 0 && (
+                      <>
+                        <span className="text-slate-600">|</span>
+                        <span className="text-amber-400">{cameraStatus.inferenceTimeMs.toFixed(1)} ms</span>
+                      </>
+                    )}
+                  </div>
+                  {/* Detector label */}
+                  <div className="flex items-center gap-1.5 bg-slate-900/85 backdrop-blur-md border border-slate-700/60 px-2.5 py-1 rounded shadow-lg text-[10px] font-mono text-slate-300">
+                    <span>HOG+SVM</span>
+                    <span className="text-slate-600">|</span>
+                    <span className="text-emerald-400 font-bold">PEOPLE DETECTOR</span>
+                  </div>
+                </div>
+              )}
+              {backendOnline && !cameraStatus.connected && (
                 <div className="flex items-center gap-2 bg-slate-900/85 backdrop-blur-md border border-slate-700/60 px-2.5 py-1 rounded shadow-lg text-[10px] font-mono text-slate-300">
-                  <span>YOLO11n</span>
+                  <span>OpenCV HOG+SVM</span>
                   <span className="text-slate-500">|</span>
-                  <span className="text-emerald-400 font-bold">COCO: PERSON</span>
+                  <span className="text-emerald-400 font-bold">PEOPLE DETECTOR</span>
                 </div>
               )}
             </div>
+
+            {/* Mode Switcher row — bottom-right HUD */}
+            {backendOnline && cameraStatus.connected && (
+              <div className="absolute bottom-3 right-3 flex items-center gap-1.5 pointer-events-auto">
+                {(['fast', 'balanced', 'accurate'] as const).map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setHogMode(m)}
+                    className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase tracking-wider border transition-all ${
+                      currentMode === m
+                        ? m === 'fast'
+                          ? 'bg-emerald-500/20 border-emerald-400 text-emerald-300'
+                          : m === 'balanced'
+                          ? 'bg-amber-500/20 border-amber-400 text-amber-300'
+                          : 'bg-rose-500/20 border-rose-400 text-rose-300'
+                        : 'bg-slate-900/70 border-slate-700 text-slate-500 hover:text-slate-300'
+                    }`}
+                  >
+                    {m === 'fast' ? '⚡ Fast' : m === 'balanced' ? '⚖️ Balanced' : '🎯 Accurate'}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {/* Prominent High-Visibility Alert Banner when Person Detected */}
             {detectionStatus.personDetected && (
@@ -320,7 +372,7 @@ function PanelContent({
                     People: <strong className="text-white">{detectionStatus.personCount}</strong>
                   </div>
                   <div className="bg-rose-900/80 px-2 py-0.5 rounded border border-rose-500/50">
-                    Conf: <strong className="text-emerald-300">{Math.round(detectionStatus.highestConfidence * 100)}%</strong>
+                    Score: <strong className="text-emerald-300">{detectionStatus.highestConfidence.toFixed(2)}</strong>
                   </div>
                 </div>
               </div>
@@ -352,7 +404,7 @@ function PanelContent({
                       className="w-full h-full object-cover hover:scale-105 transition-transform"
                     />
                     <div className="absolute bottom-0 right-0 bg-black/80 text-[9px] font-mono px-1 text-emerald-300 font-bold">
-                      {Math.round(activeIncident.highestConfidence * 100)}%
+                      {activeIncident.highestConfidence.toFixed(2)}
                     </div>
                   </div>
 
@@ -410,9 +462,9 @@ function PanelContent({
                 )}
               </div>
               <div className="hidden sm:flex items-center gap-1.5">
-                <span className="text-[#BED6EE] uppercase tracking-wider text-[9px]">Confidence:</span>
+                <span className="text-[#BED6EE] uppercase tracking-wider text-[9px]">Detection Score:</span>
                 <span className="font-bold text-white">
-                  {detectionStatus.personDetected ? `${Math.round(detectionStatus.highestConfidence * 100)}%` : '0%'}
+                  {detectionStatus.personDetected ? detectionStatus.highestConfidence.toFixed(2) : '—'}
                 </span>
               </div>
             </div>
@@ -535,113 +587,369 @@ function PanelContent({
         </div>
       );
 
-    case 'victims':
+    case 'victims': {
+      // 1. Prepare Person-based list (for "By Person" arrangement)
+      interface ManifestPerson {
+        personId: number;
+        label: string;
+        time: string;
+        timestamp: string;
+        score: number;
+        cropUrl?: string;
+        incident: RescueIncident;
+        description?: string;
+        descriptionStatus?: string;
+        captureCount: number;
+      }
+
+      // Count total captures per person across all incidents
+      const personCaptureCounts = new Map<number, number>();
+      (detectionApi.incidents || []).forEach((inc) => {
+        if (inc.personDetails && inc.personDetails.length > 0) {
+          inc.personDetails.forEach((p) => {
+            personCaptureCounts.set(p.id, (personCaptureCounts.get(p.id) || 0) + 1);
+          });
+        } else if (inc.personImages && inc.personImages.length > 0) {
+          inc.personImages.forEach((url, idx) => {
+            const urlMatch = url.match(/person_(\d+)/);
+            const pId = urlMatch ? parseInt(urlMatch[1]) : idx + 1;
+            personCaptureCounts.set(pId, (personCaptureCounts.get(pId) || 0) + 1);
+          });
+        }
+      });
+
+      const personsMap = new Map<number, ManifestPerson>();
+
+      // Iterate newest incidents first so each Person card gets their latest crop and data
+      const incidentsChronologicalDesc = [...(detectionApi.incidents || [])].sort(
+        (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      );
+
+      incidentsChronologicalDesc.forEach((inc) => {
+        if (inc.personDetails && inc.personDetails.length > 0) {
+          inc.personDetails.forEach((p) => {
+            if (!personsMap.has(p.id)) {
+              personsMap.set(p.id, {
+                personId: p.id,
+                label: p.label || `Person #${p.id}`,
+                time: inc.time,
+                timestamp: inc.timestamp,
+                score: p.score ?? inc.highestConfidence,
+                cropUrl: p.imageUrl,
+                incident: inc,
+                description: inc.description,
+                descriptionStatus: inc.descriptionStatus,
+                captureCount: personCaptureCounts.get(p.id) || 1,
+              });
+            }
+          });
+        } else if (inc.personImages && inc.personImages.length > 0) {
+          inc.personImages.forEach((url, idx) => {
+            const urlMatch = url.match(/person_(\d+)/);
+            const pId = urlMatch ? parseInt(urlMatch[1]) : idx + 1;
+            if (!personsMap.has(pId)) {
+              personsMap.set(pId, {
+                personId: pId,
+                label: `Person #${pId}`,
+                time: inc.time,
+                timestamp: inc.timestamp,
+                score: inc.highestConfidence,
+                cropUrl: url,
+                incident: inc,
+                description: inc.description,
+                descriptionStatus: inc.descriptionStatus,
+                captureCount: personCaptureCounts.get(pId) || 1,
+              });
+            }
+          });
+        } else {
+          const pId = 1;
+          if (!personsMap.has(pId)) {
+            personsMap.set(pId, {
+              personId: pId,
+              label: `Person #${pId}`,
+              time: inc.time,
+              timestamp: inc.timestamp,
+              score: inc.highestConfidence,
+              cropUrl: inc.imageUrl,
+              incident: inc,
+              description: inc.description,
+              descriptionStatus: inc.descriptionStatus,
+              captureCount: personCaptureCounts.get(pId) || 1,
+            });
+          }
+        }
+      });
+
+      const manifestPersons = Array.from(personsMap.values());
+      // Sort By Person: Highest Person ID on top (e.g. Person #8 on top)
+      manifestPersons.sort((a, b) => b.personId - a.personId);
+
+      // 2. Prepare Incident-based list (for "By Time" arrangement: INC-... on top)
+      const incidentsByTime = [...(detectionApi.incidents || [])].sort((a, b) => {
+        return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+      });
+
+      const hasEntries = victimSortBy === 'person' ? manifestPersons.length > 0 : incidentsByTime.length > 0;
+
       return (
-        <div className="h-full overflow-y-auto p-4 space-y-4">
-          {/* Live Captured Rescue Incidents */}
-          {detectionApi.incidents && detectionApi.incidents.length > 0 && (
-            <div className="space-y-2 pb-3 border-b border-[#E6DFD5]">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#162347] flex items-center gap-1.5">
-                  <Camera size={13} className="text-rose-600" />
-                  Captured Incidents ({detectionApi.incidents.length})
-                </span>
-                <span className="text-[9px] font-mono text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded font-bold">
-                  ● Vision Log
-                </span>
-              </div>
+        <div className="h-full overflow-y-auto p-4 space-y-3">
+          {/* Header & Arrangement Controls */}
+          <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-[#E6DFD5]">
+            <div className="flex items-center gap-1.5">
+              <User size={14} className="text-rose-600" />
+              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#162347]">
+                Victim Manifest ({victimSortBy === 'person' ? manifestPersons.length : incidentsByTime.length})
+              </span>
+            </div>
 
-              <div className="space-y-2">
-                {detectionApi.incidents.map(inc => (
-                  <div key={inc.id} className="p-3 rounded bg-white border border-[#E6DFD5] shadow-sm space-y-2">
-                    <div className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono font-bold text-[#162347]">{inc.id}</span>
-                        <span className="text-[9px] font-mono px-1.5 py-0.5 rounded font-bold uppercase bg-rose-100 text-rose-800 border border-rose-200">
-                          {inc.personCount} Person(s)
-                        </span>
-                      </div>
-                      <span className="text-[10px] text-[#162347]/60 font-mono">{inc.time}</span>
-                    </div>
+            {/* Arrangement Selector: By Person vs By TIME */}
+            <div className="flex items-center gap-1 bg-[#FAF7F2] p-0.5 rounded border border-[#E6DFD5] text-[10px] font-mono font-bold">
+              <span className="text-[9px] text-[#162347]/50 px-1 uppercase flex items-center gap-1">
+                <ArrowUpDown size={10} /> Sort:
+              </span>
+              <button
+                onClick={() => setVictimSortBy('person')}
+                className={`px-2.5 py-0.5 rounded transition-all cursor-pointer ${
+                  victimSortBy === 'person'
+                    ? 'bg-[#162347] text-white shadow-xs'
+                    : 'text-[#162347]/70 hover:text-[#162347] hover:bg-[#E6DFD5]'
+                }`}
+                title="Arrange by Person ID (highest number like Person #8 on top with cropped photo)"
+              >
+                By Person
+              </button>
+              <button
+                onClick={() => setVictimSortBy('time')}
+                className={`px-2.5 py-0.5 rounded transition-all cursor-pointer ${
+                  victimSortBy === 'time'
+                    ? 'bg-[#162347] text-white shadow-xs'
+                    : 'text-[#162347]/70 hover:text-[#162347] hover:bg-[#E6DFD5]'
+                }`}
+                title="Arrange by Time (original incident INC-... on top with cropped pictures)"
+              >
+                By Time
+              </button>
+            </div>
+          </div>
 
-                    <div className="flex gap-2.5 items-center">
-                      <div
-                        className="w-14 h-14 rounded overflow-hidden bg-black border border-slate-200 shrink-0 cursor-pointer relative group"
-                        onClick={() => onInspectIncident(inc)}
-                      >
-                        <img
-                          src={`${detectionApi.apiBaseUrl}${inc.imageUrl}`}
-                          alt={inc.id}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                        />
-                        <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity">
-                          <Eye size={14} />
+          {/* Manifest Content */}
+          {hasEntries ? (
+            <div className="space-y-3">
+              {/* ── VIEW 1: BY PERSON (Person #8 on top with cropped picture) ── */}
+              {victimSortBy === 'person' &&
+                manifestPersons.map((v) => (
+                  <div
+                    key={v.personId}
+                    className="p-3 rounded bg-white border border-[#E6DFD5] hover:border-emerald-400 shadow-xs transition-all space-y-2.5"
+                  >
+                    <div className="flex items-center justify-between gap-2.5">
+                      {/* Left: Cropped Picture + Person ID Info */}
+                      <div className="flex items-center gap-3">
+                        {v.cropUrl ? (
+                          <div
+                            onClick={() => onInspectIncident(v.incident, v.personId)}
+                            className="w-14 h-14 rounded-md overflow-hidden bg-black shrink-0 border border-slate-300 shadow-xs cursor-pointer hover:border-emerald-500 transition-all group relative"
+                            title={`Inspect ${v.label}`}
+                          >
+                            <img
+                              src={`${detectionApi.apiBaseUrl}${v.cropUrl}`}
+                              alt={v.label}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                            />
+                            <div className="absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity">
+                              <Eye size={12} />
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="w-12 h-12 rounded-full bg-[#162347] text-[#FAF7F2] font-mono font-bold text-xs flex items-center justify-center shadow-xs shrink-0">
+                            #{v.personId}
+                          </div>
+                        )}
+
+                        <div>
+                          <div className="font-mono font-bold text-sm text-[#162347] flex items-center gap-1.5">
+                            <span>{v.label}</span>
+                            <span className="text-[9px] font-mono text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded font-bold">
+                              Score: {v.score.toFixed(2)}
+                            </span>
+                          </div>
+                          <div className="text-[10px] font-mono text-[#162347]/60 flex items-center gap-1.5 mt-0.5">
+                            <span>{v.incident.id}</span>
+                            <span>•</span>
+                            <span className="flex items-center gap-0.5 text-[#162347]/80 font-semibold">
+                              <Clock size={10} /> {v.time}
+                            </span>
+                            <span className="text-[9px] bg-sky-100 text-sky-800 border border-sky-300 px-1.5 py-0.5 rounded font-bold font-mono">
+                              {v.captureCount} {v.captureCount === 1 ? 'photo' : 'photos'}
+                            </span>
+                          </div>
                         </div>
                       </div>
-                      <div className="flex-1 min-w-0 text-xs space-y-0.5">
-                        <div className="font-semibold text-[#162347] text-[11px] flex items-center justify-between">
-                          <span>Highest Conf: <strong className="text-emerald-600">{Math.round(inc.highestConfidence * 100)}%</strong></span>
-                        </div>
-                        <p className="text-[11px] text-[#162347]/80 line-clamp-2 leading-tight">
-                          {inc.description}
-                        </p>
-                      </div>
-                    </div>
 
-                    <div className="flex items-center justify-between pt-1.5 border-t border-[#E6DFD5] text-[10px] font-mono">
-                      <span className={`px-1.5 py-0.5 rounded uppercase font-bold text-[9px] ${
-                        inc.descriptionStatus === 'completed'
-                          ? 'bg-emerald-100 text-emerald-800'
-                          : inc.descriptionStatus === 'pending'
-                          ? 'bg-amber-100 text-amber-800 animate-pulse'
-                          : 'bg-slate-100 text-slate-700'
-                      }`}>
-                        {inc.descriptionStatus === 'completed' ? 'AI Observation Ready' : inc.descriptionStatus === 'pending' ? 'Analyzing...' : 'AI Offline'}
-                      </span>
+                      {/* Right: Inspect Button */}
                       <button
-                        onClick={() => onInspectIncident(inc)}
-                        className="bg-[#162347] hover:bg-[#24355E] text-white px-2.5 py-1 rounded text-[10px] flex items-center gap-1 font-bold transition-colors"
+                        onClick={() => onInspectIncident(v.incident, v.personId)}
+                        className="bg-[#162347] hover:bg-[#24355E] text-white px-2.5 py-1.5 rounded text-[10px] font-mono font-bold flex items-center gap-1 transition-colors shrink-0 cursor-pointer"
                       >
-                        <Eye size={12} /> Inspect Images
+                        <Eye size={12} /> Inspect
                       </button>
                     </div>
+
+                    {v.description && (
+                      <p className="text-[11px] text-[#162347]/80 line-clamp-2 leading-tight bg-slate-50 p-2 rounded border border-slate-100 font-sans">
+                        {v.description}
+                      </p>
+                    )}
                   </div>
                 ))}
+
+              {/* ── VIEW 2: BY TIME (Original INC-... with cropped pictures by time) ── */}
+              {victimSortBy === 'time' &&
+                incidentsByTime.map((inc) => {
+                  const personList = inc.personDetails && inc.personDetails.length > 0
+                    ? inc.personDetails
+                    : (inc.personImages || []).map((url, idx) => {
+                        const m = url.match(/person_(\d+)/);
+                        const pId = m ? parseInt(m[1]) : idx + 1;
+                        return { id: pId, label: `Person #${pId}`, imageUrl: url, score: inc.highestConfidence };
+                      });
+
+                  return (
+                    <div
+                      key={inc.id}
+                      className="p-3.5 rounded bg-white border border-[#E6DFD5] hover:border-emerald-400 shadow-xs transition-all space-y-3"
+                    >
+                      {/* Incident Header: INC-... and Time */}
+                      <div className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold text-sm text-[#162347]">{inc.id}</span>
+                          <span className="text-[9px] font-mono px-1.5 py-0.5 rounded font-bold uppercase bg-rose-100 text-rose-800 border border-rose-200">
+                            {inc.personCount} Person{inc.personCount > 1 ? 's' : ''}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1 text-[11px] font-mono text-[#162347]/70 font-semibold">
+                          <Clock size={12} className="text-[#162347]/60" /> {inc.time}
+                        </div>
+                      </div>
+
+                      {/* Original Scene Image (INC-... full frame) */}
+                      {inc.originalImageUrl && (
+                        <div className="space-y-1">
+                          <div className="text-[10px] font-mono font-semibold uppercase text-[#162347]/70 flex items-center gap-1">
+                            <Eye size={11} className="text-blue-500" /> Original Capture:
+                          </div>
+                          <div
+                            onClick={() => onInspectIncident(inc)}
+                            className="w-full rounded-md overflow-hidden border border-slate-200 bg-black cursor-pointer hover:border-emerald-400 transition-all group relative"
+                            style={{ maxHeight: '140px' }}
+                          >
+                            <img
+                              src={`${detectionApi.apiBaseUrl}${inc.originalImageUrl}`}
+                              alt={`${inc.id} original`}
+                              className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform"
+                              style={{ maxHeight: '140px', objectFit: 'cover' }}
+                            />
+                            <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity">
+                              <Eye size={16} />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Cropped Pictures Row by Time */}
+                      {personList.length > 0 && (
+                        <div className="space-y-1.5">
+                          <div className="text-[10px] font-mono font-semibold uppercase text-[#162347]/70 flex items-center gap-1">
+                            <User size={11} className="text-emerald-600" /> Cropped Persons:
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {personList.map((p, idx) => (
+                              <div
+                                key={idx}
+                                onClick={() => onInspectIncident(inc, p.id)}
+                                className="flex items-center gap-2 p-1.5 rounded bg-slate-50 border border-slate-200 hover:border-emerald-400 cursor-pointer transition-all group"
+                              >
+                                <div className="w-12 h-12 rounded overflow-hidden bg-black shrink-0 border border-slate-300">
+                                  <img
+                                    src={`${detectionApi.apiBaseUrl}${p.imageUrl}`}
+                                    alt={p.label}
+                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                                  />
+                                </div>
+                                <div className="font-mono pr-1">
+                                  <div className="text-[11px] font-bold text-[#162347] flex items-center gap-1">
+                                    <span>{p.label}</span>
+                                    {(p as any).isReturning && (
+                                      <span className="text-[8px] bg-amber-100 text-amber-800 border border-amber-300 px-1 py-0.2 rounded font-bold uppercase tracking-wider">
+                                        Returning
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="text-[9px] text-emerald-700 font-semibold">
+                                    Score: {p.score !== undefined ? p.score.toFixed(2) : inc.highestConfidence.toFixed(2)}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* AI Description */}
+                      {inc.description && (
+                        <p className="text-[11px] text-[#162347]/80 line-clamp-2 leading-tight bg-slate-50 p-2 rounded border border-slate-100 font-sans">
+                          {inc.description}
+                        </p>
+                      )}
+
+                      {/* Footer Actions */}
+                      <div className="flex items-center justify-between pt-1.5 border-t border-[#E6DFD5] text-[10px] font-mono">
+                        <span
+                          className={`px-1.5 py-0.5 rounded uppercase font-bold text-[9px] ${
+                            inc.descriptionStatus === 'completed'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : inc.descriptionStatus === 'pending'
+                              ? 'bg-amber-100 text-amber-800 animate-pulse'
+                              : 'bg-slate-100 text-slate-700'
+                          }`}
+                        >
+                          {inc.descriptionStatus === 'completed'
+                            ? 'AI Observation Ready'
+                            : inc.descriptionStatus === 'pending'
+                            ? 'Analyzing Scene...'
+                            : 'AI Offline'}
+                        </span>
+                        <button
+                          onClick={() => onInspectIncident(inc)}
+                          className="bg-[#162347] hover:bg-[#24355E] text-white px-2.5 py-1 rounded text-[10px] flex items-center gap-1 font-bold transition-colors cursor-pointer"
+                        >
+                          <Eye size={12} /> Inspect Incident
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          ) : (
+            /* Clean Empty State when no real victims have been detected */
+            <div className="h-full flex flex-col items-center justify-center p-6 text-center space-y-3 my-auto">
+              <div className="w-12 h-12 rounded-full bg-[#162347]/5 border border-[#162347]/15 flex items-center justify-center text-[#162347]/60">
+                <Users size={24} />
+              </div>
+              <div>
+                <h4 className="font-mono text-xs font-bold text-[#162347] uppercase tracking-wider">
+                  No Victims Currently Detected
+                </h4>
+                <p className="text-[11px] text-[#162347]/60 mt-1 max-w-xs leading-relaxed">
+                  OpenCV HOG + SVM person detector is actively monitoring the live video stream. Detected persons (Person #1, Person #2) will appear here in real-time.
+                </p>
               </div>
             </div>
           )}
-
-          {/* Simulated / Field Victim Manifest */}
-          <div className="space-y-1">
-            <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#162347]/70 mb-2">
-              Field Deployments &amp; Manifest
-            </div>
-            {victims.map(v => (
-              <div key={v.id} className="p-3 rounded bg-[#FAF7F2] border border-[#E6DFD5] text-xs space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono font-bold text-[#162347]">{v.id}</span>
-                    <span className={`text-[9px] font-mono px-1.5 rounded font-bold uppercase ${v.priority === 'Critical' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'}`}>{v.priority}</span>
-                  </div>
-                  <span className="text-[10px] text-[#162347]/60 font-mono">{v.time}</span>
-                </div>
-                <p className="text-[#162347]/80 leading-snug">{v.zone} — <strong>{v.peopleCount} Person(s)</strong></p>
-                <div className="flex items-center justify-between pt-2 border-t border-[#E6DFD5]">
-                  <span className="text-[10px] font-mono font-bold uppercase text-[#162347]/70">{v.status}</span>
-                  {v.status !== 'Rescued' ? (
-                    <button onClick={() => {
-                      const next: Record<VictimStatus, VictimStatus> = { Detected: 'Verified', Verified: 'Rescue Assigned', 'Rescue Assigned': 'Rescued', Rescued: 'Rescued' };
-                      updateVictimStatus(v.id, next[v.status]);
-                    }} className="bg-[#162347] text-[#FAF7F2] text-[10px] font-mono px-3 py-1 rounded-full">
-                      {v.status === 'Detected' ? 'Verify' : v.status === 'Verified' ? 'Assign Boat' : 'Mark Rescued'}
-                    </button>
-                  ) : <span className="text-[10px] font-mono text-emerald-700 font-bold">✓ Rescued</span>}
-                </div>
-              </div>
-            ))}
-          </div>
         </div>
       );
+    }
 
     case 'status':
       return (
@@ -789,23 +1097,16 @@ function PanelContent({
                 </div>
                 {log.confidence > 0 && (
                   <div className="text-right shrink-0">
-                    <span className="text-[11px] font-bold text-emerald-400">{log.confidence}%</span>
+                    <span className="text-[11px] font-bold text-emerald-400">
+                      Score: {log.confidence.toFixed(2)}
+                    </span>
                   </div>
                 )}
               </div>
             ))
-          ) : detectionLogs && detectionLogs.length > 0 ? (
-            detectionLogs.map((log) => (
-              <div key={log.id} className="border-b border-emerald-900/40 pb-2">
-                <div className="flex justify-between text-emerald-600 mb-0.5">
-                  <span>[{log.time}]</span><span>CONF: {log.confidence}%</span>
-                </div>
-                <div className="text-emerald-300">{log.message}</div>
-              </div>
-            ))
           ) : (
-            <div className="text-emerald-700 italic py-4 text-center">
-              No detections logged.
+            <div className="text-white/40 italic py-6 text-center text-xs">
+              No detection events recorded yet.
             </div>
           )}
         </div>
@@ -825,7 +1126,7 @@ function LayoutRenderer({
   dropIndicator: { panelId: PanelId; position: 'top' | 'bottom' | 'left' | 'right' } | null;
   onClose: (id: PanelId) => void;
   detectionApi: ReturnType<typeof useDetectionApi>;
-  onInspectIncident: (inc: RescueIncident) => void;
+  onInspectIncident: (inc: RescueIncident, personId?: number) => void;
 }) {
   if (!node) {
     return (
@@ -881,6 +1182,12 @@ export default function Dashboard() {
   const { robotOnline, moveRobot, emergencyStop } = useRescue();
   const detectionApi = useDetectionApi();
   const [inspectedIncident, setInspectedIncident] = useState<RescueIncident | null>(null);
+  const [inspectedPersonId, setInspectedPersonId] = useState<number | null>(null);
+
+  const handleInspectIncident = useCallback((inc: RescueIncident, personId?: number) => {
+    setInspectedIncident(inc);
+    setInspectedPersonId(personId ?? null);
+  }, []);
 
   const [layout, setLayout] = useState<LayoutNode | null>({ type: 'panel', id: 'camera' });
   const [time, setTime] = useState(new Date().toLocaleTimeString());
@@ -972,17 +1279,15 @@ export default function Dashboard() {
   };
 
   const handleDragEnd = (e: DragEndEvent) => {
+    const { over } = e;
     const currentDrag = activeDrag;
     const currentIndicator = dropIndicator;
     setActiveDrag(null);
     setDropIndicator(null);
     if (!currentDrag) return;
 
-    const { active, over } = e;
-    const activeId = active.id as string;
-    const overId = over?.id as PanelId | undefined;
     const panelId = currentDrag.panelId;
-
+    const overId = over?.id as PanelId | undefined;
     if (!overId || !currentIndicator) return;
 
     setLayout(prev => {
@@ -1070,7 +1375,7 @@ export default function Dashboard() {
               dropIndicator={dropIndicator}
               onClose={(id) => setLayout(prev => removeNode(prev, id))}
               detectionApi={detectionApi}
-              onInspectIncident={setInspectedIncident}
+              onInspectIncident={handleInspectIncident}
             />
           </div>
         </SortableContext>
@@ -1080,8 +1385,13 @@ export default function Dashboard() {
       {inspectedIncident && (
         <IncidentModal
           incident={inspectedIncident}
+          targetPersonId={inspectedPersonId}
+          allIncidents={detectionApi.incidents}
           apiBaseUrl={detectionApi.apiBaseUrl}
-          onClose={() => setInspectedIncident(null)}
+          onClose={() => {
+            setInspectedIncident(null);
+            setInspectedPersonId(null);
+          }}
         />
       )}
 

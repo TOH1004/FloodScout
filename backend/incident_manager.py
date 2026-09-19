@@ -3,11 +3,16 @@ incident_manager.py — Rescue Incident Manager for FloodScout.
 
 Handles:
   - Detection debouncing and cooldown tracking
-  - Frame saving (original full scene, annotated YOLO frame, person crops)
+  - Frame saving (original full scene, annotated detector frame, person crops)
   - Unique Incident ID generation (INC-YYYYMMDD-HHMMSS-XXX)
   - Async dispatch of Gemini Vision AI description
   - Thread-safe storage of incident records
   - Real-time WebSocket broadcasting to connected dashboard clients
+
+Note on detection scores:
+  Person detections from OpenCV HOG + SVM carry a raw SVM decision margin score
+  (stored in 'highestConfidence' for API backward compatibility). This value is
+  NOT a probability percentage — it is an SVM weight (typically 0.0 – 2.5+).
 """
 
 import os
@@ -16,7 +21,7 @@ import time
 import datetime
 import threading
 import logging
-from typing import List, Dict, Any, Optional, Set
+from typing import List, Dict, Any, Optional, Set, Tuple
 from fastapi import WebSocket
 
 logger = logging.getLogger(__name__)
@@ -24,6 +29,9 @@ logger = logging.getLogger(__name__)
 
 class IncidentManager:
     """Manages creation, image persistence, vision AI analysis, and distribution of rescue incidents."""
+
+    # Minimum seconds between re-captures of the SAME already-seen person
+    RECAPTURE_COOLDOWN: float = 15.0
 
     def __init__(
         self,
@@ -43,9 +51,14 @@ class IncidentManager:
         self.lock = threading.Lock()
         self.incidents: List[Dict[str, Any]] = []
         self._incident_counter: int = 0
+        self.main_loop: Optional[Any] = None
 
-        # Once-only presence tracking
-        self._is_person_present: bool = False   # True if person already captured for this continuous presence
+        # Person ID tracking across the entire session
+        # captured_person_ids: IDs ever captured (used by frontend to classify 'new' vs 'returning')
+        self.captured_person_ids: Set[int] = set()
+        # _person_last_captured: per-person timestamp of last successful capture
+        self._person_last_captured: Dict[int, float] = {}
+        self._is_person_present: bool = False   # True while persons are actively in frame
         self._last_seen_time: float = 0.0       # Timestamp of last frame where a person was detected
         self._presence_lock = threading.Lock()
 
@@ -81,39 +94,47 @@ class IncidentManager:
             for ws in sockets:
                 try:
                     await ws.send_json(event_data)
-                except Exception:
+                except BaseException:
+                    # Catch BaseException (not just Exception) because Python 3.11+
+                    # raises asyncio.CancelledError (a BaseException subclass) when a
+                    # WebSocket client disconnects abruptly. Missing this causes the
+                    # broadcast coroutine to crash silently.
                     self.disconnect_websocket(ws)
 
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                asyncio.run_coroutine_threadsafe(_send_all(), loop)
-            else:
-                loop.run_until_complete(_send_all())
-        except RuntimeError:
-            # If no running event loop in current thread, spawn a quick one
-            new_loop = asyncio.new_event_loop()
-            new_loop.run_until_complete(_send_all())
-            new_loop.close()
+            if self.main_loop and self.main_loop.is_running():
+                asyncio.run_coroutine_threadsafe(_send_all(), self.main_loop)
+                return
+
+            try:
+                loop = asyncio.get_running_loop()
+                if loop and loop.is_running():
+                    asyncio.run_coroutine_threadsafe(_send_all(), loop)
+                    return
+            except RuntimeError:
+                pass
         except Exception as e:
             logger.debug(f"Broadcast error: {e}")
 
-    # ─── Incident Detection Trigger (Once-Only Capture) ──────────────────────────
+    # ─── Incident Detection Trigger ───────────────────────────────────────────────
     def check_and_trigger(
         self,
         original_frame,
         annotated_frame,
         detections: List[Dict[str, Any]],
         summary: Dict[str, Any],
-        confidence_threshold: float = 0.50
+        confidence_threshold: float = 0.0
     ) -> Optional[Dict[str, Any]]:
-        """Evaluates detection state and captures the person ONCE per presence session.
+        """Evaluates detection state and captures incidents, updating By-Time view on every detection.
 
         Behavior:
-          1. When a person is detected for the first time, it captures an incident immediately.
-          2. As long as the person stays in front of the camera, NO further captures are taken.
-          3. Only after the scene remains completely clear of any person for `clear_hold_seconds`
-             (e.g., 3.0s) will the system re-arm to capture the next person.
+          1. NEW person (never seen before): capture incident immediately, add to captured_person_ids.
+          2. RETURNING person (re-identified same ID): capture a new incident after RECAPTURE_COOLDOWN
+             seconds have elapsed since their last capture. Marked as isReturning=True in personDetails.
+             In the frontend, By Person de-duplicates by personId, so returning captures flow into
+             'All Captures' without creating a new Person #N card.
+          3. Persons still within their cooldown window: no new incident.
+          4. Scene clear for clear_hold_seconds with no detections: reset presence flag.
         """
         person_detected = summary.get("personDetected", False)
         highest_conf = summary.get("highestConfidence", 0.0)
@@ -121,37 +142,69 @@ class IncidentManager:
 
         with self._presence_lock:
             if person_detected and highest_conf >= confidence_threshold:
-                # A person is in the frame right now
                 self._last_seen_time = now
+                self._is_person_present = True
 
-                if not self._is_person_present:
-                    # RISING EDGE: First detection after clear state -> Capture ONCE!
-                    self._is_person_present = True
-                    logger.info(
-                        f"Person detected ({int(highest_conf * 100)}% conf). "
-                        f"Capturing incident (1-time capture). Further captures paused while person remains."
-                    )
-                    return self._create_incident(original_frame, annotated_frame, detections, summary)
-                else:
-                    # Person is still present in frame -> Suppress duplicate captures
+                # Classify each visible person as new or returnable
+                new_ids: List[int] = []
+                returning_ids: List[int] = []
+
+                for d in detections:
+                    pid = d.get("id")
+                    if pid is None:
+                        continue
+                    if pid not in self.captured_person_ids:
+                        # Never captured before — new person
+                        new_ids.append(pid)
+                    else:
+                        # Already seen — eligible for recapture after cooldown
+                        last_cap = self._person_last_captured.get(pid, 0.0)
+                        if (now - last_cap) >= self.RECAPTURE_COOLDOWN:
+                            returning_ids.append(pid)
+
+                if not new_ids and not returning_ids:
+                    # All persons within their cooldown window — no capture needed
                     return None
+
+                # Register new persons
+                for pid in new_ids:
+                    self.captured_person_ids.add(pid)
+                    self._person_last_captured[pid] = now
+
+                # Update returning persons' last-captured timestamp
+                for pid in returning_ids:
+                    self._person_last_captured[pid] = now
+
+                all_triggered = new_ids + returning_ids
+                ids_str = ", ".join(
+                    f"#{i}{'(new)' if i in new_ids else '(returning)'}" for i in all_triggered
+                )
+                logger.info(
+                    f"Capturing incident — persons: {ids_str} "
+                    f"(Score: {highest_conf:.2f}). Unique persons total: {len(self.captured_person_ids)}"
+                )
+                return self._create_incident(
+                    original_frame, annotated_frame, detections, summary,
+                    new_ids=set(new_ids), returning_ids=set(returning_ids)
+                )
             else:
                 # No person detected in this frame
                 if self._is_person_present:
-                    # Check if enough time has passed without any detection to consider scene clear
                     time_absent = now - self._last_seen_time
                     if time_absent >= self.clear_hold_seconds:
                         self._is_person_present = False
-                        logger.info(f"Scene clear for {time_absent:.1f}s. Detector re-armed for next person.")
+                        logger.info(f"Scene clear for {time_absent:.1f}s.")
 
                 return None
 
     def rearm(self):
-        """Manually force re-arming so the current or next person can be captured again."""
+        """Manually force re-arming so all persons can be captured again."""
         with self._presence_lock:
             self._is_person_present = False
             self._last_seen_time = 0.0
-            logger.info("Presence detector manually re-armed.")
+            self.captured_person_ids.clear()
+            self._person_last_captured.clear()
+            logger.info("Presence detector manually re-armed (all person capture records cleared.)")
 
     def _generate_incident_id(self) -> str:
         """Generates a standardized incident ID: INC-YYYYMMDD-HHMMSS-XXX."""
@@ -166,9 +219,24 @@ class IncidentManager:
         original_frame,
         annotated_frame,
         detections: List[Dict[str, Any]],
-        summary: Dict[str, Any]
+        summary: Dict[str, Any],
+        new_ids: Optional[Set[int]] = None,
+        returning_ids: Optional[Set[int]] = None,
     ) -> Dict[str, Any]:
-        """Saves images, creates the incident record, and starts async vision analysis."""
+        """Saves images, creates the incident record, and starts async vision analysis.
+
+        Args:
+            new_ids: Person IDs that are brand-new (never captured before).
+            returning_ids: Person IDs that were re-identified from a previous session.
+                           Their crops are stored as additional captures in the frontend's
+                           'All Captures' gallery but do NOT create a new 'Person #N' card
+                           in the By Person manifest (de-duplicated by personId on frontend).
+        """
+        if new_ids is None:
+            new_ids = set()
+        if returning_ids is None:
+            returning_ids = set()
+
         incident_id = self._generate_incident_id()
         now_dt = datetime.datetime.now()
         timestamp_iso = now_dt.isoformat()
@@ -179,13 +247,14 @@ class IncidentManager:
         original_path = os.path.join(self.captures_dir, original_filename)
         cv2.imwrite(original_path, original_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
 
-        # 2. Save Annotated Frame with YOLO Bounding Boxes
+        # 2. Save Annotated Frame with HOG+SVM Bounding Boxes
         annotated_filename = f"{incident_id}_annotated.jpg"
         annotated_path = os.path.join(self.captures_dir, annotated_filename)
         cv2.imwrite(annotated_path, annotated_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
 
-        # 3. Save Person Crop(s)
+        # 3. Save Person Crop(s) — tag each as new or returning
         person_images = []
+        person_details = []
         frame_h, frame_w = original_frame.shape[:2]
 
         for i, det in enumerate(detections, start=1):
@@ -197,13 +266,26 @@ class IncidentManager:
                 x2 = min(frame_w, x + w)
                 y2 = min(frame_h, y + h)
 
+                pid = det.get("id", i)
+                score = det.get("confidence", 0.0)
+                is_returning = pid in returning_ids
+
                 if (x2 > x) and (y2 > y):
                     crop = original_frame[y:y2, x:x2]
                     if crop.size > 0:
-                        crop_filename = f"{incident_id}_person_{i:02d}.jpg"
+                        crop_filename = f"{incident_id}_person_{pid}.jpg"
                         crop_path = os.path.join(self.captures_dir, crop_filename)
                         cv2.imwrite(crop_path, crop, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
-                        person_images.append(f"/captures/{crop_filename}")
+                        crop_url = f"/captures/{crop_filename}"
+                        person_images.append(crop_url)
+                        person_details.append({
+                            "id": pid,
+                            "label": f"Person #{pid}",
+                            "imageUrl": crop_url,
+                            "score": round(score, 2),
+                            "box": [x, y, w, h],
+                            "isReturning": is_returning,
+                        })
             except Exception as e:
                 logger.warning(f"Failed to crop person {i} for incident {incident_id}: {e}")
 
@@ -217,6 +299,7 @@ class IncidentManager:
             "imageUrl": f"/captures/{annotated_filename}",
             "originalImageUrl": f"/captures/{original_filename}",
             "personImages": person_images,
+            "personDetails": person_details,
             "description": "Analyzing visual scene with Gemini Vision AI...",
             "descriptionStatus": "pending",
             "status": "NEW"
@@ -229,7 +312,7 @@ class IncidentManager:
 
         logger.info(
             f"Created rescue incident: {incident_id} | People: {incident['personCount']} | "
-            f"Conf: {int(incident['highestConfidence'] * 100)}%"
+            f"Detection score: {incident['highestConfidence']:.4f}"
         )
 
         # Notify dashboard immediately of the new incident capture

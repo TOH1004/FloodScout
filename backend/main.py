@@ -39,6 +39,7 @@ import time
 import datetime
 import threading
 import logging
+import urllib.parse
 from typing import List, Dict, Any, Optional
 from contextlib import asynccontextmanager
 
@@ -522,6 +523,125 @@ def set_camera_setting(payload: Dict[str, Any] = Body(...)):
         "value": value_int,
         "current_settings": state.serial_bridge.settings
     }
+
+
+def _persist_env_key(key: str, value: str):
+    """Safely update or add an environment key in backend/.env without overwriting other keys."""
+    env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+    if not os.path.exists(env_path):
+        return
+    try:
+        with open(env_path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+        found = False
+        new_lines = []
+        for line in lines:
+            line_stripped = line.strip()
+            if line_stripped.startswith(f"{key}=") or line_stripped == key:
+                new_lines.append(f"{key}={value}\n")
+                found = True
+            else:
+                new_lines.append(line)
+        if not found:
+            new_lines.append(f"{key}={value}\n")
+        with open(env_path, "w", encoding="utf-8") as f:
+            f.writelines(new_lines)
+    except Exception as e:
+        logger.warning(f"Could not persist {key} to .env: {e}")
+
+
+class CameraUrlPayload(BaseModel):
+    url: str = Field(..., description="Wi-Fi / IP camera stream URL (e.g. http://10.185.112.106:81/stream) or 'usb' for USB webcam")
+
+
+@app.post("/camera/url")
+def update_camera_url(payload: CameraUrlPayload):
+    """Dynamically switch camera stream source to a Wi-Fi / IP stream or USB webcam in real time."""
+    global CAMERA_URL
+    raw_url = payload.url.strip()
+
+    with state.lock:
+        if raw_url.lower() in ("usb", "webcam", "local", ""):
+            # Switch to USB camera
+            CAMERA_URL = ""
+            if state.camera_source:
+                try:
+                    state.camera_source.release()
+                except Exception:
+                    pass
+            state.camera_source = USBCameraSource(
+                camera_index=CAMERA_INDEX,
+                width=int(os.getenv("CAMERA_WIDTH", "1280")),
+                height=int(os.getenv("CAMERA_HEIGHT", "720")),
+                fps=int(os.getenv("CAMERA_FPS", "30")),
+            )
+            _persist_env_key("CAMERA_URL", "")
+            logger.info(f"Switched camera source to USB Webcam index {CAMERA_INDEX}")
+            return {
+                "success": True,
+                "mode": "usb",
+                "message": f"Switched to USB camera index {CAMERA_INDEX}",
+                "connected": state.camera_source.is_connected(),
+            }
+        else:
+            # Normalize and sanitize Wi-Fi camera URL
+            cleaned = raw_url
+            if not cleaned.startswith("http://") and not cleaned.startswith("https://") and not cleaned.startswith("rtsp://"):
+                cleaned = f"http://{cleaned}"
+
+            parsed = urllib.parse.urlparse(cleaned)
+            # Auto-correct /cam.mjpg to :81/stream since official ESP32 CameraWebServer uses :81/stream
+            if parsed.path == "/cam.mjpg":
+                cleaned = f"{parsed.scheme or 'http'}://{parsed.netloc}:81/stream"
+                parsed = urllib.parse.urlparse(cleaned)
+            # If no port and no specific path, default to :81/stream for standard ESP32 / XIAO cameras
+            elif not parsed.port and (not parsed.path or parsed.path == "/"):
+                cleaned = f"{cleaned.rstrip('/')}:81/stream"
+                parsed = urllib.parse.urlparse(cleaned)
+
+            CAMERA_URL = cleaned
+            if state.camera_source:
+                try:
+                    state.camera_source.release()
+                except Exception:
+                    pass
+
+            state.camera_source = IPCameraSource(stream_url=cleaned)
+            _persist_env_key("CAMERA_URL", cleaned)
+            logger.info(f"Switched camera source to Wi-Fi stream: {cleaned}")
+
+            # Also update serial_bridge xiao_ip for sensor settings over Wi-Fi
+            if state.serial_bridge and parsed.hostname:
+                base_ip = f"{parsed.scheme or 'http'}://{parsed.hostname}"
+                state.serial_bridge.xiao_ip = base_ip
+                _persist_env_key("XIAO_IP", base_ip)
+                threading.Thread(target=state.serial_bridge.connect, args=(True,), daemon=True).start()
+
+            return {
+                "success": True,
+                "mode": "wifi",
+                "url": cleaned,
+                "message": f"Connected to Wi-Fi camera stream at {cleaned}",
+                "connected": state.camera_source.is_connected(),
+            }
+
+
+@app.post("/camera/reconnect")
+def reconnect_camera():
+    """Forces reconnection of the active camera source."""
+    with state.lock:
+        if not state.camera_source:
+            raise HTTPException(status_code=503, detail="Camera source not initialized")
+        if isinstance(state.camera_source, IPCameraSource):
+            state.camera_source.release()
+            state.camera_source = IPCameraSource(stream_url=CAMERA_URL)
+        elif isinstance(state.camera_source, USBCameraSource):
+            state.camera_source._open()
+        return {
+            "success": True,
+            "connected": state.camera_source.is_connected(),
+            "url": CAMERA_URL if CAMERA_URL else f"USB #{CAMERA_INDEX}",
+        }
 
 
 # ── Pan & Tilt Sonar Actuator Endpoints ─────────────────────────────────────────

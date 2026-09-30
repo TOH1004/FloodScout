@@ -14,6 +14,8 @@ Design:
 
 import cv2
 import numpy as np
+import urllib.request
+import urllib.parse
 from abc import ABC, abstractmethod
 from typing import Optional, Tuple, Dict, Any
 import time
@@ -239,82 +241,104 @@ class USBCameraSource(CameraSource):
 
 
 class IPCameraSource(CameraSource):
-    """Network camera source (Seeed XIAO ESP32S3, ESP32-CAM, RTSP / HTTP MJPEG)."""
+    """Network camera source (Seeed XIAO ESP32S3, ESP32-CAM, RTSP / HTTP MJPEG) with auto-fallback."""
 
     def __init__(self, stream_url: str):
         self.stream_url = stream_url
         self.camera_index = 0
-        self._cap: Optional[cv2.VideoCapture] = None
+        parsed = urllib.parse.urlparse(stream_url)
+        self.host = parsed.hostname or "10.185.112.149"
+        self.capture_url = f"http://{self.host}/capture"
         self._lock = threading.Lock()
         self._latest_frame: Optional[np.ndarray] = None
-        self._frame_time: float = 0.0
+        self._frame_time: float = time.time()
         self._is_capturing = False
         self._capture_thread: Optional[threading.Thread] = None
+        self._mode = "init"
         self._open()
 
     def _open(self) -> bool:
         try:
             self._stop()
             self._is_capturing = True
+            self._frame_time = time.time()
             self._capture_thread = threading.Thread(
                 target=self._worker, name="IPCameraGrabber", daemon=True
             )
             self._capture_thread.start()
-            logger.info(f"IP camera grabber started in background for: {self.stream_url}")
+            logger.info(f"IP camera grabber started for {self.stream_url} (fallback: {self.capture_url})")
             return True
         except Exception as e:
-            logger.error(f"Failed to open IP camera {self.stream_url}: {e}")
+            logger.error(f"Failed to start IP camera grabber: {e}")
             return False
 
     def _worker(self) -> None:
         while self._is_capturing:
+            # 1. Attempt high-speed HTTP MJPEG stream (port 81)
+            connected_stream = False
             try:
-                if not self._cap or not self._cap.isOpened():
-                    time.sleep(1.0)
-                    self._cap = cv2.VideoCapture(self.stream_url)
-                    continue
-
-                ret, frame = self._cap.read()
-                if ret and frame is not None:
-                    with self._lock:
-                        self._latest_frame = frame
-                        self._frame_time = time.time()
-                else:
-                    time.sleep(0.04)
-                    if time.time() - self._frame_time > 3.0:
-                        try:
-                            if self._cap:
-                                self._cap.release()
-                            self._cap = cv2.VideoCapture(self.stream_url)
-                        except Exception:
-                            pass
+                req = urllib.request.Request(self.stream_url)
+                with urllib.request.urlopen(req, timeout=3) as stream:
+                    buf = b""
+                    self._mode = "stream"
+                    logger.info(f"High-speed MJPEG stream connected: {self.stream_url}")
+                    while self._is_capturing:
+                        chunk = stream.read(4096)
+                        if not chunk:
+                            break
+                        buf += chunk
+                        a = buf.find(b"\xff\xd8")
+                        b = buf.find(b"\xff\xd9")
+                        if a != -1 and b != -1 and b > a:
+                            jpg = buf[a : b + 2]
+                            buf = buf[b + 2 :]
+                            frame = cv2.imdecode(np.frombuffer(jpg, dtype=np.uint8), cv2.IMREAD_COLOR)
+                            if frame is not None:
+                                with self._lock:
+                                    self._latest_frame = frame
+                                    self._frame_time = time.time()
+                                connected_stream = True
             except Exception as e:
-                time.sleep(1.0)
+                logger.debug(f"Direct stream {self.stream_url} not accessible ({e}), using /capture fallback")
+
+            # 2. Fallback mode: Poll /capture endpoint on port 80 (always available)
+            if self._is_capturing:
+                self._mode = "capture"
+                fallback_rounds = 0
+                while self._is_capturing and fallback_rounds < 30:  # Check port 81 every ~3 seconds
+                    try:
+                        resp = urllib.request.urlopen(self.capture_url, timeout=1.5)
+                        jpg_data = resp.read()
+                        frame = cv2.imdecode(np.frombuffer(jpg_data, dtype=np.uint8), cv2.IMREAD_COLOR)
+                        if frame is not None:
+                            with self._lock:
+                                self._latest_frame = frame
+                                self._frame_time = time.time()
+                        time.sleep(0.04)
+                    except Exception:
+                        time.sleep(0.2)
+                    fallback_rounds += 1
 
     def read(self) -> Tuple[bool, Optional[np.ndarray]]:
         with self._lock:
-            if self._latest_frame is not None and time.time() - self._frame_time < 3.0:
+            if self._latest_frame is not None and (time.time() - self._frame_time < 5.0):
                 return True, self._latest_frame
         return False, None
 
     def _stop(self) -> None:
         self._is_capturing = False
         if self._capture_thread and self._capture_thread.is_alive():
-            self._capture_thread.join(timeout=1.0)
+            self._capture_thread.join(timeout=1.5)
             self._capture_thread = None
-        if self._cap:
-            try:
-                self._cap.release()
-            except Exception:
-                pass
-            self._cap = None
+        with self._lock:
+            self._latest_frame = None
 
     def release(self) -> None:
         self._stop()
 
     def is_connected(self) -> bool:
         with self._lock:
-            return self._is_capturing and (time.time() - self._frame_time < 3.0)
+            return self._is_capturing and (self._latest_frame is not None) and (time.time() - self._frame_time < 5.0)
 
     def get_info(self) -> Dict[str, Any]:
         with self._lock:
@@ -322,7 +346,7 @@ class IPCameraSource(CameraSource):
             h = self._latest_frame.shape[0] if self._latest_frame is not None else 480
         return {
             "connected": self.is_connected(),
-            "type": "Seeed XIAO (Wi-Fi)",
+            "type": f"Seeed XIAO (Wi-Fi {'Stream' if self._mode == 'stream' else 'Capture'})",
             "camera_index": 0,
             "url": self.stream_url,
             "resolution": {"width": w, "height": h},

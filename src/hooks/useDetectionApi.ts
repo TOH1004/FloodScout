@@ -1,4 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import {
+  getCameraStreamUrl,
+  setCameraStreamUrl,
+  getCameraFeedMode,
+  setCameraFeedMode,
+  type CameraFeedMode,
+} from '../config/camera';
 
 export interface DetectionItem {
   class: string;
@@ -22,6 +29,7 @@ export interface CameraStatus {
   connected: boolean;
   camera_index: number;
   type?: string;
+  url?: string;
   visionAiReady?: boolean;
   visionModel?: string;
   cooldownSeconds?: number;
@@ -455,6 +463,53 @@ export function useDetectionApi() {
     setApiBaseUrlState(saved);
   }, []);
 
+  // Direct Wi-Fi Camera Stream state & mode ('ai' vs 'direct')
+  const [cameraStreamUrl, setCameraStreamUrlState] = useState<string>(() => getCameraStreamUrl());
+  const [feedMode, setFeedModeState] = useState<CameraFeedMode>(() => getCameraFeedMode());
+  const [isUpdatingCameraUrl, setIsUpdatingCameraUrl] = useState<boolean>(false);
+
+  const setFeedMode = useCallback((mode: CameraFeedMode) => {
+    setCameraFeedMode(mode);
+    setFeedModeState(mode);
+  }, []);
+
+  const updateCameraUrl = useCallback(async (newUrl: string): Promise<boolean> => {
+    const saved = setCameraStreamUrl(newUrl);
+    setCameraStreamUrlState(saved);
+    setIsUpdatingCameraUrl(true);
+    try {
+      const res = await fetch(`${apiBaseUrl}/camera/url`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: saved }),
+      });
+      if (res.ok) {
+        await fetchData();
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    } finally {
+      setIsUpdatingCameraUrl(false);
+    }
+  }, [apiBaseUrl, fetchData]);
+
+  const reconnectCamera = useCallback(async (): Promise<boolean> => {
+    try {
+      const res = await fetch(`${apiBaseUrl}/camera/reconnect`, {
+        method: 'POST',
+      });
+      if (res.ok) {
+        await fetchData();
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }, [apiBaseUrl, fetchData]);
+
   const videoFeedUrl = `${apiBaseUrl}/video_feed`;
 
   return {
@@ -467,6 +522,12 @@ export function useDetectionApi() {
     visionAiStatus,
     lastAlertTimestamp,
     videoFeedUrl,
+    cameraStreamUrl,
+    setCameraStreamUrl: updateCameraUrl,
+    feedMode,
+    setFeedMode,
+    isUpdatingCameraUrl,
+    reconnectCamera,
     apiBaseUrl,
     setBackendUrl: updateBackendUrl,
     xiaoStatus,

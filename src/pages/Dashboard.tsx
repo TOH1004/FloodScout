@@ -2,14 +2,17 @@ import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ArrowLeft, Clock, Compass, MapPin, ArrowUp, ArrowDown, ArrowRight,
-  Camera, X, Activity, Cpu, Target, FileText,
-  GripVertical, AlertTriangle, VideoOff, Eye, User, Users, ArrowUpDown,
-  Navigation, Laptop, Maximize2, Minimize2, Wifi, Settings, Check, RefreshCw, Globe, Edit3
+  Camera, X, Cpu, Target, FileText,
+  GripVertical, Eye, User, Users, ArrowUpDown,
+  Navigation, Laptop, Maximize2, Minimize2, Wifi, Settings, Check, RefreshCw, Globe, Edit3, Radio, Route
 } from 'lucide-react';
 import { useDetectionApi, type RescueIncident } from '../hooks/useDetectionApi';
+import { RescueLocationAnalysis } from '../components/RescueLocationAnalysis';
 import { usePanTilt, type UsePanTiltReturn } from '../hooks/usePanTilt';
 import { IncidentModal } from '../components/IncidentModal';
 import { CameraSettingsPanel } from '../components/CameraSettingsPanel';
+import { WifiCameraModal } from '../components/WifiCameraModal';
+import { extractCameraHost } from '../config/camera';
 import {
   DndContext,
   pointerWithin,
@@ -35,7 +38,7 @@ import {
   Panel,
   Separator as PanelResizeHandle,
 } from 'react-resizable-panels';
-import { MapContainer, TileLayer, Marker, Popup, Circle, Polygon, useMapEvents, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Circle, Polygon, Polyline, useMapEvents, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { useRescue } from '../context/RescueContext';
@@ -73,6 +76,30 @@ const getVictimMarkerIcon = (status: VictimStatus) => {
     iconAnchor: [13, 13],
   });
 };
+
+const robotIcon = L.divIcon({
+  className: 'custom-robot-marker',
+  html: `<div style="position:relative;width:38px;height:38px;display:flex;align-items:center;justify-content:center;">
+    <div style="position:absolute;inset:0;border-radius:50%;background:rgba(6,182,212,0.45);animation:ping 2s cubic-bezier(0,0,0.2,1) infinite;"></div>
+    <div style="position:relative;width:32px;height:32px;background:#0891B2;border:3px solid #FAF7F2;border-radius:50%;box-shadow:0 0 16px rgba(6,182,212,0.9);display:flex;align-items:center;justify-content:center;font-size:14px;color:#FAF7F2;cursor:pointer;">🤖</div>
+  </div>`,
+  iconSize: [38, 38],
+  iconAnchor: [19, 19],
+});
+
+const startIcon = L.divIcon({
+  className: 'custom-start-marker',
+  html: `<div style="width:30px;height:30px;background:#4338CA;border:2.5px solid #FAF7F2;border-radius:50%;box-shadow:0 0 14px rgba(67,56,202,0.8);display:flex;align-items:center;justify-content:center;font-size:13px;color:#FAF7F2;cursor:pointer;">🚩</div>`,
+  iconSize: [30, 30],
+  iconAnchor: [15, 15],
+});
+
+const rescueHavenIcon = L.divIcon({
+  className: 'custom-rescue-marker',
+  html: `<div style="width:32px;height:32px;background:#059669;border:3px solid #FAF7F2;border-radius:50%;box-shadow:0 0 16px rgba(5,150,105,0.85);display:flex;align-items:center;justify-content:center;font-size:14px;color:#FAF7F2;cursor:pointer;">🛡️</div>`,
+  iconSize: [32, 32],
+  iconAnchor: [16, 16],
+});
 
 function MapClickHandler({ onMapClick }: { onMapClick: (lat: number, lng: number) => void }) {
   useMapEvents({ click: (e) => onMapClick(e.latlng.lat, e.latlng.lng) });
@@ -188,7 +215,7 @@ const PANEL_DEFS: PanelDef[] = [
   { id: 'map',        label: 'Tactical Map',        icon: MapPin },
   { id: 'navigation', label: 'Navigation',          icon: Compass },
   { id: 'victims',    label: 'Victim Manifest',     icon: Target },
-  { id: 'status',     label: 'Robot Status',        icon: Activity },
+  { id: 'status',     label: 'Rescue / Location Analysis', icon: Route },
   { id: 'controls',   label: 'Controls',            icon: Cpu },
   { id: 'log',        label: 'Detection Log',       icon: FileText },
 ];
@@ -347,17 +374,25 @@ function PanelContent({
     locationStatus, locationSource, locationError,
     refreshComputerLocation, setManualComputerLocation,
     setOperatingMode, moveRobot,
+    robotLocation, robotHeading, trajectory, signalDbm,
   } = useRescue();
 
   const { detectionStatus } = detectionApi;
 
   const [aiBoxes, setAiBoxes] = useState(true);
   const [crosshair, setCrosshair] = useState(true);
-  const [throttle, setThrottle] = useState(50);
   const [waypoint, setWaypoint] = useState<[number, number] | null>(null);
   const [localThreshold, setLocalThreshold] = useState(50);
   const [victimSortBy, setVictimSortBy] = useState<'person' | 'time'>('person');
   const [mapTileSource, setMapTileSource] = useState<'google' | 'google-hybrid' | 'carto' | 'osm'>('google');
+  const [showWifiModal, setShowWifiModal] = useState(false);
+  const [directFeedError, setDirectFeedError] = useState(false);
+  const [inlineCameraIpInput, setInlineCameraIpInput] = useState('');
+
+  // Reset stream error when URL or mode changes so the new feed can attempt connection
+  useEffect(() => {
+    setDirectFeedError(false);
+  }, [detectionApi.cameraStreamUrl, detectionApi.feedMode]);
 
   const floodZone: [number, number][] = [
     [1.5650, 103.6320], [1.5670, 103.6430], [1.5560, 103.6460], [1.5520, 103.6350],
@@ -480,58 +515,157 @@ function PanelContent({
   const manifestPersons = Array.from(personsMap.values());
   manifestPersons.sort((a, b) => b.personId - a.personId);
 
+  // Corridor Milestones: Start -> Robot -> Person -> Rescue Point
+  const startPoint: [number, number] = (trajectory && trajectory.length > 0)
+    ? trajectory[0]
+    : [baseLocation[0] - 0.0028, baseLocation[1] - 0.0025];
+  const rescuePoint: [number, number] = [startPoint[0] + 0.0045, startPoint[1] + 0.0042];
+  const targetPersonLoc: [number, number] = manifestPersons[0]?.location ||
+    victims[0]?.location ||
+    (detectionStatus.personDetected ? [baseLocation[0] + 0.0014, baseLocation[1] + 0.0016] : [startPoint[0] + 0.0024, startPoint[1] + 0.0028]);
+
   const incidentsByTime = [...(detectionApi.incidents || [])].sort((a, b) => {
     return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
   });
 
   switch (id) {
     case 'camera': {
-      const { backendOnline, cameraStatus, detectionStatus, videoFeedUrl, activeIncident, dismissActiveIncident, apiBaseUrl, setHogMode } = detectionApi;
+      const {
+        backendOnline, cameraStatus, detectionStatus, videoFeedUrl,
+        cameraStreamUrl, setCameraStreamUrl, feedMode, setFeedMode, isUpdatingCameraUrl,
+        activeIncident, dismissActiveIncident, apiBaseUrl, setHogMode
+      } = detectionApi;
       const currentMode = cameraStatus.mode ?? 'fast';
 
       return (
         <div className="relative h-full bg-slate-950 flex flex-col overflow-hidden select-none">
           {/* Main Video Viewport */}
           <div className="relative flex-1 bg-black flex items-center justify-center overflow-hidden">
-            {backendOnline && cameraStatus.connected ? (
+            {feedMode === 'direct' ? (
+              directFeedError ? (
+                <div className="flex flex-col items-center justify-center p-6 text-center text-slate-400 space-y-3">
+                  <div className="w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                    <Wifi size={24} />
+                  </div>
+                  <div>
+                    <h4 className="font-mono text-sm font-bold text-amber-300 uppercase tracking-wider">
+                      Direct Wi-Fi Stream Unreachable
+                    </h4>
+                    <p className="text-xs text-slate-400 mt-1 max-w-sm font-mono">
+                      Could not reach: <span className="text-sky-300 font-bold">{cameraStreamUrl}</span>
+                    </p>
+                    <p className="text-[11px] text-slate-500 mt-1 max-w-xs">
+                      Verify the camera is powered on and connected to this Wi-Fi network.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      onClick={() => setShowWifiModal(true)}
+                      className="px-3 py-1.5 rounded bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold font-mono transition-all flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95"
+                    >
+                      <Wifi size={13} /> Configure Wi-Fi IP
+                    </button>
+                    <button
+                      onClick={() => {
+                        setDirectFeedError(false);
+                        setFeedMode('ai');
+                      }}
+                      className="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold font-mono transition-all cursor-pointer"
+                    >
+                      Switch to AI Feed
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <img
+                  src={cameraStreamUrl}
+                  alt="FloodScout Direct Wi-Fi Cam"
+                  className="w-full h-full object-contain"
+                  onError={() => setDirectFeedError(true)}
+                  onLoad={() => setDirectFeedError(false)}
+                />
+              )
+            ) : backendOnline && cameraStatus.connected ? (
               <img
                 src={videoFeedUrl}
                 alt="FloodScout Live Stream"
                 className="w-full h-full object-contain"
               />
-            ) : !backendOnline ? (
-              <div className="flex flex-col items-center justify-center p-6 text-center text-slate-400 space-y-3">
-                <div className="w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
-                  <AlertTriangle size={24} />
-                </div>
-                <div>
-                  <h4 className="font-mono text-sm font-bold text-amber-300 uppercase tracking-wider">
-                    AI Vision Backend Offline
-                  </h4>
-                  <p className="text-xs text-slate-400 mt-1 max-w-sm">
-                    Start the Python computer-vision backend to begin USB camera streaming and OpenCV person detection.
-                  </p>
-                </div>
-                <div className="font-mono text-[11px] bg-slate-900 border border-slate-700 px-3 py-1.5 rounded text-slate-300">
-                  cd backend && python main.py
-                </div>
-              </div>
             ) : (
-              <div className="flex flex-col items-center justify-center p-6 text-center text-slate-400 space-y-3">
-                <div className="w-12 h-12 rounded-full bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400">
-                  <VideoOff size={24} />
+              <div className="flex flex-col items-center justify-center p-6 text-center text-slate-400 space-y-4 max-w-md">
+                <div className="w-14 h-14 rounded-2xl bg-sky-500/10 border border-sky-400/30 flex items-center justify-center text-sky-400 shadow-lg">
+                  <Wifi size={28} />
                 </div>
                 <div>
-                  <h4 className="font-mono text-sm font-bold text-rose-300 uppercase tracking-wider">
-                    Camera Unavailable
+                  <h4 className="font-mono text-sm font-bold text-sky-300 uppercase tracking-wider">
+                    {backendOnline ? 'Wi-Fi Camera Standby' : 'AI Vision Backend Offline'}
                   </h4>
-                  <p className="text-xs text-slate-400 mt-1 max-w-sm">
-                    USB Camera index {cameraStatus.camera_index} could not be opened. Verify that your camera is plugged in and not in use by another app.
+                  <p className="text-xs text-slate-400 mt-1">
+                    {backendOnline
+                      ? `Waiting for camera stream at: ${cameraStatus.url || cameraStreamUrl}`
+                      : 'Connect your ESP32-CAM over local Wi-Fi or view direct stream.'}
                   </p>
                 </div>
-                <span className="text-[10px] font-mono text-slate-500 uppercase">
-                  Status: USB Index #{cameraStatus.camera_index} Disconnected
-                </span>
+
+                <div className="w-full space-y-2 bg-slate-900/90 border border-slate-800 p-3 rounded-lg text-left">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block font-mono">
+                    Camera Wi-Fi URL / IP:
+                  </label>
+                  <div className="flex gap-1.5">
+                    <input
+                      type="text"
+                      defaultValue={cameraStreamUrl}
+                      onChange={(e) => setInlineCameraIpInput(e.target.value)}
+                      placeholder="http://10.185.112.106:81/stream"
+                      className="flex-1 bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-xs font-mono text-white outline-none focus:border-sky-400"
+                    />
+                    <button
+                      onClick={async () => {
+                        const target = inlineCameraIpInput || cameraStreamUrl;
+                        await setCameraStreamUrl(target);
+                      }}
+                      disabled={isUpdatingCameraUrl}
+                      className="bg-sky-600 hover:bg-sky-500 text-white px-3 py-1.5 rounded text-xs font-bold font-mono transition-all cursor-pointer flex items-center gap-1 active:scale-95 disabled:opacity-50"
+                    >
+                      {isUpdatingCameraUrl ? <RefreshCw size={12} className="animate-spin" /> : <Check size={12} />}
+                      Connect
+                    </button>
+                  </div>
+
+                  <div className="flex flex-wrap gap-1 pt-1">
+                    {[':81/stream', ':80/stream', '/stream', '/cam.mjpg'].map((path) => (
+                      <button
+                        key={path}
+                        onClick={async () => {
+                          const host = extractCameraHost(inlineCameraIpInput || cameraStreamUrl);
+                          const fullUrl = `http://${host}${path}`;
+                          await setCameraStreamUrl(fullUrl);
+                        }}
+                        className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-sky-300 transition-colors cursor-pointer border border-slate-700/60"
+                      >
+                        {path}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      setFeedMode('direct');
+                      setDirectFeedError(false);
+                    }}
+                    className="px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold font-mono transition-all flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95"
+                  >
+                    <Radio size={13} /> View Direct Wi-Fi Feed
+                  </button>
+                  <button
+                    onClick={() => setShowWifiModal(true)}
+                    className="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold font-mono transition-all flex items-center gap-1 cursor-pointer"
+                  >
+                    <Wifi size={13} /> Advanced Setup
+                  </button>
+                </div>
               </div>
             )}
 
@@ -546,25 +680,73 @@ function PanelContent({
               </div>
             )}
 
-            {/* Top Bar: Camera connection badge, XIAO serial badge & HUD status */}
+            {/* Top Bar: Camera connection badge, Feed mode toggle, Wi-Fi Setup & telemetry */}
             <div className="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between pointer-events-none">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2 pointer-events-auto">
                 <div className="flex items-center gap-1.5 bg-slate-900/85 backdrop-blur-md border border-slate-700/60 px-2.5 py-1 rounded shadow-lg text-[10px] font-mono text-white">
                   <span
                     className={`w-2 h-2 rounded-full ${
-                      backendOnline && cameraStatus.connected
+                      feedMode === 'direct'
+                        ? directFeedError
+                          ? 'bg-amber-400'
+                          : 'bg-emerald-400 shadow-[0_0_8px_#34d399] animate-pulse'
+                        : backendOnline && cameraStatus.connected
                         ? 'bg-emerald-400 shadow-[0_0_8px_#34d399] animate-pulse'
-                        : 'bg-rose-500'
+                        : 'bg-amber-400'
                     }`}
                   />
                   <span className="font-bold tracking-wider uppercase">
-                    {backendOnline && cameraStatus.connected
-                      ? `Camera Connected (USB #${cameraStatus.camera_index})`
+                    {feedMode === 'direct'
+                      ? `Direct Wi-Fi Cam (${extractCameraHost(cameraStreamUrl)})`
+                      : backendOnline && cameraStatus.connected
+                      ? `AI Vision Feed (${cameraStatus.type || 'Wi-Fi'})`
                       : backendOnline
-                      ? 'Camera Disconnected'
+                      ? 'Camera Standby'
                       : 'Backend Offline'}
                   </span>
                 </div>
+
+                {/* Feed Mode Switcher (AI vs Direct Wi-Fi) */}
+                <div className="flex items-center bg-slate-900/90 backdrop-blur-md border border-slate-700/80 rounded-md p-0.5 shadow-md text-[10px] font-mono font-bold">
+                  <button
+                    onClick={() => setFeedMode('ai')}
+                    className={`px-2 py-0.5 rounded transition-all cursor-pointer flex items-center gap-1 ${
+                      feedMode === 'ai'
+                        ? 'bg-sky-500 text-white shadow-xs'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                    title="Switch to AI Vision Stream with Person Detection Bounding Boxes"
+                  >
+                    <Cpu size={11} />
+                    <span>AI Feed</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setFeedMode('direct');
+                      setDirectFeedError(false);
+                    }}
+                    className={`px-2 py-0.5 rounded transition-all cursor-pointer flex items-center gap-1 ${
+                      feedMode === 'direct'
+                        ? 'bg-emerald-500 text-white shadow-xs'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                    title="Switch to Direct Wi-Fi Camera Stream (Lowest Latency)"
+                  >
+                    <Radio size={11} />
+                    <span>Direct Wi-Fi</span>
+                  </button>
+                </div>
+
+                {/* Wi-Fi Camera Setup Button */}
+                <button
+                  onClick={() => setShowWifiModal(true)}
+                  className="bg-slate-900/90 hover:bg-[#162347] text-sky-300 hover:text-white border border-sky-500/40 rounded-md px-2 py-1 shadow-md text-[10px] font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
+                  title="Configure Wi-Fi Camera IP / Stream URL"
+                >
+                  <Wifi size={12} className="text-sky-400" />
+                  <span className="hidden sm:inline">Wi-Fi Cam Setup</span>
+                </button>
+
                 {detectionApi.xiaoStatus && (
                   <div
                     className={`hidden sm:flex items-center gap-1.5 bg-slate-900/85 backdrop-blur-md border px-2 py-1 rounded shadow-lg text-[9px] font-mono ${
@@ -579,7 +761,7 @@ function PanelContent({
                       }`}
                     />
                     <span>
-                      XIAO: {detectionApi.xiaoStatus.connected ? `Connected (${detectionApi.xiaoStatus.port || 'USB'})` : 'Disconnected'}
+                      XIAO: {detectionApi.xiaoStatus.connected ? `Connected (${detectionApi.xiaoStatus.port || 'USB'})` : 'Standby'}
                     </span>
                   </div>
                 )}
@@ -815,6 +997,25 @@ function PanelContent({
               <span className="text-emerald-300 font-bold">AI VISION ACTIVE</span>
             </div>
           </div>
+          {/* Wi-Fi Camera Setup Modal */}
+          <WifiCameraModal
+            isOpen={showWifiModal}
+            onClose={() => setShowWifiModal(false)}
+            onSaveUrl={async (url) => {
+              const success = await detectionApi.setCameraStreamUrl(url);
+              setDirectFeedError(false);
+              return success;
+            }}
+            activeStreamUrl={detectionApi.cameraStreamUrl}
+            activeFeedMode={detectionApi.feedMode}
+            onSelectFeedMode={(mode) => {
+              detectionApi.setFeedMode(mode);
+              setDirectFeedError(false);
+            }}
+            backendOnline={backendOnline}
+            cameraConnected={cameraStatus.connected}
+            isUpdating={detectionApi.isUpdatingCameraUrl}
+          />
         </div>
       );
     }
@@ -1238,6 +1439,109 @@ function PanelContent({
               </Marker>
             ))}
 
+            {/* Mission Trajectory (Historic Breadcrumb Line) */}
+            {trajectory && trajectory.length > 1 && (
+              <Polyline
+                positions={trajectory}
+                pathOptions={{
+                  color: '#6366F1',
+                  weight: 3,
+                  opacity: 0.75,
+                  dashArray: '3 4',
+                }}
+              />
+            )}
+
+            {/* Rescue Corridor Polyline: Start -> Robot -> Person -> Rescue Point */}
+            <Polyline
+              positions={[startPoint, robotLocation, targetPersonLoc, rescuePoint]}
+              pathOptions={{
+                color: '#06B6D4',
+                weight: 3.5,
+                opacity: 0.85,
+                dashArray: '8 6',
+              }}
+            />
+
+            {/* 1. Start Point Marker (Launch Dock) */}
+            <Marker position={startPoint} icon={startIcon}>
+              <Popup>
+                <div className="font-mono text-xs space-y-1.5 min-w-[200px]">
+                  <div className="border-b pb-1 font-bold text-indigo-700 flex items-center gap-1.5">
+                    <span>🚩</span> 1. MISSION LAUNCH BASE
+                  </div>
+                  <div className="bg-indigo-50 border border-indigo-200 p-2 rounded space-y-1">
+                    <div className="text-[10px] text-indigo-800 font-sans font-bold uppercase tracking-wider">
+                      Deployment Slipway
+                    </div>
+                    <div className="text-[#162347] font-bold">
+                      LAT: <span className="text-indigo-700">{startPoint[0].toFixed(6)}° N</span>
+                    </div>
+                    <div className="text-[#162347] font-bold">
+                      LNG: <span className="text-indigo-700">{startPoint[1].toFixed(6)}° E</span>
+                    </div>
+                  </div>
+                  <div className="text-[10px] text-slate-500 font-sans">
+                    Mission Start: {activeMission.startTime || '14:15:00'}
+                  </div>
+                </div>
+              </Popup>
+            </Marker>
+
+            {/* 2. Robot Vessel Marker (Live Vessel) */}
+            <Marker position={robotLocation} icon={robotIcon}>
+              <Popup>
+                <div className="font-mono text-xs space-y-1.5 min-w-[210px]">
+                  <div className="border-b pb-1 font-bold text-cyan-700 flex items-center gap-1.5">
+                    <span>🤖</span> 2. FLOODSCOUT-01 (VESSEL)
+                  </div>
+                  <div className="bg-cyan-50 border border-cyan-200 p-2 rounded space-y-1">
+                    <div className="text-[10px] text-cyan-900 font-sans font-bold uppercase tracking-wider">
+                      Live Telemetry Fix
+                    </div>
+                    <div className="text-[#162347] font-bold">
+                      LAT: <span className="text-cyan-700">{robotLocation[0].toFixed(6)}° N</span>
+                    </div>
+                    <div className="text-[#162347] font-bold">
+                      LNG: <span className="text-cyan-700">{robotLocation[1].toFixed(6)}° E</span>
+                    </div>
+                    <div className="text-[10px] text-slate-600 flex justify-between pt-0.5">
+                      <span>Speed: {robotSpeed} km/h</span>
+                      <span>Heading: {robotHeading}°</span>
+                    </div>
+                  </div>
+                  <div className="text-[10px] text-slate-500 font-sans">
+                    Bat: {batteryLevel}% • Link: {connectionStatus} • Depth: {waterDepth}m
+                  </div>
+                </div>
+              </Popup>
+            </Marker>
+
+            {/* 4. Rescue Safe Haven Marker */}
+            <Marker position={rescuePoint} icon={rescueHavenIcon}>
+              <Popup>
+                <div className="font-mono text-xs space-y-1.5 min-w-[210px]">
+                  <div className="border-b pb-1 font-bold text-emerald-800 flex items-center gap-1.5">
+                    <span>🛡️</span> 4. RESCUE SAFE HAVEN ALPHA
+                  </div>
+                  <div className="bg-emerald-50 border border-emerald-200 p-2 rounded space-y-1">
+                    <div className="text-[10px] text-emerald-900 font-sans font-bold uppercase tracking-wider">
+                      Evacuation Assembly Post
+                    </div>
+                    <div className="text-[#162347] font-bold">
+                      LAT: <span className="text-emerald-800">{rescuePoint[0].toFixed(6)}° N</span>
+                    </div>
+                    <div className="text-[#162347] font-bold">
+                      LNG: <span className="text-emerald-800">{rescuePoint[1].toFixed(6)}° E</span>
+                    </div>
+                  </div>
+                  <div className="text-[10px] text-slate-500 font-sans">
+                    UTM High Ground Helipad &amp; Medical Triage
+                  </div>
+                </div>
+              </Popup>
+            </Marker>
+
             {waypoint && <Circle center={waypoint} radius={20} pathOptions={{ color: '#F59E0B', fillColor: '#F59E0B', fillOpacity: 0.4 }} />}
           </MapContainer>
         </div>
@@ -1439,39 +1743,6 @@ function PanelContent({
                 <span>{panTilt.error} <span className="underline font-semibold ml-1">(Click to set IP)</span></span>
               </div>
             )}
-
-            {/* Thruster Slider */}
-            <div className="w-full">
-              <div className="flex justify-between text-[10px] font-mono text-[#162347] mb-1">
-                <span className="tracking-wider uppercase font-semibold">THRUSTER PWM</span>
-                <span className="font-bold">{throttle}%</span>
-              </div>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                value={throttle}
-                onChange={e => setThrottle(+e.target.value)}
-                className="w-full accent-[#162347] h-1.5 rounded cursor-pointer bg-[#E6DFD5]"
-              />
-            </div>
-
-            {/* Mode Selectors */}
-            <div className="grid grid-cols-2 gap-1.5 w-full">
-              {(['MANUAL', 'AUTO_SEARCH', 'RETURN_TO_BASE', 'EMERGENCY_STOP'] as const).map(mode => (
-                <button
-                  key={mode}
-                  onClick={() => setOperatingMode(mode)}
-                  className={`px-2 py-1.5 rounded text-[9px] font-mono font-bold uppercase transition-all ${
-                    operatingMode === mode
-                      ? (mode === 'EMERGENCY_STOP' ? 'bg-rose-700 text-white shadow' : 'bg-[#162347] text-white shadow')
-                      : 'bg-[#FAF7F2] text-[#162347]/70 hover:bg-[#E6DFD5] border border-[#E6DFD5]'
-                  }`}
-                >
-                  {mode.replace(/_/g, ' ')}
-                </button>
-              ))}
-            </div>
           </div>
         </div>
       );
@@ -1775,21 +2046,24 @@ function PanelContent({
 
     case 'status':
       return (
-        <div className="h-full overflow-y-auto p-4 grid grid-cols-2 gap-3 content-start">
-          {[
-            { label: 'Robot Link',   value: connectionStatus },
-            { label: 'Battery',      value: `${batteryLevel}%` },
-            { label: 'Water Depth',  value: `${waterDepth} m` },
-            { label: 'Speed',        value: `${robotSpeed} km/h` },
-            { label: 'Mode',         value: operatingMode.replace(/_/g, ' ') },
-            { label: 'Mission Time', value: `${Math.floor(activeMission.durationSeconds / 60)}m ${activeMission.durationSeconds % 60}s` },
-          ].map(({ label, value }) => (
-            <div key={label} className="bg-[#FAF7F2] border border-[#E6DFD5] p-3 rounded shadow-sm">
-              <div className="text-[9px] font-bold tracking-[0.2em] uppercase text-[#162347]/60 mb-0.5">{label}</div>
-              <div className="font-editorial-serif font-bold text-lg text-[#162347] leading-tight">{value}</div>
-            </div>
-          ))}
-        </div>
+        <RescueLocationAnalysis
+          robotLocation={robotLocation}
+          robotHeading={robotHeading}
+          robotSpeed={robotSpeed}
+          waterDepth={waterDepth}
+          batteryLevel={batteryLevel}
+          connectionStatus={connectionStatus}
+          operatingMode={operatingMode}
+          signalDbm={signalDbm}
+          activeMission={activeMission}
+          trajectory={trajectory}
+          victims={victims}
+          manifestPersons={manifestPersons}
+          detectionStatus={detectionStatus}
+          baseLocation={baseLocation}
+          onSelectLocation={onTrackPerson}
+          onInspectIncident={onInspectIncident}
+        />
       );
 
     case 'controls': {

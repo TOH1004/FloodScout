@@ -35,6 +35,48 @@ export interface CameraStatus {
   detectorFps?: number;
   mode?: 'fast' | 'balanced' | 'accurate';
   modeLabel?: string;
+  xiaoSerial?: XiaoSerialStatus;
+}
+
+export interface CameraHardwareSettings {
+  xclk: number;           // 5 to 40 (MHz, default 20)
+  framesize: number;      // 0 to 13 (Resolution)
+  quality: number;        // 4 to 63 (JPEG quality, lower is better)
+  brightness: number;     // -3 to 3
+  contrast: number;       // -3 to 3
+  saturation: number;     // -4 to 4
+  sharpness: number;      // -3 to 3
+  denoise: number;        // 0 to 8
+  ae_level: number;       // -5 to 5 (Exposure Level)
+  gainceiling: number;    // 0 to 511
+  special_effect: number; // 0 to 6
+  awb: number;            // 0 or 1 (AWB Enable)
+  awb_gain: number;       // 0 or 1 (Advanced AWB)
+  wb_mode: number;        // 0 to 4 (Manual AWB Mode)
+  aec: number;            // 0 or 1 (AEC Enable)
+  aec2: number;           // 0 or 1 (Night Mode)
+  agc: number;            // 0 or 1 (AGC Enable)
+  raw_gma: number;        // 0 or 1 (GMA Enable)
+  lenc: number;           // 0 or 1 (Lens Correction)
+  hmirror: number;        // 0 or 1 (H-Mirror)
+  vflip: number;          // 0 or 1 (V-Flip)
+  bpc: number;            // 0 or 1 (Black Pixel Correction)
+  wpc: number;            // 0 or 1 (White Pixel Correction)
+  colorbar: number;       // 0 or 1 (Color Bar Test Pattern)
+}
+
+export interface XiaoSerialStatus {
+  connected: boolean;
+  port: string | null;
+  baud_rate?: number;
+  last_error?: string | null;
+  settings?: CameraHardwareSettings;
+}
+
+export interface SettingFeedback {
+  message: string;
+  success: boolean;
+  timestamp: number;
 }
 
 export interface DetectionHistoryItem {
@@ -98,6 +140,41 @@ export function useDetectionApi() {
     model: 'gemini-2.5-flash',
   });
 
+  // XIAO ESP32-S3 Hardware Settings & Serial Status
+  const [cameraSettings, setCameraSettings] = useState<CameraHardwareSettings>({
+    xclk: 20,
+    framesize: 4,
+    quality: 12,
+    brightness: 0,
+    contrast: 0,
+    saturation: 0,
+    sharpness: 0,
+    denoise: 0,
+    ae_level: 0,
+    gainceiling: 0,
+    special_effect: 0,
+    awb: 1,
+    awb_gain: 1,
+    wb_mode: 0,
+    aec: 1,
+    aec2: 0,
+    agc: 1,
+    raw_gma: 1,
+    lenc: 1,
+    hmirror: 0,
+    vflip: 0,
+    bpc: 0,
+    wpc: 1,
+    colorbar: 0,
+  });
+  const [xiaoStatus, setXiaoStatus] = useState<XiaoSerialStatus>({
+    connected: false,
+    port: null,
+    last_error: null,
+  });
+  const [settingFeedback, setSettingFeedback] = useState<SettingFeedback | null>(null);
+  const [isUpdatingSetting, setIsUpdatingSetting] = useState<boolean>(false);
+
   const isPollingRef = useRef<boolean>(true);
   const wsRef = useRef<WebSocket | null>(null);
 
@@ -125,7 +202,7 @@ export function useDetectionApi() {
   // Poll Detection Status & Camera Status
   const fetchData = useCallback(async () => {
     try {
-      // 1. Fetch Detection Status
+      // 1. Fetch Detection Status (primary health ping)
       const detRes = await fetch(`${API_BASE_URL}/detection/status`, { signal: AbortSignal.timeout(2000) });
       if (detRes.ok) {
         const detData: DetectionStatus = await detRes.json();
@@ -137,6 +214,7 @@ export function useDetectionApi() {
         }
       } else {
         setBackendOnline(false);
+        return;
       }
 
       // 2. Fetch Camera Status
@@ -148,6 +226,12 @@ export function useDetectionApi() {
           ready: Boolean(camData.visionAiReady),
           model: camData.visionModel || 'gemini-2.5-flash',
         });
+        if (camData.xiaoSerial) {
+          setXiaoStatus(camData.xiaoSerial);
+          if (camData.xiaoSerial.settings) {
+            setCameraSettings(camData.xiaoSerial.settings);
+          }
+        }
       }
 
       // 3. Fetch Detection History
@@ -162,12 +246,21 @@ export function useDetectionApi() {
     } catch {
       setBackendOnline(false);
       setCameraStatus((prev) => ({ ...prev, connected: false }));
+      setXiaoStatus((prev) => ({ ...prev, connected: false }));
     }
   }, [fetchIncidents]);
 
-  // Connect WebSocket for Real-Time Incident Push
+  // Connect WebSocket for Real-Time Incident Push (only when backend is confirmed online)
   useEffect(() => {
     let reconnectTimeout: ReturnType<typeof setTimeout>;
+
+    if (!backendOnline) {
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+      return;
+    }
 
     function connectWs() {
       try {
@@ -196,14 +289,14 @@ export function useDetectionApi() {
         };
 
         ws.onclose = () => {
-          reconnectTimeout = setTimeout(connectWs, 3000);
+          reconnectTimeout = setTimeout(connectWs, 5000);
         };
 
         ws.onerror = () => {
           ws.close();
         };
       } catch {
-        reconnectTimeout = setTimeout(connectWs, 4000);
+        reconnectTimeout = setTimeout(connectWs, 5000);
       }
     }
 
@@ -222,17 +315,18 @@ export function useDetectionApi() {
     isPollingRef.current = true;
     fetchData();
 
+    const intervalTime = backendOnline ? 1000 : 3500;
     const interval = setInterval(() => {
       if (isPollingRef.current) {
         fetchData();
       }
-    }, 1000);
+    }, intervalTime);
 
     return () => {
       isPollingRef.current = false;
       clearInterval(interval);
     };
-  }, [fetchData]);
+  }, [fetchData, backendOnline]);
 
   // Adjust HOG+SVM hit threshold (SVM score, NOT a YOLO confidence percentage)
   const setConfidenceThreshold = async (threshold: number): Promise<boolean> => {
@@ -261,6 +355,47 @@ export function useDetectionApi() {
     }
   };
 
+  const updateCameraSetting = async (
+    setting: keyof CameraHardwareSettings,
+    value: number
+  ): Promise<boolean> => {
+    setIsUpdatingSetting(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/camera/settings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ setting, value }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setCameraSettings((prev) => ({ ...prev, [setting]: value }));
+        setSettingFeedback({
+          message: `✓ ${setting.charAt(0).toUpperCase() + setting.slice(1)} updated`,
+          success: true,
+          timestamp: Date.now(),
+        });
+        return true;
+      } else {
+        const errorMsg = data.message || `Failed to update ${setting}`;
+        setSettingFeedback({
+          message: `✗ ${errorMsg}`,
+          success: false,
+          timestamp: Date.now(),
+        });
+        return false;
+      }
+    } catch {
+      setSettingFeedback({
+        message: `✗ Failed to update ${setting} (backend offline)`,
+        success: false,
+        timestamp: Date.now(),
+      });
+      return false;
+    } finally {
+      setIsUpdatingSetting(false);
+    }
+  };
+
   const dismissActiveIncident = () => {
     setActiveIncident(null);
   };
@@ -278,6 +413,11 @@ export function useDetectionApi() {
     lastAlertTimestamp,
     videoFeedUrl,
     apiBaseUrl: API_BASE_URL,
+    xiaoStatus,
+    cameraSettings,
+    settingFeedback,
+    isUpdatingSetting,
+    updateCameraSetting,
     dismissActiveIncident,
     setConfidenceThreshold,
     setHogMode,

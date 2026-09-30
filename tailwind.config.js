@@ -21,7 +21,10 @@ export default {
       },
       fontFamily: {
         sans: ['Montserrat', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
-        script: ['Alex Brush', 'cursive'],
+        script: ['Cambria', 'Cambria Math', 'Georgia', 'Times New Roman', 'serif'],
+        iconic: ['Cambria', 'Cambria Math', 'Georgia', 'Times New Roman', 'serif'],
+        display: ['Cambria', 'Georgia', 'serif'],
+        curve: ['Alex Brush', 'cursive'],
         editorial: ['Cinzel', 'Playfair Display', 'Cormorant Garamond', 'Georgia', 'serif'],
         cormorant: ['Cormorant Garamond', 'Georgia', 'serif'],
         mono: ['JetBrains Mono', 'monospace'],

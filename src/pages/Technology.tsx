@@ -35,7 +35,7 @@ export default function Technology() {
         <span className="text-[11px] font-bold tracking-[0.35em] text-[#162347]/70 uppercase block mb-2">
           ENGINEERING &amp; HARDWARE ARCHITECTURE
         </span>
-        <h1 className="font-script text-6xl sm:text-7xl text-[#162347] mb-4">
+        <h1 className="font-script text-4xl sm:text-5xl md:text-6xl text-[#162347] font-bold tracking-tight mb-4">
           Rescue Technology
         </h1>
         <p className="font-editorial-serif text-lg tracking-[0.15em] text-[#162347]/80 uppercase">

@@ -1,12 +1,15 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Fragment } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ArrowLeft, Clock, Compass, MapPin, ArrowUp, ArrowDown, ArrowRight,
-  Camera, Sparkles, X, Activity, Cpu, Target, FileText,
-  GripVertical, AlertTriangle, VideoOff, Eye, User, Users, ArrowUpDown, SlidersHorizontal
+  Camera, X, Activity, Cpu, Target, FileText,
+  GripVertical, AlertTriangle, VideoOff, Eye, User, Users, ArrowUpDown,
+  Navigation, Laptop, Maximize2, Minimize2, Wifi
 } from 'lucide-react';
 import { useDetectionApi, type RescueIncident } from '../hooks/useDetectionApi';
+import { usePanTilt, type UsePanTiltReturn } from '../hooks/usePanTilt';
 import { IncidentModal } from '../components/IncidentModal';
+import { CameraSettingsPanel } from '../components/CameraSettingsPanel';
 import {
   DndContext,
   pointerWithin,
@@ -32,7 +35,7 @@ import {
   Panel,
   Separator as PanelResizeHandle,
 } from 'react-resizable-panels';
-import { MapContainer, TileLayer, Marker, Popup, Polyline, Circle, Polygon, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Circle, Polygon, useMapEvents, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { useRescue } from '../context/RescueContext';
@@ -41,22 +44,108 @@ import { type LayoutNode, type PanelId, removeNode, insertNode, hasPanel, getFir
 export type { PanelId, LayoutNode };
 
 // ─── Map Icons ────────────────────────────────────────────────────────────────
-const robotIcon = L.divIcon({
-  className: 'custom-robot-marker',
-  html: `<div style="width:28px;height:28px;background:#162347;border:3px solid #FAF7F2;border-radius:50%;box-shadow:0 0 12px rgba(22,35,71,.6);display:flex;align-items:center;justify-content:center;font-size:11px;color:#FAF7F2">🚤</div>`,
-  iconSize: [28, 28], iconAnchor: [14, 14],
+const computerIcon = L.divIcon({
+  className: 'custom-computer-marker',
+  html: `<div style="position:relative;width:38px;height:38px;display:flex;align-items:center;justify-content:center;">
+    <div style="position:absolute;inset:0;border-radius:50%;background:rgba(2,132,199,0.4);animation:ping 2s cubic-bezier(0,0,0.2,1) infinite;"></div>
+    <div style="position:relative;width:32px;height:32px;background:#0284C7;border:3px solid #FAF7F2;border-radius:50%;box-shadow:0 0 16px rgba(2,132,199,0.9);display:flex;align-items:center;justify-content:center;font-size:14px;color:#FAF7F2;cursor:pointer;">💻</div>
+  </div>`,
+  iconSize: [38, 38],
+  iconAnchor: [19, 19],
 });
+
+const livePersonIcon = L.divIcon({
+  className: 'custom-live-person-marker',
+  html: `<div style="position:relative;width:38px;height:38px;display:flex;align-items:center;justify-content:center;">
+    <div style="position:absolute;inset:0;border-radius:50%;background:rgba(239,68,68,0.45);animation:ping 1.5s cubic-bezier(0,0,0.2,1) infinite;"></div>
+    <div style="position:relative;width:30px;height:30px;background:#EF4444;border:3px solid #FAF7F2;border-radius:50%;box-shadow:0 0 16px rgba(239,68,68,0.95);display:flex;align-items:center;justify-content:center;font-size:13px;color:#FAF7F2;cursor:pointer;">👤</div>
+  </div>`,
+  iconSize: [38, 38],
+  iconAnchor: [19, 19],
+});
+
 const getVictimMarkerIcon = (status: VictimStatus) => {
   const color = status === 'Rescued' ? '#10B981' : status === 'Rescue Assigned' ? '#0284C7' : status === 'Verified' ? '#F59E0B' : '#EF4444';
   return L.divIcon({
     className: 'custom-victim-marker',
-    html: `<div style="width:24px;height:24px;background:${color};border:2px solid #FAF7F2;border-radius:50%;box-shadow:0 0 10px ${color};display:flex;align-items:center;justify-content:center;font-size:10px">${status === 'Rescued' ? '✅' : '👤'}</div>`,
-    iconSize: [24, 24], iconAnchor: [12, 12],
+    html: `<div style="width:26px;height:26px;background:${color};border:2.5px solid #FAF7F2;border-radius:50%;box-shadow:0 0 12px ${color};display:flex;align-items:center;justify-content:center;font-size:11px">${status === 'Rescued' ? '✅' : '👤'}</div>`,
+    iconSize: [26, 26],
+    iconAnchor: [13, 13],
   });
 };
+
 function MapClickHandler({ onMapClick }: { onMapClick: (lat: number, lng: number) => void }) {
   useMapEvents({ click: (e) => onMapClick(e.latlng.lat, e.latlng.lng) });
   return null;
+}
+
+function MapResizerAndController({ center }: { center?: [number, number] | null }) {
+  const map = useMap();
+
+  // Guarantee Leaflet recalculates true container dimensions on mount, resize, and panel drag
+  useEffect(() => {
+    // 1. Immediate invalidation
+    map.invalidateSize({ animate: false });
+
+    // 2. Multi-stage invalidations as flex / resizable panels settle
+    const t1 = setTimeout(() => map.invalidateSize({ animate: false }), 40);
+    const t2 = setTimeout(() => map.invalidateSize({ animate: false }), 150);
+    const t3 = setTimeout(() => map.invalidateSize({ animate: false }), 350);
+    const t4 = setTimeout(() => map.invalidateSize({ animate: false }), 700);
+
+    // 3. Dynamic ResizeObserver on Leaflet's container element
+    const container = map.getContainer();
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined' && container) {
+      ro = new ResizeObserver(() => {
+        map.invalidateSize({ animate: false });
+      });
+      ro.observe(container);
+    }
+
+    const onResize = () => map.invalidateSize({ animate: false });
+    window.addEventListener('resize', onResize);
+
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+      clearTimeout(t4);
+      if (ro) ro.disconnect();
+      window.removeEventListener('resize', onResize);
+    };
+  }, [map]);
+
+  // Center/focus on target smoothly and promptly
+  useEffect(() => {
+    if (center) {
+      map.panTo(center, { animate: true, duration: 0.35 });
+    }
+  }, [center, map]);
+
+  return null;
+}
+
+function LocateControl({ target }: { target: [number, number] }) {
+  const map = useMap();
+  return (
+    <div className="leaflet-top leaflet-right" style={{ marginTop: '55px', marginRight: '10px', zIndex: 999 }}>
+      <div className="leaflet-control">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            map.invalidateSize({ animate: false });
+            map.panTo(target, { animate: true, duration: 0.35 });
+          }}
+          className="bg-white/95 backdrop-blur-md hover:bg-sky-50 text-sky-800 border-2 border-sky-400 rounded-md px-2.5 py-1.5 shadow-md flex items-center gap-1.5 transition-all cursor-pointer font-mono font-bold text-xs active:scale-95 group pointer-events-auto"
+          title="Center and Locate Ground Control Computer"
+        >
+          <Laptop size={14} className="text-sky-600 group-hover:scale-110 transition-transform" />
+          <span className="hidden sm:inline">Locate PC</span>
+        </button>
+      </div>
+    </div>
+  );
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -100,8 +189,15 @@ function DockButton({
 
 // ─── Sortable Panel Wrapper ─────────────────────────────────────────────────────
 function SortablePanel({
-  id, children, onClose, dropPosition,
-}: { id: PanelId; children: React.ReactNode; onClose: () => void; dropPosition?: 'top' | 'bottom' | 'left' | 'right' | null }) {
+  id, children, onClose, onMaximize, isMaximized, dropPosition,
+}: {
+  id: PanelId;
+  children: React.ReactNode;
+  onClose: () => void;
+  onMaximize?: () => void;
+  isMaximized?: boolean;
+  dropPosition?: 'top' | 'bottom' | 'left' | 'right' | null;
+}) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id });
   const style: React.CSSProperties = {
@@ -150,9 +246,20 @@ function SortablePanel({
           <def.icon size={13} />
           <h3 className="font-editorial-serif text-sm font-bold tracking-widest uppercase">{def.label}</h3>
         </div>
-        <button onClick={onClose} className="text-[#162347]/40 hover:text-rose-600 transition-colors p-1">
-          <X size={15} />
-        </button>
+        <div className="flex items-center gap-1">
+          {onMaximize && (
+            <button
+              onClick={onMaximize}
+              className="text-[#162347]/40 hover:text-[#162347] transition-colors p-1 cursor-pointer"
+              title={isMaximized ? "Restore split layout" : "Maximize panel full width"}
+            >
+              {isMaximized ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+            </button>
+          )}
+          <button onClick={onClose} className="text-[#162347]/40 hover:text-rose-600 transition-colors p-1 cursor-pointer">
+            <X size={15} />
+          </button>
+        </div>
       </div>
       <div className="flex-1 overflow-hidden relative min-h-0">{children}</div>
     </div>
@@ -186,29 +293,168 @@ function ResizeHandle({ orientation = 'horizontal' }: { orientation?: 'horizonta
 function PanelContent({
   id,
   detectionApi,
+  panTilt,
   onInspectIncident,
+  focusedLocation,
+  onTrackPerson,
+  onMaximizeMap,
+  isMapMaximized,
 }: {
   id: PanelId;
   detectionApi: ReturnType<typeof useDetectionApi>;
+  panTilt: UsePanTiltReturn;
   onInspectIncident: (inc: RescueIncident, personId?: number) => void;
+  focusedLocation?: [number, number] | null;
+  onTrackPerson?: (loc: [number, number]) => void;
+  onMaximizeMap?: () => void;
+  isMapMaximized?: boolean;
 }) {
   const {
-    waterDepth, robotSpeed, robotLocation, robotHeading, operatingMode, trajectory,
-    cameraMode, activeMission, victims, detectionLogs, batteryLevel, connectionStatus,
-    setCameraMode, setOperatingMode, moveRobot, updateVictimStatus, simulateVictimDetection,
+    waterDepth, robotSpeed, computerLocation, computerAccuracy, operatingMode,
+    activeMission, victims, batteryLevel, connectionStatus,
+    setOperatingMode, moveRobot,
   } = useRescue();
+
+  const { detectionStatus } = detectionApi;
 
   const [aiBoxes, setAiBoxes] = useState(true);
   const [crosshair, setCrosshair] = useState(true);
   const [throttle, setThrottle] = useState(50);
   const [waypoint, setWaypoint] = useState<[number, number] | null>(null);
   const [localThreshold, setLocalThreshold] = useState(50);
-  const [brightnessVal] = useState(50);
   const [victimSortBy, setVictimSortBy] = useState<'person' | 'time'>('person');
+  const [mapTileSource, setMapTileSource] = useState<'google' | 'google-hybrid' | 'carto' | 'osm'>('google');
+
+  // Johor, Malaysia Geographic Boundaries (Segamat to Tanjung Piai, Muar to Mersing + coastal buffer)
+  const JOHOR_BOUNDS: [[number, number], [number, number]] = [
+    [1.10, 101.90], // South-West (Kukup / Pontian / Muar / Straits)
+    [3.15, 104.70], // North-East (Segamat / Mersing / Endau / South China Sea)
+  ];
 
   const floodZone: [number, number][] = [
-    [3.0450, 101.5250], [3.0460, 101.5320], [3.0390, 101.5330], [3.0380, 101.5255],
+    [1.5650, 103.6320], [1.5670, 103.6430], [1.5560, 103.6460], [1.5520, 103.6350],
   ];
+
+  // GPS coordination for detected persons (aligned with Ground Control Computer in Johor)
+  const baseLocation: [number, number] = computerLocation || [1.5588, 103.6375];
+
+  const getPersonGps = (personId: number, base: [number, number]): [number, number] => {
+    // Both computer and detected person location are aligned (same coordinates)
+    if (personId <= 1) {
+      return [
+        parseFloat(base[0].toFixed(6)),
+        parseFloat(base[1].toFixed(6)),
+      ];
+    }
+    // Subtle micro-spread (~3 meters) for multiple targets so markers don't overlap completely
+    const angle = ((personId - 1) * 72) * (Math.PI / 180);
+    const dist = 0.00003;
+    return [
+      parseFloat((base[0] + Math.sin(angle) * dist).toFixed(6)),
+      parseFloat((base[1] + Math.cos(angle) * dist).toFixed(6)),
+    ];
+  };
+
+  // Build manifest persons with GPS Coordination
+  interface ManifestPerson {
+    personId: number;
+    label: string;
+    time: string;
+    timestamp: string;
+    score: number;
+    cropUrl?: string;
+    incident: RescueIncident;
+    description?: string;
+    descriptionStatus?: string;
+    captureCount: number;
+    location: [number, number];
+  }
+
+  const personCaptureCounts = new Map<number, number>();
+  (detectionApi.incidents || []).forEach((inc) => {
+    if (inc.personDetails && inc.personDetails.length > 0) {
+      inc.personDetails.forEach((p) => {
+        personCaptureCounts.set(p.id, (personCaptureCounts.get(p.id) || 0) + 1);
+      });
+    } else if (inc.personImages && inc.personImages.length > 0) {
+      inc.personImages.forEach((url, idx) => {
+        const urlMatch = url.match(/person_(\d+)/);
+        const pId = urlMatch ? parseInt(urlMatch[1]) : idx + 1;
+        personCaptureCounts.set(pId, (personCaptureCounts.get(pId) || 0) + 1);
+      });
+    }
+  });
+
+  const personsMap = new Map<number, ManifestPerson>();
+  const incidentsChronologicalDesc = [...(detectionApi.incidents || [])].sort(
+    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+  );
+
+  incidentsChronologicalDesc.forEach((inc) => {
+    if (inc.personDetails && inc.personDetails.length > 0) {
+      inc.personDetails.forEach((p) => {
+        if (!personsMap.has(p.id)) {
+          personsMap.set(p.id, {
+            personId: p.id,
+            label: p.label || `Person #${p.id}`,
+            time: inc.time,
+            timestamp: inc.timestamp,
+            score: p.score ?? inc.highestConfidence,
+            cropUrl: p.imageUrl,
+            incident: inc,
+            description: inc.description,
+            descriptionStatus: inc.descriptionStatus,
+            captureCount: personCaptureCounts.get(p.id) || 1,
+            location: getPersonGps(p.id, baseLocation),
+          });
+        }
+      });
+    } else if (inc.personImages && inc.personImages.length > 0) {
+      inc.personImages.forEach((url, idx) => {
+        const urlMatch = url.match(/person_(\d+)/);
+        const pId = urlMatch ? parseInt(urlMatch[1]) : idx + 1;
+        if (!personsMap.has(pId)) {
+          personsMap.set(pId, {
+            personId: pId,
+            label: `Person #${pId}`,
+            time: inc.time,
+            timestamp: inc.timestamp,
+            score: inc.highestConfidence,
+            cropUrl: url,
+            incident: inc,
+            description: inc.description,
+            descriptionStatus: inc.descriptionStatus,
+            captureCount: personCaptureCounts.get(pId) || 1,
+            location: getPersonGps(pId, baseLocation),
+          });
+        }
+      });
+    } else {
+      const pId = 1;
+      if (!personsMap.has(pId)) {
+        personsMap.set(pId, {
+          personId: pId,
+          label: `Person #${pId}`,
+          time: inc.time,
+          timestamp: inc.timestamp,
+          score: inc.highestConfidence,
+          cropUrl: inc.imageUrl,
+          incident: inc,
+          description: inc.description,
+          descriptionStatus: inc.descriptionStatus,
+          captureCount: personCaptureCounts.get(pId) || 1,
+          location: getPersonGps(pId, baseLocation),
+        });
+      }
+    }
+  });
+
+  const manifestPersons = Array.from(personsMap.values());
+  manifestPersons.sort((a, b) => b.personId - a.personId);
+
+  const incidentsByTime = [...(detectionApi.incidents || [])].sort((a, b) => {
+    return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+  });
 
   switch (id) {
     case 'camera': {
@@ -272,23 +518,43 @@ function PanelContent({
               </div>
             )}
 
-            {/* Top Bar: Camera connection badge & HUD status */}
+            {/* Top Bar: Camera connection badge, XIAO serial badge & HUD status */}
             <div className="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between pointer-events-none">
-              <div className="flex items-center gap-1.5 bg-slate-900/85 backdrop-blur-md border border-slate-700/60 px-2.5 py-1 rounded shadow-lg text-[10px] font-mono text-white">
-                <span
-                  className={`w-2 h-2 rounded-full ${
-                    backendOnline && cameraStatus.connected
-                      ? 'bg-emerald-400 shadow-[0_0_8px_#34d399] animate-pulse'
-                      : 'bg-rose-500'
-                  }`}
-                />
-                <span className="font-bold tracking-wider uppercase">
-                  {backendOnline && cameraStatus.connected
-                    ? `Camera Connected (USB #${cameraStatus.camera_index})`
-                    : backendOnline
-                    ? 'Camera Disconnected'
-                    : 'Backend Offline'}
-                </span>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 bg-slate-900/85 backdrop-blur-md border border-slate-700/60 px-2.5 py-1 rounded shadow-lg text-[10px] font-mono text-white">
+                  <span
+                    className={`w-2 h-2 rounded-full ${
+                      backendOnline && cameraStatus.connected
+                        ? 'bg-emerald-400 shadow-[0_0_8px_#34d399] animate-pulse'
+                        : 'bg-rose-500'
+                    }`}
+                  />
+                  <span className="font-bold tracking-wider uppercase">
+                    {backendOnline && cameraStatus.connected
+                      ? `Camera Connected (USB #${cameraStatus.camera_index})`
+                      : backendOnline
+                      ? 'Camera Disconnected'
+                      : 'Backend Offline'}
+                  </span>
+                </div>
+                {detectionApi.xiaoStatus && (
+                  <div
+                    className={`hidden sm:flex items-center gap-1.5 bg-slate-900/85 backdrop-blur-md border px-2 py-1 rounded shadow-lg text-[9px] font-mono ${
+                      detectionApi.xiaoStatus.connected
+                        ? 'border-emerald-500/40 text-emerald-300'
+                        : 'border-slate-700/60 text-slate-400'
+                    }`}
+                  >
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full ${
+                        detectionApi.xiaoStatus.connected ? 'bg-emerald-400' : 'bg-slate-500'
+                      }`}
+                    />
+                    <span>
+                      XIAO: {detectionApi.xiaoStatus.connected ? `Connected (${detectionApi.xiaoStatus.port || 'USB'})` : 'Disconnected'}
+                    </span>
+                  </div>
+                )}
               </div>
 
               {backendOnline && cameraStatus.connected && (
@@ -355,25 +621,54 @@ function PanelContent({
 
             {/* Prominent High-Visibility Alert Banner when Person Detected */}
             {detectionStatus.personDetected && (
-              <div className="absolute top-12 left-3 right-3 bg-rose-950/90 border-2 border-rose-500 text-white px-3 py-2 rounded shadow-2xl backdrop-blur-md flex items-center justify-between animate-pulse">
+              <div className="absolute top-12 left-3 right-3 bg-rose-950/95 border-2 border-rose-500 text-white p-2.5 rounded-md shadow-2xl backdrop-blur-md flex flex-wrap items-center justify-between gap-2 z-30 animate-pulse">
                 <div className="flex items-center gap-2.5">
                   <span className="text-base">🚨</span>
                   <div>
-                    <div className="text-xs font-mono font-black tracking-widest text-rose-200 uppercase">
-                      PERSON DETECTED
+                    <div className="text-xs font-mono font-black tracking-widest text-rose-200 uppercase flex items-center gap-2">
+                      <span>PERSON DETECTED</span>
+                      <span className="text-[9px] bg-rose-800 text-rose-200 border border-rose-400 px-1.5 py-0.2 rounded font-sans font-bold">
+                        TARGET LOCKED
+                      </span>
                     </div>
-                    <div className="text-[10px] font-mono text-rose-300">
-                      Operator intervention recommended
+                    <div className="text-[11px] font-mono font-bold text-amber-300 flex items-center gap-1 mt-0.5">
+                      <MapPin size={12} className="text-amber-400 shrink-0" />
+                      <span>TARGET GPS: {baseLocation[0].toFixed(6)}° N, {baseLocation[1].toFixed(6)}° E</span>
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-3 font-mono text-xs">
-                  <div className="bg-rose-900/80 px-2 py-0.5 rounded border border-rose-500/50">
+                <div className="flex items-center gap-2 font-mono text-xs">
+                  <div className="bg-rose-900/80 px-2 py-1 rounded border border-rose-500/50 text-[11px]">
                     People: <strong className="text-white">{detectionStatus.personCount}</strong>
                   </div>
-                  <div className="bg-rose-900/80 px-2 py-0.5 rounded border border-rose-500/50">
+                  <div className="bg-rose-900/80 px-2 py-1 rounded border border-rose-500/50 text-[11px]">
                     Score: <strong className="text-emerald-300">{detectionStatus.highestConfidence.toFixed(2)}</strong>
                   </div>
+                  {(activeIncident || manifestPersons[0]) && (
+                    <button
+                      onClick={() => {
+                        const inc = activeIncident || manifestPersons[0]?.incident;
+                        if (inc) {
+                          onInspectIncident(inc, manifestPersons[0]?.personId);
+                        }
+                      }}
+                      className="bg-rose-600 hover:bg-rose-500 text-white px-2.5 py-1 rounded text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer shadow-md active:scale-95"
+                      title="Inspect detected person with AI analysis"
+                    >
+                      <Eye size={12} />
+                      <span>Inspect</span>
+                    </button>
+                  )}
+                  {onTrackPerson && (
+                    <button
+                      onClick={() => onTrackPerson(baseLocation)}
+                      className="bg-emerald-600 hover:bg-emerald-500 text-white px-2.5 py-1 rounded text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer shadow-md active:scale-95"
+                      title="View Target Location on Tactical Map"
+                    >
+                      <Navigation size={11} />
+                      <span>View Map</span>
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -418,6 +713,10 @@ function PanelContent({
                         {activeIncident.id}
                       </span>
                     </div>
+                    <div className="text-[10px] font-mono text-amber-300 font-bold flex items-center gap-1">
+                      <MapPin size={11} className="text-amber-400 shrink-0" />
+                      <span>GPS: {baseLocation[0].toFixed(6)}° N, {baseLocation[1].toFixed(6)}° E</span>
+                    </div>
                     <p className="text-[11px] font-sans text-white/90 line-clamp-2 leading-tight">
                       {activeIncident.description}
                     </p>
@@ -433,12 +732,23 @@ function PanelContent({
                       ? '⏳ Analyzing Scene...'
                       : 'AI Description Unavailable'}
                   </span>
-                  <button
-                    onClick={() => onInspectIncident(activeIncident)}
-                    className="flex items-center gap-1 bg-emerald-500 hover:bg-emerald-600 text-white font-bold px-2.5 py-1 rounded transition-colors shadow-sm"
-                  >
-                    <Eye size={12} /> View Image
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    {onTrackPerson && (
+                      <button
+                        onClick={() => onTrackPerson(baseLocation)}
+                        className="flex items-center gap-1 bg-sky-600 hover:bg-sky-500 text-white font-bold px-2 py-1 rounded transition-colors shadow-sm"
+                        title="Show on Map"
+                      >
+                        <Navigation size={11} /> Map
+                      </button>
+                    )}
+                    <button
+                      onClick={() => onInspectIncident(activeIncident)}
+                      className="flex items-center gap-1 bg-emerald-500 hover:bg-emerald-600 text-white font-bold px-2.5 py-1 rounded transition-colors shadow-sm"
+                    >
+                      <Eye size={12} /> View Image
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -470,11 +780,11 @@ function PanelContent({
             </div>
 
             <div className="flex items-center gap-3 text-[10px] text-[#BED6EE]">
-              <span>SONAR: <strong className="text-white">{waterDepth}m</strong></span>
+              <span className="flex items-center gap-1 font-bold text-sky-300">
+                <Laptop size={11} /> PC GPS: <strong className="text-white font-mono">{baseLocation[0].toFixed(4)}°, {baseLocation[1].toFixed(4)}°</strong>
+              </span>
               <span>•</span>
-              <span>BRG: <strong className="text-white">{robotHeading}°</strong></span>
-              <span>•</span>
-              <span className="text-emerald-300 font-bold">AI ACTIVE</span>
+              <span className="text-emerald-300 font-bold">AI VISION ACTIVE</span>
             </div>
           </div>
         </div>
@@ -484,19 +794,377 @@ function PanelContent({
     case 'map':
       return (
         <div className="h-full w-full relative z-0 isolate">
-          <MapContainer center={robotLocation} zoom={16} scrollWheelZoom className="w-full h-full">
-            <TileLayer attribution='&copy; CARTO' url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" />
+          {/* Live Tactical Coordination HUD */}
+          <div className="absolute top-3 left-3 right-3 z-[1000] flex flex-wrap items-center justify-between gap-2 pointer-events-none">
+            <div className="flex flex-wrap items-center gap-2 pointer-events-auto">
+              {/* Computer / Ground Control Coordination + Quick Locate Button */}
+              <button
+                onClick={() => {
+                  if (onTrackPerson) onTrackPerson(baseLocation);
+                }}
+                className="bg-[#162347]/95 hover:bg-[#1f2f5c] text-[#FAF7F2] backdrop-blur-md px-3 py-1.5 rounded-md shadow-md border border-sky-400/60 text-[11px] font-mono flex items-center gap-2 transition-all cursor-pointer active:scale-95 group"
+                title="Click to Center Tactical Map on Computer Ground Control"
+              >
+                <span className="text-sky-400 flex items-center gap-1 font-bold">
+                  <Laptop size={14} className="text-sky-300 group-hover:scale-110 transition-transform" />
+                  PC GPS:
+                </span>
+                <span className="font-bold text-white">
+                  {baseLocation[0].toFixed(6)}°, {baseLocation[1].toFixed(6)}°
+                </span>
+                {computerAccuracy && (
+                  <span className="text-[9px] text-sky-200/80 bg-sky-900/60 px-1 py-0.2 rounded font-sans">
+                    ±{computerAccuracy}m
+                  </span>
+                )}
+                <span className="text-[9px] bg-sky-500 text-white font-sans font-bold px-1.5 py-0.5 rounded shadow-xs ml-0.5">
+                  Locate
+                </span>
+              </button>
+
+              {/* Target GPS Coordination (Co-located with PC for now) */}
+              <div className="bg-[#162347]/95 text-[#FAF7F2] backdrop-blur-md px-3 py-1.5 rounded-md shadow-md border border-rose-500/60 text-[11px] font-mono flex items-center gap-2">
+                <span className="text-rose-400 flex items-center gap-1 font-bold">
+                  <MapPin size={13} className="text-rose-400 animate-bounce" />
+                  TARGET GPS:
+                </span>
+                <span className="font-bold text-white">
+                  {baseLocation[0].toFixed(6)}°, {baseLocation[1].toFixed(6)}°
+                </span>
+                <span className="font-bold text-rose-300 bg-rose-950/70 border border-rose-500/40 px-1.5 py-0.5 rounded text-[10px]">
+                  {manifestPersons.length > 0
+                    ? `${manifestPersons.length} detected`
+                    : detectionStatus.personDetected
+                    ? 'Target Active'
+                    : 'Monitoring'}
+                </span>
+                {(manifestPersons.length > 0 || detectionApi.activeIncident) && (
+                  <button
+                    onClick={() => {
+                      const inc = detectionApi.activeIncident || manifestPersons[0]?.incident;
+                      if (inc) {
+                        onInspectIncident(inc, manifestPersons[0]?.personId);
+                      }
+                    }}
+                    className="bg-rose-600 hover:bg-rose-500 text-white px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all active:scale-95 shadow-xs"
+                    title="Inspect detected person with AI analysis"
+                  >
+                    <Eye size={11} />
+                    <span>Inspect</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Free OSM / CARTO Tile Switcher & Maximize Map Control */}
+            <div className="pointer-events-auto flex items-center gap-2">
+              {onMaximizeMap && (
+                <button
+                  onClick={onMaximizeMap}
+                  className="bg-white/95 backdrop-blur-md hover:bg-sky-50 text-[#162347] border border-slate-300 px-2.5 py-1 rounded-md shadow-md flex items-center gap-1.5 text-[10px] font-mono font-bold transition-all cursor-pointer active:scale-95 group"
+                  title={isMapMaximized ? "Restore split layout" : "Make map bigger (full workspace)"}
+                >
+                  {isMapMaximized ? (
+                    <Minimize2 size={12} className="text-sky-600 group-hover:scale-110 transition-transform" />
+                  ) : (
+                    <Maximize2 size={12} className="text-sky-600 group-hover:scale-110 transition-transform" />
+                  )}
+                  <span>{isMapMaximized ? 'Split View' : 'Full Map'}</span>
+                </button>
+              )}
+
+              <div className="bg-white/95 backdrop-blur-md p-1 rounded-md shadow-md border border-slate-200 flex items-center gap-1 text-[10px] font-mono font-bold">
+                <span className="text-[9px] text-[#162347]/70 font-sans px-1 font-bold uppercase tracking-wider">
+                  Johor, MY
+                </span>
+                <span className="text-slate-300">|</span>
+                <button
+                  onClick={() => setMapTileSource('google')}
+                  className={`px-2 py-1 rounded transition-colors cursor-pointer ${
+                    mapTileSource === 'google'
+                      ? 'bg-[#162347] text-white shadow-xs'
+                      : 'text-slate-600 hover:bg-slate-100'
+                  }`}
+                  title="Google Maps Road / Street Layer"
+                >
+                  Google Maps
+                </button>
+                <button
+                  onClick={() => setMapTileSource('google-hybrid')}
+                  className={`px-2 py-1 rounded transition-colors cursor-pointer ${
+                    mapTileSource === 'google-hybrid'
+                      ? 'bg-[#162347] text-white shadow-xs'
+                      : 'text-slate-600 hover:bg-slate-100'
+                  }`}
+                  title="Google Maps Hybrid (Satellite Imagery + Street Labels)"
+                >
+                  Google Hybrid
+                </button>
+                <button
+                  onClick={() => setMapTileSource('carto')}
+                  className={`px-2 py-1 rounded transition-colors cursor-pointer ${
+                    mapTileSource === 'carto'
+                      ? 'bg-[#162347] text-white shadow-xs'
+                      : 'text-slate-600 hover:bg-slate-100'
+                  }`}
+                  title="Tactical Voyager Layer (Fast Cloudflare Edge CDN)"
+                >
+                  CARTO
+                </button>
+                <button
+                  onClick={() => setMapTileSource('osm')}
+                  className={`px-2 py-1 rounded transition-colors cursor-pointer ${
+                    mapTileSource === 'osm'
+                      ? 'bg-[#162347] text-white shadow-xs'
+                      : 'text-slate-600 hover:bg-slate-100'
+                  }`}
+                  title="Direct OpenStreetMap Tile Layer"
+                >
+                  OSM
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <MapContainer
+            center={focusedLocation || baseLocation}
+            zoom={14}
+            minZoom={10}
+            maxZoom={20}
+            maxBounds={JOHOR_BOUNDS}
+            maxBoundsViscosity={0.5}
+            preferCanvas={true}
+            scrollWheelZoom={true}
+            className="w-full h-full bg-[#0F172A]"
+          >
+            <MapResizerAndController center={focusedLocation} />
+            <LocateControl target={baseLocation} />
+
+            {mapTileSource === 'google' && (
+              <TileLayer
+                attribution='&copy; Google Maps'
+                url="https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}"
+                subdomains={['0', '1', '2', '3']}
+                maxZoom={20}
+                minZoom={10}
+                keepBuffer={8}
+                updateWhenZooming={false}
+              />
+            )}
+
+            {mapTileSource === 'google-hybrid' && (
+              <TileLayer
+                attribution='&copy; Google Maps'
+                url="https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}"
+                subdomains={['0', '1', '2', '3']}
+                maxZoom={20}
+                minZoom={10}
+                keepBuffer={8}
+                updateWhenZooming={false}
+              />
+            )}
+
+            {mapTileSource === 'carto' && (
+              <TileLayer
+                attribution='&copy; CARTO &copy; OpenStreetMap contributors'
+                url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png"
+                subdomains="abcd"
+                maxZoom={18}
+                minZoom={10}
+                keepBuffer={8}
+                updateWhenZooming={false}
+              />
+            )}
+
+            {mapTileSource === 'osm' && (
+              <TileLayer
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                maxZoom={18}
+                minZoom={10}
+                keepBuffer={8}
+                updateWhenZooming={false}
+              />
+            )}
+
             <MapClickHandler onMapClick={(lat, lng) => setWaypoint([lat, lng])} />
             <Polygon positions={floodZone} pathOptions={{ color: '#0284C7', fillColor: '#BED6EE', fillOpacity: 0.35, weight: 1.5, dashArray: '4 4' }} />
-            <Polyline positions={trajectory} pathOptions={{ color: '#162347', weight: 3, opacity: 0.85 }} />
-            <Marker position={robotLocation} icon={robotIcon}>
-              <Popup><div className="font-mono text-xs"><strong>FLOODSCOUT-01</strong><br />Mode: {operatingMode}<br />Speed: {robotSpeed} km/h</div></Popup>
-            </Marker>
+
+            {/* Operator Ground Control PC Marker */}
+            {baseLocation && (
+              <Marker position={baseLocation} icon={computerIcon}>
+                <Popup>
+                  <div className="font-mono text-xs space-y-1.5 min-w-[210px]">
+                    <div className="border-b pb-1 font-bold text-sky-700 flex items-center gap-1.5">
+                      <span>💻</span> OPERATOR GROUND CONTROL (PC)
+                    </div>
+                    <div className="bg-sky-50 border border-sky-200/80 p-2 rounded space-y-1">
+                      <div className="text-[10px] text-sky-800 font-sans font-bold uppercase tracking-wider">
+                        Computer Live GPS
+                      </div>
+                      <div className="text-[#162347] font-bold">
+                        LAT: <span className="text-sky-700">{baseLocation[0].toFixed(6)}° N</span>
+                      </div>
+                      <div className="text-[#162347] font-bold">
+                        LNG: <span className="text-sky-700">{baseLocation[1].toFixed(6)}° E</span>
+                      </div>
+                      {computerAccuracy && (
+                        <div className="text-[10px] text-slate-500 font-sans">
+                          Device Precision: ±{computerAccuracy}m
+                        </div>
+                      )}
+                    </div>
+                    <div className="text-[10px] text-slate-500 font-sans">
+                      Ground Control Station Active • Targets co-located
+                    </div>
+                  </div>
+                </Popup>
+              </Marker>
+            )}
+
+            {/* Real-Time Live Detected Person Marker (active while camera detects a person) */}
+            {detectionStatus.personDetected && (
+              <Fragment key="live-person-marker">
+                <Circle
+                  center={baseLocation}
+                  radius={22}
+                  pathOptions={{
+                    color: '#EF4444',
+                    fillColor: '#EF4444',
+                    fillOpacity: 0.35,
+                    weight: 2,
+                    dashArray: '4 4',
+                  }}
+                />
+                <Marker position={baseLocation} icon={livePersonIcon}>
+                  <Popup>
+                    <div className="font-mono text-xs space-y-1.5 min-w-[220px]">
+                      <div className="flex items-center justify-between border-b pb-1">
+                        <span className="font-bold text-rose-600 flex items-center gap-1">
+                          🚨 LIVE TARGET DETECTED
+                        </span>
+                        <span className="bg-rose-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded animate-pulse">
+                          ACTIVE
+                        </span>
+                      </div>
+
+                      <div className="bg-rose-50 border border-rose-200 p-2 rounded space-y-1 text-[11px]">
+                        <div className="text-rose-800 font-sans text-[10px] uppercase font-bold tracking-wider">
+                          Target GPS Coordination (Live)
+                        </div>
+                        <div className="text-[#162347] font-bold">
+                          LAT: <span className="text-rose-600 font-mono">{baseLocation[0].toFixed(6)}° N</span>
+                        </div>
+                        <div className="text-[#162347] font-bold">
+                          LNG: <span className="text-rose-600 font-mono">{baseLocation[1].toFixed(6)}° E</span>
+                        </div>
+                        <div className="text-[10px] text-slate-500 font-sans italic">
+                          (Co-located with Ground Control Computer)
+                        </div>
+                      </div>
+
+                      <div className="text-[10px] text-slate-600 flex items-center justify-between pt-0.5">
+                        <span>People in frame: <strong className="text-rose-600">{detectionStatus.personCount}</strong></span>
+                        <span>Score: <strong className="text-emerald-700">{(detectionStatus.highestConfidence).toFixed(2)}</strong></span>
+                      </div>
+
+                      {(detectionApi.activeIncident || manifestPersons[0]) && (
+                        <button
+                          onClick={() => {
+                            const inc = detectionApi.activeIncident || manifestPersons[0]?.incident;
+                            if (inc) onInspectIncident(inc, manifestPersons[0]?.personId);
+                          }}
+                          className="w-full mt-2 bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-mono font-bold py-1.5 px-3 rounded flex items-center justify-center gap-1.5 cursor-pointer transition-colors shadow-xs active:scale-98"
+                        >
+                          <Eye size={13} />
+                          <span>Inspect Live Target</span>
+                        </button>
+                      )}
+                    </div>
+                  </Popup>
+                </Marker>
+              </Fragment>
+            )}
+
+            {/* AI Camera Detected Persons (Recorded Manifest) */}
+            {manifestPersons.map(p => (
+              <Fragment key={`person-marker-${p.personId}`}>
+                <Circle
+                  center={p.location}
+                  radius={18}
+                  pathOptions={{
+                    color: '#EF4444',
+                    fillColor: '#EF4444',
+                    fillOpacity: 0.25,
+                    weight: 1.5,
+                  }}
+                />
+                <Marker position={p.location} icon={getVictimMarkerIcon('Detected')}>
+                  <Popup>
+                    <div className="font-mono text-xs space-y-1.5 min-w-[220px]">
+                      <div className="flex items-center justify-between border-b pb-1">
+                        <span className="font-bold text-rose-600 flex items-center gap-1">
+                          🚨 PERSON DETECTED
+                        </span>
+                        <span className="bg-rose-100 text-rose-800 text-[10px] font-bold px-1.5 py-0.5 rounded">
+                          #{p.personId}
+                        </span>
+                      </div>
+
+                      <div className="bg-rose-50 border border-rose-200 p-2 rounded space-y-1 text-[11px]">
+                        <div className="text-rose-800 font-sans text-[10px] uppercase font-bold tracking-wider">
+                          Target GPS Coordination
+                        </div>
+                        <div className="text-[#162347] font-bold">
+                          LAT: <span className="text-rose-600 font-mono">{p.location[0].toFixed(6)}° N</span>
+                        </div>
+                        <div className="text-[#162347] font-bold">
+                          LNG: <span className="text-rose-600 font-mono">{p.location[1].toFixed(6)}° E</span>
+                        </div>
+                      </div>
+
+                      {p.cropUrl && (
+                        <div className="rounded overflow-hidden border border-slate-200 shadow-xs">
+                          <img
+                            src={`${detectionApi.apiBaseUrl}${p.cropUrl}`}
+                            alt={p.label}
+                            className="w-full h-24 object-cover"
+                          />
+                        </div>
+                      )}
+
+                      <div className="text-[10px] text-slate-600 flex items-center justify-between pt-0.5">
+                        <span>Confidence: <strong className="text-emerald-700">{(p.score).toFixed(1)}%</strong></span>
+                        <span className="text-slate-400">{p.time}</span>
+                      </div>
+
+                      <button
+                        onClick={() => onInspectIncident(p.incident, p.personId)}
+                        className="w-full mt-2 bg-[#162347] hover:bg-[#24355E] text-white text-[11px] font-mono font-bold py-1.5 px-3 rounded flex items-center justify-center gap-1.5 cursor-pointer transition-colors shadow-xs active:scale-98"
+                      >
+                        <Eye size={13} className="text-emerald-400" />
+                        <span>Inspect Person #{p.personId}</span>
+                      </button>
+                    </div>
+                  </Popup>
+                </Marker>
+              </Fragment>
+            ))}
+
+            {/* Context Victims (Simulated / Initial) */}
             {victims.map(v => (
               <Marker key={v.id} position={v.location} icon={getVictimMarkerIcon(v.status)}>
-                <Popup><div className="font-mono text-xs"><strong>{v.id}</strong><br />{v.status}</div></Popup>
+                <Popup>
+                  <div className="font-mono text-xs space-y-1">
+                    <strong className="text-rose-600">🚨 {v.id} ({v.status})</strong>
+                    <div className="text-[10px] text-slate-600">
+                      GPS: {v.location[0].toFixed(6)}°, {v.location[1].toFixed(6)}°
+                    </div>
+                  </div>
+                </Popup>
               </Marker>
             ))}
+
             {waypoint && <Circle center={waypoint} radius={20} pathOptions={{ color: '#F59E0B', fillColor: '#F59E0B', fillOpacity: 0.4 }} />}
           </MapContainer>
         </div>
@@ -510,46 +1178,194 @@ function PanelContent({
             <div className="grid grid-cols-3 gap-2 w-40">
               <div />
               <button
-                onClick={() => moveRobot(0, 0.0003, 0)}
-                className="h-10 rounded bg-[#FAF7F2] hover:bg-[#162347] text-[#162347] hover:text-white border border-[#E6DFD5] flex items-center justify-center transition-all active:scale-95 shadow-sm"
-                title="Forward"
+                onMouseDown={() => {
+                  moveRobot(0, 0.0003, 0);
+                  panTilt.sendCommand('up');
+                }}
+                onMouseUp={() => panTilt.sendCommand('stop')}
+                onMouseLeave={() => panTilt.sendCommand('stop')}
+                onTouchStart={(e) => {
+                  e.preventDefault();
+                  moveRobot(0, 0.0003, 0);
+                  panTilt.sendCommand('up');
+                }}
+                onTouchEnd={() => panTilt.sendCommand('stop')}
+                onClick={() => {
+                  moveRobot(0, 0.0003, 0);
+                  panTilt.sendCommand('up');
+                }}
+                disabled={panTilt.isProcessing}
+                className="h-10 rounded bg-[#FAF7F2] hover:bg-[#162347] text-[#162347] hover:text-white border border-[#E6DFD5] flex items-center justify-center transition-all active:scale-95 shadow-sm disabled:opacity-75 cursor-pointer select-none"
+                title="Forward / Tilt Up"
               >
                 <ArrowUp size={18} />
               </button>
               <div />
 
               <button
-                onClick={() => moveRobot(-0.0003, 0, 270)}
-                className="h-10 rounded bg-[#FAF7F2] hover:bg-[#162347] text-[#162347] hover:text-white border border-[#E6DFD5] flex items-center justify-center transition-all active:scale-95 shadow-sm"
-                title="Port (Left)"
+                onMouseDown={() => {
+                  moveRobot(-0.0003, 0, 270);
+                  panTilt.sendCommand('left');
+                }}
+                onMouseUp={() => panTilt.sendCommand('stop')}
+                onMouseLeave={() => panTilt.sendCommand('stop')}
+                onTouchStart={(e) => {
+                  e.preventDefault();
+                  moveRobot(-0.0003, 0, 270);
+                  panTilt.sendCommand('left');
+                }}
+                onTouchEnd={() => panTilt.sendCommand('stop')}
+                onClick={() => {
+                  moveRobot(-0.0003, 0, 270);
+                  panTilt.sendCommand('left');
+                }}
+                disabled={panTilt.isProcessing}
+                className="h-10 rounded bg-[#FAF7F2] hover:bg-[#162347] text-[#162347] hover:text-white border border-[#E6DFD5] flex items-center justify-center transition-all active:scale-95 shadow-sm disabled:opacity-75 cursor-pointer select-none"
+                title="Port (Left) / Pan Left"
               >
                 <ArrowLeft size={18} />
               </button>
               <button
-                onClick={() => setOperatingMode('MANUAL')}
-                className="h-10 rounded bg-[#162347] text-[#FAF7F2] font-mono text-[10px] font-bold active:scale-95 shadow-sm"
-                title="Hold Position"
+                onClick={(e) => {
+                  setOperatingMode('MANUAL');
+                  if (e.shiftKey) {
+                    panTilt.sendCommand('center');
+                  } else {
+                    panTilt.sendCommand('stop');
+                  }
+                }}
+                onDoubleClick={() => panTilt.sendCommand('center')}
+                disabled={panTilt.isProcessing}
+                className="h-10 rounded bg-[#162347] text-[#FAF7F2] font-mono text-[10px] font-bold active:scale-95 shadow-sm disabled:opacity-75 cursor-pointer select-none"
+                title="Hold Position / Stop (Double-click or Shift-click to Center)"
               >
                 STOP
               </button>
               <button
-                onClick={() => moveRobot(0.0003, 0, 90)}
-                className="h-10 rounded bg-[#FAF7F2] hover:bg-[#162347] text-[#162347] hover:text-white border border-[#E6DFD5] flex items-center justify-center transition-all active:scale-95 shadow-sm"
-                title="Starboard (Right)"
+                onMouseDown={() => {
+                  moveRobot(0.0003, 0, 90);
+                  panTilt.sendCommand('right');
+                }}
+                onMouseUp={() => panTilt.sendCommand('stop')}
+                onMouseLeave={() => panTilt.sendCommand('stop')}
+                onTouchStart={(e) => {
+                  e.preventDefault();
+                  moveRobot(0.0003, 0, 90);
+                  panTilt.sendCommand('right');
+                }}
+                onTouchEnd={() => panTilt.sendCommand('stop')}
+                onClick={() => {
+                  moveRobot(0.0003, 0, 90);
+                  panTilt.sendCommand('right');
+                }}
+                disabled={panTilt.isProcessing}
+                className="h-10 rounded bg-[#FAF7F2] hover:bg-[#162347] text-[#162347] hover:text-white border border-[#E6DFD5] flex items-center justify-center transition-all active:scale-95 shadow-sm disabled:opacity-75 cursor-pointer select-none"
+                title="Starboard (Right) / Pan Right"
               >
                 <ArrowRight size={18} />
               </button>
 
               <div />
               <button
-                onClick={() => moveRobot(0, -0.0003, 180)}
-                className="h-10 rounded bg-[#FAF7F2] hover:bg-[#162347] text-[#162347] hover:text-white border border-[#E6DFD5] flex items-center justify-center transition-all active:scale-95 shadow-sm"
-                title="Reverse"
+                onMouseDown={() => {
+                  moveRobot(0, -0.0003, 180);
+                  panTilt.sendCommand('down');
+                }}
+                onMouseUp={() => panTilt.sendCommand('stop')}
+                onMouseLeave={() => panTilt.sendCommand('stop')}
+                onTouchStart={(e) => {
+                  e.preventDefault();
+                  moveRobot(0, -0.0003, 180);
+                  panTilt.sendCommand('down');
+                }}
+                onTouchEnd={() => panTilt.sendCommand('stop')}
+                onClick={() => {
+                  moveRobot(0, -0.0003, 180);
+                  panTilt.sendCommand('down');
+                }}
+                disabled={panTilt.isProcessing}
+                className="h-10 rounded bg-[#FAF7F2] hover:bg-[#162347] text-[#162347] hover:text-white border border-[#E6DFD5] flex items-center justify-center transition-all active:scale-95 shadow-sm disabled:opacity-75 cursor-pointer select-none"
+                title="Reverse / Tilt Down"
               >
                 <ArrowDown size={18} />
               </button>
               <div />
             </div>
+
+            {/* ESP32 Wi-Fi Pan/Tilt Connection Status & Center Reset */}
+            <div className="w-full flex items-center justify-between px-3 py-1.5 rounded bg-[#FAF7F2] border border-[#E6DFD5] font-mono text-[10px]">
+              <div className="flex items-center gap-1.5 text-[#162347]">
+                <Compass size={12} className="text-[#162347]" />
+                <span className="font-semibold uppercase tracking-wider text-[9px] text-[#162347]/70">Pan/Tilt</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const input = window.prompt(
+                      `Enter ESP32 IP address or URL:\n(e.g., 192.168.0.50 or http://192.168.0.50)`,
+                      panTilt.esp32Url
+                    );
+                    if (input && input.trim()) {
+                      panTilt.setEsp32Url(input.trim());
+                      panTilt.fetchStatus();
+                    }
+                  }}
+                  className="flex items-center gap-1 cursor-pointer focus:outline-none"
+                  title={`ESP32 URL: ${panTilt.esp32Url} (Click to change IP)`}
+                >
+                  {panTilt.connected ? (
+                    <span className="font-bold text-xs text-emerald-800 bg-emerald-100/70 border border-emerald-300 px-1.5 py-0.5 rounded flex items-center gap-1 hover:bg-emerald-200/80 transition-colors">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      ESP32: Connected
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold text-amber-800 bg-amber-100 border border-amber-300 px-1.5 py-0.5 rounded flex items-center gap-1 hover:bg-amber-200 transition-colors">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                      ESP32: Offline
+                      <Wifi size={10} className="text-amber-700/80 ml-0.5" />
+                    </span>
+                  )}
+                </button>
+              </div>
+              <div className="flex items-center gap-1.5">
+                {panTilt.isProcessing && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-ping" title="Sending command..." />
+                )}
+                {panTilt.connected ? (
+                  <button
+                    type="button"
+                    onClick={() => panTilt.sendCommand('center')}
+                    className="px-2 py-0.5 rounded bg-[#162347] hover:bg-[#243452] text-white text-[9px] font-bold transition-all active:scale-95 cursor-pointer"
+                    title="Reset Sonar to Neutral / Center"
+                  >
+                    CENTER
+                  </button>
+                ) : (
+                  <span className="text-[9px] text-slate-400 font-mono italic">
+                    Offline
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Graceful Pan/Tilt Error Message */}
+            {panTilt.error && (
+              <div
+                onClick={() => {
+                  const input = window.prompt(
+                    `Enter ESP32 IP address or URL:\n(e.g., 192.168.0.50 or http://192.168.0.50)`,
+                    panTilt.esp32Url
+                  );
+                  if (input && input.trim()) {
+                    panTilt.setEsp32Url(input.trim());
+                    panTilt.fetchStatus();
+                  }
+                }}
+                className="w-full text-center text-[10px] font-mono text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1 animate-fadeIn cursor-pointer hover:bg-amber-100 transition-colors"
+                title="Click to configure ESP32 IP address"
+              >
+                <span>{panTilt.error} <span className="underline font-semibold ml-1">(Click to set IP)</span></span>
+              </div>
+            )}
 
             {/* Thruster Slider */}
             <div className="w-full">
@@ -588,108 +1404,6 @@ function PanelContent({
       );
 
     case 'victims': {
-      // 1. Prepare Person-based list (for "By Person" arrangement)
-      interface ManifestPerson {
-        personId: number;
-        label: string;
-        time: string;
-        timestamp: string;
-        score: number;
-        cropUrl?: string;
-        incident: RescueIncident;
-        description?: string;
-        descriptionStatus?: string;
-        captureCount: number;
-      }
-
-      // Count total captures per person across all incidents
-      const personCaptureCounts = new Map<number, number>();
-      (detectionApi.incidents || []).forEach((inc) => {
-        if (inc.personDetails && inc.personDetails.length > 0) {
-          inc.personDetails.forEach((p) => {
-            personCaptureCounts.set(p.id, (personCaptureCounts.get(p.id) || 0) + 1);
-          });
-        } else if (inc.personImages && inc.personImages.length > 0) {
-          inc.personImages.forEach((url, idx) => {
-            const urlMatch = url.match(/person_(\d+)/);
-            const pId = urlMatch ? parseInt(urlMatch[1]) : idx + 1;
-            personCaptureCounts.set(pId, (personCaptureCounts.get(pId) || 0) + 1);
-          });
-        }
-      });
-
-      const personsMap = new Map<number, ManifestPerson>();
-
-      // Iterate newest incidents first so each Person card gets their latest crop and data
-      const incidentsChronologicalDesc = [...(detectionApi.incidents || [])].sort(
-        (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-      );
-
-      incidentsChronologicalDesc.forEach((inc) => {
-        if (inc.personDetails && inc.personDetails.length > 0) {
-          inc.personDetails.forEach((p) => {
-            if (!personsMap.has(p.id)) {
-              personsMap.set(p.id, {
-                personId: p.id,
-                label: p.label || `Person #${p.id}`,
-                time: inc.time,
-                timestamp: inc.timestamp,
-                score: p.score ?? inc.highestConfidence,
-                cropUrl: p.imageUrl,
-                incident: inc,
-                description: inc.description,
-                descriptionStatus: inc.descriptionStatus,
-                captureCount: personCaptureCounts.get(p.id) || 1,
-              });
-            }
-          });
-        } else if (inc.personImages && inc.personImages.length > 0) {
-          inc.personImages.forEach((url, idx) => {
-            const urlMatch = url.match(/person_(\d+)/);
-            const pId = urlMatch ? parseInt(urlMatch[1]) : idx + 1;
-            if (!personsMap.has(pId)) {
-              personsMap.set(pId, {
-                personId: pId,
-                label: `Person #${pId}`,
-                time: inc.time,
-                timestamp: inc.timestamp,
-                score: inc.highestConfidence,
-                cropUrl: url,
-                incident: inc,
-                description: inc.description,
-                descriptionStatus: inc.descriptionStatus,
-                captureCount: personCaptureCounts.get(pId) || 1,
-              });
-            }
-          });
-        } else {
-          const pId = 1;
-          if (!personsMap.has(pId)) {
-            personsMap.set(pId, {
-              personId: pId,
-              label: `Person #${pId}`,
-              time: inc.time,
-              timestamp: inc.timestamp,
-              score: inc.highestConfidence,
-              cropUrl: inc.imageUrl,
-              incident: inc,
-              description: inc.description,
-              descriptionStatus: inc.descriptionStatus,
-              captureCount: personCaptureCounts.get(pId) || 1,
-            });
-          }
-        }
-      });
-
-      const manifestPersons = Array.from(personsMap.values());
-      // Sort By Person: Highest Person ID on top (e.g. Person #8 on top)
-      manifestPersons.sort((a, b) => b.personId - a.personId);
-
-      // 2. Prepare Incident-based list (for "By Time" arrangement: INC-... on top)
-      const incidentsByTime = [...(detectionApi.incidents || [])].sort((a, b) => {
-        return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
-      });
-
       const hasEntries = victimSortBy === 'person' ? manifestPersons.length > 0 : incidentsByTime.length > 0;
 
       return (
@@ -796,6 +1510,23 @@ function PanelContent({
                       </button>
                     </div>
 
+                    {/* Person GPS Coordination & Track on Map */}
+                    <div className="flex items-center justify-between text-[11px] font-mono bg-rose-50 border border-rose-200/80 px-2.5 py-1.5 rounded text-rose-800">
+                      <div className="flex items-center gap-1.5 font-bold">
+                        <MapPin size={12} className="text-rose-600 animate-pulse shrink-0" />
+                        <span>GPS: {v.location[0].toFixed(6)}° N, {v.location[1].toFixed(6)}° E</span>
+                      </div>
+                      {onTrackPerson && (
+                        <button
+                          onClick={() => onTrackPerson(v.location)}
+                          className="bg-[#162347] hover:bg-[#24355E] text-[#FAF7F2] text-[10px] font-mono font-bold px-2 py-1 rounded flex items-center gap-1 transition-colors cursor-pointer shadow-xs active:scale-95"
+                          title="Locate person on Tactical Map"
+                        >
+                          <Navigation size={10} /> Track on Map
+                        </button>
+                      )}
+                    </div>
+
                     {v.description && (
                       <p className="text-[11px] text-[#162347]/80 line-clamp-2 leading-tight bg-slate-50 p-2 rounded border border-slate-100 font-sans">
                         {v.description}
@@ -806,7 +1537,7 @@ function PanelContent({
 
               {/* ── VIEW 2: BY TIME (Original INC-... with cropped pictures by time) ── */}
               {victimSortBy === 'time' &&
-                incidentsByTime.map((inc) => {
+                incidentsByTime.map((inc, incIdx) => {
                   const personList = inc.personDetails && inc.personDetails.length > 0
                     ? inc.personDetails
                     : (inc.personImages || []).map((url, idx) => {
@@ -814,6 +1545,7 @@ function PanelContent({
                         const pId = m ? parseInt(m[1]) : idx + 1;
                         return { id: pId, label: `Person #${pId}`, imageUrl: url, score: inc.highestConfidence };
                       });
+                  const incLocation = getPersonGps(incIdx + 1, baseLocation);
 
                   return (
                     <div
@@ -831,6 +1563,23 @@ function PanelContent({
                         <div className="flex items-center gap-1 text-[11px] font-mono text-[#162347]/70 font-semibold">
                           <Clock size={12} className="text-[#162347]/60" /> {inc.time}
                         </div>
+                      </div>
+
+                      {/* Incident GPS Coordination */}
+                      <div className="flex items-center justify-between text-[11px] font-mono bg-rose-50 border border-rose-200/80 px-2.5 py-1.5 rounded text-rose-800">
+                        <div className="flex items-center gap-1.5 font-bold">
+                          <MapPin size={12} className="text-rose-600 animate-pulse shrink-0" />
+                          <span>GPS: {incLocation[0].toFixed(6)}° N, {incLocation[1].toFixed(6)}° E</span>
+                        </div>
+                        {onTrackPerson && (
+                          <button
+                            onClick={() => onTrackPerson(incLocation)}
+                            className="bg-[#162347] hover:bg-[#24355E] text-[#FAF7F2] text-[10px] font-mono font-bold px-2 py-1 rounded flex items-center gap-1 transition-colors cursor-pointer shadow-xs active:scale-95"
+                            title="Locate incident on Tactical Map"
+                          >
+                            <Navigation size={10} /> Track on Map
+                          </button>
+                        )}
                       </div>
 
                       {/* Original Scene Image (INC-... full frame) */}
@@ -1000,50 +1749,19 @@ function PanelContent({
             </div>
           </div>
 
-          {/* Camera Brightness Control (Architecture Prepared for ESP32-CAM) */}
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <h4 className="text-[10px] font-bold tracking-widest uppercase text-[#162347]">
-                Camera Control
-              </h4>
-              <span className="text-[9px] font-mono text-amber-800 bg-amber-100 border border-amber-300 px-2 py-0.5 rounded font-semibold">
-                Available when ESP32-CAM is connected
-              </span>
-            </div>
-            <div className="space-y-1 opacity-60">
-              <div className="flex justify-between text-[10px] font-mono text-[#162347]">
-                <span className="uppercase font-semibold">Brightness</span>
-                <span>{brightnessVal}%</span>
-              </div>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                value={brightnessVal}
-                disabled
-                className="w-full accent-slate-400 h-1.5 rounded cursor-not-allowed bg-[#E6DFD5]"
-              />
-              <p className="text-[9px] text-[#162347]/50 italic">
-                Hardware sensor exposure/brightness is locked for USB webcams.
-              </p>
-            </div>
-          </div>
-
-          {/* Camera Mode */}
-          <div>
-            <h4 className="text-[10px] font-bold tracking-widest uppercase text-[#162347] mb-2">Camera Mode</h4>
-            <div className="flex flex-col gap-1.5 font-mono text-xs">
-              {(['optical', 'ai', 'thermal'] as const).map(m => (
-                <button key={m} onClick={() => setCameraMode(m)}
-                  className={`px-4 py-2 text-left rounded border text-xs ${cameraMode === m ? 'bg-[#162347] text-white border-[#162347]' : 'bg-[#FAF7F2] border-[#E6DFD5] text-[#162347]'}`}>
-                  {m === 'optical' ? 'Optical (Standard)' : m === 'ai' ? 'AI Vision Enhanced' : 'Thermal FLIR'}
-                </button>
-              ))}
-            </div>
+          {/* Remote Camera Controls via USB Serial (Seeed Studio XIAO ESP32-S3 Sense) */}
+          <div className="pt-2 border-t border-[#E6DFD5]">
+            <CameraSettingsPanel
+              xiaoStatus={detectionApi.xiaoStatus}
+              cameraSettings={detectionApi.cameraSettings}
+              settingFeedback={detectionApi.settingFeedback}
+              isUpdatingSetting={detectionApi.isUpdatingSetting}
+              onUpdateSetting={detectionApi.updateCameraSetting}
+            />
           </div>
 
           {/* HUD Overlays */}
-          <div>
+          <div className="pt-2 border-t border-[#E6DFD5]">
             <h4 className="text-[10px] font-bold tracking-widest uppercase text-[#162347] mb-2">HUD Overlays</h4>
             <div className="space-y-2 font-mono text-xs">
               <label className="flex items-center gap-2 cursor-pointer">
@@ -1055,13 +1773,6 @@ function PanelContent({
                 Center Reticle
               </label>
             </div>
-          </div>
-
-          {/* Demo Simulation Action */}
-          <div className="pt-3 border-t border-[#E6DFD5]">
-            <button onClick={simulateVictimDetection} className="w-full bg-[#162347] text-white px-4 py-2.5 rounded text-[10px] tracking-widest uppercase font-bold flex items-center justify-center gap-2 active:scale-98 transition-transform">
-              <Sparkles size={13} /> Simulate Victim Incident (Demo)
-            </button>
           </div>
         </div>
       );
@@ -1120,13 +1831,23 @@ function LayoutRenderer({
   dropIndicator,
   onClose,
   detectionApi,
+  panTilt,
   onInspectIncident,
+  focusedLocation,
+  onTrackPerson,
+  onMaximize,
+  isMaximized,
 }: {
   node: LayoutNode | null;
   dropIndicator: { panelId: PanelId; position: 'top' | 'bottom' | 'left' | 'right' } | null;
   onClose: (id: PanelId) => void;
   detectionApi: ReturnType<typeof useDetectionApi>;
+  panTilt: UsePanTiltReturn;
   onInspectIncident: (inc: RescueIncident, personId?: number) => void;
+  focusedLocation?: [number, number] | null;
+  onTrackPerson?: (loc: [number, number]) => void;
+  onMaximize: (id: PanelId) => void;
+  isMaximized: (id: PanelId) => boolean;
 }) {
   if (!node) {
     return (
@@ -1141,8 +1862,23 @@ function LayoutRenderer({
   if (node.type === 'panel') {
     return (
       <div className="h-full w-full overflow-hidden flex flex-col min-h-0 min-w-0">
-        <SortablePanel id={node.id} onClose={() => onClose(node.id)} dropPosition={dropIndicator?.panelId === node.id ? dropIndicator.position : null}>
-          <PanelContent id={node.id} detectionApi={detectionApi} onInspectIncident={onInspectIncident} />
+        <SortablePanel
+          id={node.id}
+          onClose={() => onClose(node.id)}
+          onMaximize={() => onMaximize(node.id)}
+          isMaximized={isMaximized(node.id)}
+          dropPosition={dropIndicator?.panelId === node.id ? dropIndicator.position : null}
+        >
+          <PanelContent
+            id={node.id}
+            detectionApi={detectionApi}
+            panTilt={panTilt}
+            onInspectIncident={onInspectIncident}
+            focusedLocation={focusedLocation}
+            onTrackPerson={onTrackPerson}
+            onMaximizeMap={() => onMaximize('map')}
+            isMapMaximized={isMaximized('map')}
+          />
         </SortablePanel>
       </div>
     );
@@ -1155,18 +1891,49 @@ function LayoutRenderer({
       className="h-full w-full min-h-0 min-w-0"
     >
       {node.children.flatMap((child, index) => {
+        const isMap = child.type === 'panel' && child.id === 'map';
+        const isCamera = child.type === 'panel' && child.id === 'camera';
+        const defaultSize = isMap ? 65 : isCamera ? 35 : undefined;
+
         const childEl = (
           <Panel
             key={child.type === 'panel' ? child.id : child.id}
-            minSize={10}
+            defaultSize={defaultSize}
+            minSize={15}
             className="h-full w-full flex flex-col overflow-hidden min-h-0 min-w-0"
           >
             {child.type === 'panel' ? (
-              <SortablePanel id={child.id} onClose={() => onClose(child.id)} dropPosition={dropIndicator?.panelId === child.id ? dropIndicator.position : null}>
-                <PanelContent id={child.id} detectionApi={detectionApi} onInspectIncident={onInspectIncident} />
+              <SortablePanel
+                id={child.id}
+                onClose={() => onClose(child.id)}
+                onMaximize={() => onMaximize(child.id)}
+                isMaximized={isMaximized(child.id)}
+                dropPosition={dropIndicator?.panelId === child.id ? dropIndicator.position : null}
+              >
+                <PanelContent
+                  id={child.id}
+                  detectionApi={detectionApi}
+                  panTilt={panTilt}
+                  onInspectIncident={onInspectIncident}
+                  focusedLocation={focusedLocation}
+                  onTrackPerson={onTrackPerson}
+                  onMaximizeMap={() => onMaximize('map')}
+                  isMapMaximized={isMaximized('map')}
+                />
               </SortablePanel>
             ) : (
-              <LayoutRenderer node={child} dropIndicator={dropIndicator} onClose={onClose} detectionApi={detectionApi} onInspectIncident={onInspectIncident} />
+              <LayoutRenderer
+                node={child}
+                dropIndicator={dropIndicator}
+                onClose={onClose}
+                detectionApi={detectionApi}
+                panTilt={panTilt}
+                onInspectIncident={onInspectIncident}
+                focusedLocation={focusedLocation}
+                onTrackPerson={onTrackPerson}
+                onMaximize={onMaximize}
+                isMaximized={isMaximized}
+              />
             )}
           </Panel>
         );
@@ -1181,15 +1948,53 @@ function LayoutRenderer({
 export default function Dashboard() {
   const { robotOnline, moveRobot, emergencyStop } = useRescue();
   const detectionApi = useDetectionApi();
+  const panTilt = usePanTilt();
   const [inspectedIncident, setInspectedIncident] = useState<RescueIncident | null>(null);
   const [inspectedPersonId, setInspectedPersonId] = useState<number | null>(null);
+  const [focusedLocation, setFocusedLocation] = useState<[number, number] | null>(null);
+  const [previousLayout, setPreviousLayout] = useState<LayoutNode | null>(null);
 
   const handleInspectIncident = useCallback((inc: RescueIncident, personId?: number) => {
     setInspectedIncident(inc);
     setInspectedPersonId(personId ?? null);
   }, []);
 
+  const handleTrackPerson = useCallback((loc: [number, number]) => {
+    setFocusedLocation(loc);
+    setLayout((prev) => {
+      if (!prev) return { type: 'panel', id: 'map' };
+      if (!hasPanel(prev, 'map')) {
+        return insertNode(prev, getFirstPanelId(prev), 'map', 'right');
+      }
+      return prev;
+    });
+  }, []);
+
   const [layout, setLayout] = useState<LayoutNode | null>({ type: 'panel', id: 'camera' });
+
+  const handleMaximizePanel = useCallback((id: PanelId) => {
+    setLayout((prev) => {
+      // If already maximized to this single panel, restore previous layout (or default camera + map)
+      if (prev && prev.type === 'panel' && prev.id === id) {
+        if (previousLayout) return previousLayout;
+        return {
+          type: 'group',
+          id: 'root-group',
+          direction: 'horizontal',
+          children: [
+            { type: 'panel', id: 'camera' },
+            { type: 'panel', id: 'map' },
+          ],
+        };
+      }
+      setPreviousLayout(prev);
+      return { type: 'panel', id };
+    });
+  }, [previousLayout]);
+
+  const isPanelMaximized = useCallback((id: PanelId) => {
+    return layout?.type === 'panel' && layout.id === id;
+  }, [layout]);
   const [time, setTime] = useState(new Date().toLocaleTimeString());
   // Track what is being dragged: panel grip OR dock button
   const [activeDrag, setActiveDrag] = useState<{ id: string; panelId: PanelId } | null>(null);
@@ -1206,15 +2011,34 @@ export default function Dashboard() {
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       if (document.activeElement?.tagName === 'INPUT') return;
-      if (['ArrowUp', 'KeyW'].includes(e.code)) { e.preventDefault(); moveRobot(0, 0.0003, 0); }
-      else if (['ArrowDown', 'KeyS'].includes(e.code)) { e.preventDefault(); moveRobot(0, -0.0003, 180); }
-      else if (['ArrowLeft', 'KeyA'].includes(e.code)) { e.preventDefault(); moveRobot(-0.0003, 0, 270); }
-      else if (['ArrowRight', 'KeyD'].includes(e.code)) { e.preventDefault(); moveRobot(0.0003, 0, 90); }
-      else if (e.code === 'Space') { e.preventDefault(); emergencyStop(); }
+      if (['ArrowUp', 'KeyW'].includes(e.code)) {
+        e.preventDefault();
+        moveRobot(0, 0.0003, 0);
+        panTilt.sendCommand('UP');
+      } else if (['ArrowDown', 'KeyS'].includes(e.code)) {
+        e.preventDefault();
+        moveRobot(0, -0.0003, 180);
+        panTilt.sendCommand('DOWN');
+      } else if (['ArrowLeft', 'KeyA'].includes(e.code)) {
+        e.preventDefault();
+        moveRobot(-0.0003, 0, 270);
+        panTilt.sendCommand('LEFT');
+      } else if (['ArrowRight', 'KeyD'].includes(e.code)) {
+        e.preventDefault();
+        moveRobot(0.0003, 0, 90);
+        panTilt.sendCommand('RIGHT');
+      } else if (e.code === 'KeyC') {
+        e.preventDefault();
+        panTilt.sendCommand('CENTER');
+      } else if (e.code === 'Space') {
+        e.preventDefault();
+        emergencyStop();
+        panTilt.sendCommand('STOP');
+      }
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [moveRobot, emergencyStop]);
+  }, [moveRobot, emergencyStop, panTilt]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -1317,8 +2141,8 @@ export default function Dashboard() {
           <Link to="/" className="flex items-center gap-2 text-xs font-semibold tracking-[0.2em] uppercase text-[#BED6EE] hover:text-white bg-white/10 px-3.5 py-1.5 rounded-full transition-colors">
             <ArrowLeft size={14} /> Back
           </Link>
-          <div className="border-l border-white/20 pl-4">
-            <span className="font-script text-3xl text-white">FloodScout</span>
+          <div className="border-l border-white/20 pl-4 flex items-baseline">
+            <span className="font-script text-2xl font-bold tracking-tight text-white">FloodScout</span>
             <span className="ml-3 text-[11px] tracking-[0.25em] text-[#BED6EE] uppercase font-semibold hidden sm:inline">
               Operations Command &amp; Control
             </span>
@@ -1375,7 +2199,12 @@ export default function Dashboard() {
               dropIndicator={dropIndicator}
               onClose={(id) => setLayout(prev => removeNode(prev, id))}
               detectionApi={detectionApi}
+              panTilt={panTilt}
               onInspectIncident={handleInspectIncident}
+              focusedLocation={focusedLocation}
+              onTrackPerson={handleTrackPerson}
+              onMaximize={handleMaximizePanel}
+              isMaximized={isPanelMaximized}
             />
           </div>
         </SortableContext>

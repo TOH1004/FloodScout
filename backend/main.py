@@ -54,14 +54,17 @@ except ImportError:
 
 import cv2
 import numpy as np
-from fastapi import FastAPI, Query, HTTPException, Body, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Query, HTTPException, Body, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 
-from camera import USBCameraSource, create_unavailable_frame
+from camera import USBCameraSource, IPCameraSource, create_unavailable_frame
 from detector import PersonDetector
 from vision import VisionAnalyzer
 from incident_manager import IncidentManager
+from serial_bridge import XiaoSerialBridge
+from pan_tilt import get_pan_tilt_controller, SUPPORTED_COMMANDS, PanTiltController
+from pydantic import BaseModel, Field
 
 # ── N-frame skip: run HOG every Nth frame, redraw cached boxes on skipped frames ─
 DETECT_EVERY_N_FRAMES = 2  # 1 = every frame, 2 = detect ~15x/sec at 30 FPS stream
@@ -96,6 +99,7 @@ logger = logging.getLogger("floodscout-backend")
 
 # ── Environment configuration ──────────────────────────────────────────────────
 CAMERA_INDEX = int(os.getenv("CAMERA_INDEX", "0"))
+CAMERA_URL = (os.getenv("CAMERA_URL") or "").strip()
 
 # HOG_DETECTION_THRESHOLD: minimum SVM decision score to count as a detection.
 # Range: typically 0.0 (boundary) – 1.5 (very strict). Default 0.0.
@@ -134,6 +138,8 @@ class PipelineState:
         self.detector: Optional[PersonDetector] = None
         self.vision_analyzer: Optional[VisionAnalyzer] = None
         self.incident_manager: Optional[IncidentManager] = None
+        self.serial_bridge: Optional[XiaoSerialBridge] = None
+        self.pan_tilt_controller: PanTiltController = get_pan_tilt_controller()
         self.running = False
 
         # Current frame JPEG bytes for streaming
@@ -334,12 +340,17 @@ def capture_and_detect_loop():
 async def lifespan(app: FastAPI):
     """Lifecycle manager — initializes camera, HOG+SVM detector, vision analyzer, incident manager."""
     logger.info("Initializing FloodScout Computer Vision Backend (OpenCV HOG + SVM)...")
-    state.camera_source = USBCameraSource(
-        camera_index=CAMERA_INDEX,
-        width=int(os.getenv("CAMERA_WIDTH", "1280")),
-        height=int(os.getenv("CAMERA_HEIGHT", "720")),
-        fps=int(os.getenv("CAMERA_FPS", "30")),
-    )
+    if CAMERA_URL:
+        logger.info(f"Connecting to network camera stream at: {CAMERA_URL}")
+        state.camera_source = IPCameraSource(stream_url=CAMERA_URL)
+    else:
+        logger.info(f"Connecting to USB camera at index {CAMERA_INDEX}...")
+        state.camera_source = USBCameraSource(
+            camera_index=CAMERA_INDEX,
+            width=int(os.getenv("CAMERA_WIDTH", "1280")),
+            height=int(os.getenv("CAMERA_HEIGHT", "720")),
+            fps=int(os.getenv("CAMERA_FPS", "30")),
+        )
     state.detector = PersonDetector(hit_threshold=HOG_DETECTION_THRESHOLD, mode=HOG_MODE)
 
     if not state.detector.ready:
@@ -361,6 +372,13 @@ async def lifespan(app: FastAPI):
         state.incident_manager.main_loop = asyncio.get_running_loop()
     except Exception:
         pass
+
+    # Initialize USB Serial Bridge for XIAO camera hardware controls
+    try:
+        state.serial_bridge = XiaoSerialBridge()
+    except Exception as e:
+        logger.warning(f"Could not initialize XIAO serial bridge: {e}")
+
     state.running = True
 
     worker_thread = threading.Thread(target=capture_and_detect_loop, daemon=True)
@@ -373,6 +391,8 @@ async def lifespan(app: FastAPI):
     worker_thread.join(timeout=2.0)
     if state.camera_source:
         state.camera_source.release()
+    if state.serial_bridge:
+        state.serial_bridge.disconnect()
 
 
 app = FastAPI(
@@ -396,10 +416,21 @@ app.add_middleware(
         "http://localhost:4173",
         "http://127.0.0.1:4173",
     ],
+    allow_origin_regex=r"https?://.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Global unhandled exception on {request.url.path}: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error", "error": str(exc)},
+        headers={"Access-Control-Allow-Origin": "*"}
+    )
 
 
 @app.get("/health")
@@ -431,7 +462,109 @@ def camera_status():
     info["streamFps"] = state.stream_fps
     if state.detector:
         info.update(state.detector.get_telemetry())
+    if state.serial_bridge:
+        info["xiaoSerial"] = state.serial_bridge.get_status()
+    else:
+        info["xiaoSerial"] = {"connected": False, "port": None, "last_error": "Bridge not initialized", "settings": {}}
+    if hasattr(state, "pan_tilt_controller") and state.pan_tilt_controller:
+        info["panTilt"] = state.pan_tilt_controller.get_status()
     return info
+
+
+@app.get("/camera/settings")
+def get_camera_settings():
+    """Return current XIAO hardware settings and USB Serial connection status."""
+    if not state.serial_bridge:
+        return {
+            "connected": False,
+            "port": None,
+            "settings": {"brightness": 0, "contrast": 0, "saturation": 0, "hflip": 0, "vflip": 0},
+            "last_error": "Serial bridge unavailable"
+        }
+    return state.serial_bridge.get_status()
+
+
+@app.post("/camera/settings")
+def set_camera_setting(payload: Dict[str, Any] = Body(...)):
+    """
+    Update a camera hardware setting on XIAO via USB Serial.
+    Payload: {"setting": "brightness", "value": 1}
+    Supported settings: brightness (-2..2), contrast (-2..2), saturation (-2..2),
+                        hflip (0|1), vflip (0|1)
+    """
+    if not state.serial_bridge:
+        raise HTTPException(status_code=503, detail="Serial bridge not initialized")
+
+    setting = payload.get("setting")
+    value = payload.get("value")
+    if setting is None or value is None:
+        raise HTTPException(status_code=400, detail="Missing 'setting' or 'value' in request payload")
+
+    try:
+        value_int = int(value)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="Setting value must be an integer")
+
+    success, message = state.serial_bridge.send_command(setting, value_int)
+    if not success:
+        return JSONResponse(status_code=400, content={
+            "success": False,
+            "message": message,
+            "setting": setting,
+            "value": value_int,
+            "current_settings": state.serial_bridge.settings
+        })
+
+    return {
+        "success": True,
+        "message": message,
+        "setting": setting,
+        "value": value_int,
+        "current_settings": state.serial_bridge.settings
+    }
+
+
+# ── Pan & Tilt Sonar Actuator Endpoints ─────────────────────────────────────────
+class PanTiltCommandPayload(BaseModel):
+    command: str = Field(..., description="Directional command: LEFT, RIGHT, UP, DOWN, CENTER, STOP")
+
+
+@app.post("/api/pan-tilt/command")
+@app.post("/pan-tilt/command")
+def pan_tilt_command(payload: PanTiltCommandPayload):
+    """Execute a Pan/Tilt command (LEFT, RIGHT, UP, DOWN, CENTER, STOP).
+
+    Validates the incoming command and forwards it to the active PanTiltController
+    (Mock simulation or physical ESP32 driving SG90 servos).
+    """
+    cmd = payload.command.strip().upper()
+    if cmd not in SUPPORTED_COMMANDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid command '{payload.command}'. Supported commands: {', '.join(sorted(SUPPORTED_COMMANDS))}"
+        )
+
+    try:
+        return state.pan_tilt_controller.execute_command(cmd)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"[PanTilt] Error executing command '{cmd}': {e}")
+        raise HTTPException(status_code=500, detail=f"Pan/Tilt controller execution error: {e}")
+
+
+@app.get("/api/pan-tilt/status")
+@app.get("/pan-tilt/status")
+def pan_tilt_status():
+    """Return the current simulated or physical Pan & Tilt servo angles and connection state."""
+    return state.pan_tilt_controller.get_status()
+
+
+@app.get("/api/pan-tilt/health")
+@app.get("/pan-tilt/health")
+def pan_tilt_health():
+    """Health check for Pan/Tilt subsystem. In ESP32 mode, verifies controller connectivity."""
+    return state.pan_tilt_controller.check_health()
 
 
 @app.get("/detection/status")
@@ -586,8 +719,7 @@ async def incident_websocket(websocket: WebSocket):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
-        "main:app",
+        app,
         host="0.0.0.0",
         port=BACKEND_PORT,
-        reload=False
     )

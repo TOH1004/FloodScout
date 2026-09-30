@@ -57,6 +57,8 @@ interface RescueContextType {
   waterDepth: number;
   robotSpeed: number;
   robotLocation: [number, number];
+  computerLocation: [number, number];
+  computerAccuracy: number | null;
   robotHeading: number;
   operatingMode: RobotMode;
   thrusterPwm: number;
@@ -96,8 +98,8 @@ interface RescueContextType {
 
 const RescueContext = createContext<RescueContextType | undefined>(undefined);
 
-// Initial Malaysian flood scenario coordinates (e.g. Sri Muda / Klang valley area)
-const INITIAL_COORDS: [number, number] = [3.0425, 101.5280];
+// Initial Johor flood scenario coordinates (e.g. UTM Skudai / Sungai Skudai Basin, Johor)
+const INITIAL_COORDS: [number, number] = [1.5588, 103.6375];
 
 export const RescueProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [robotOnline] = useState(true);
@@ -106,6 +108,24 @@ export const RescueProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [waterDepth, setWaterDepth] = useState(1.85);
   const [robotSpeed, setRobotSpeed] = useState(2.4);
   const [robotLocation, setRobotLocation] = useState<[number, number]>(INITIAL_COORDS);
+  const [computerLocation, setComputerLocation] = useState<[number, number]>([1.5588, 103.6375]);
+  const [computerAccuracy, setComputerAccuracy] = useState<number | null>(null);
+
+  // Fetch Computer / Ground Control Browser Geolocation
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setComputerLocation([pos.coords.latitude, pos.coords.longitude]);
+          setComputerAccuracy(Math.round(pos.coords.accuracy));
+        },
+        (err) => {
+          console.warn('Geolocation fallback used (Johor default):', err.message);
+        },
+        { enableHighAccuracy: true, timeout: 8000 }
+      );
+    }
+  }, []);
   const [robotHeading, setRobotHeading] = useState(65);
   const [operatingMode, setOperatingModeState] = useState<RobotMode>('AUTO_SEARCH');
   const [thrusterPwm, setThrusterPwm] = useState(48);
@@ -116,17 +136,16 @@ export const RescueProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [thermalPalette] = useState<'ironbow' | 'whitehot' | 'rainbow'>('ironbow');
 
   const [trajectory, setTrajectory] = useState<[number, number][]>([
-    [3.0410, 101.5265],
-    [3.0415, 101.5270],
-    [3.0418, 101.5275],
-    [3.0422, 101.5278],
+    [1.5560, 103.6350],
+    [1.5570, 103.6360],
+    [1.5580, 103.6370],
     INITIAL_COORDS,
   ]);
 
   const [activeMission, setActiveMission] = useState<Mission>({
     id: 'MISSION-024',
-    title: 'Kampung Seri Melati Flash Flood Deployment',
-    zone: 'Sector B - Submerged Residential Zone',
+    title: 'Johor River Basin Deployment',
+    zone: 'Sector J - Sungai Skudai Flood Watch, Johor',
     status: 'ACTIVE',
     startTime: '14:15:00',
     durationSeconds: 1140, // 19 minutes
@@ -330,6 +349,8 @@ export const RescueProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         waterDepth,
         robotSpeed,
         robotLocation,
+        computerLocation,
+        computerAccuracy,
         robotHeading,
         operatingMode,
         thrusterPwm,

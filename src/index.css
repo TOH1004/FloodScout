@@ -12,7 +12,12 @@
   }
 }
 
-.font-script {
+.font-script,
+.font-iconic {
+  font-family: 'Cambria', 'Cambria Math', Georgia, 'Times New Roman', serif;
+}
+
+.font-curve {
   font-family: 'Alex Brush', cursive;
 }
 
@@ -45,4 +50,13 @@
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #162347;
+}
+
+/* Tactical Map Leaflet optimization */
+.leaflet-container {
+  background-color: #0f172a !important;
+  font-family: inherit;
+}
+.leaflet-tile {
+  will-change: transform;
 }

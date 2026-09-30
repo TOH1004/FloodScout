@@ -243,6 +243,7 @@ class IPCameraSource(CameraSource):
 
     def __init__(self, stream_url: str):
         self.stream_url = stream_url
+        self.camera_index = 0
         self._cap: Optional[cv2.VideoCapture] = None
         self._lock = threading.Lock()
         self._latest_frame: Optional[np.ndarray] = None
@@ -254,33 +255,45 @@ class IPCameraSource(CameraSource):
     def _open(self) -> bool:
         try:
             self._stop()
-            self._cap = cv2.VideoCapture(self.stream_url)
-            if self._cap.isOpened():
-                self._is_capturing = True
-                self._capture_thread = threading.Thread(
-                    target=self._worker, name="IPCameraGrabber", daemon=True
-                )
-                self._capture_thread.start()
-                logger.info(f"Connected to IP camera: {self.stream_url}")
-                return True
-            return False
+            self._is_capturing = True
+            self._capture_thread = threading.Thread(
+                target=self._worker, name="IPCameraGrabber", daemon=True
+            )
+            self._capture_thread.start()
+            logger.info(f"IP camera grabber started in background for: {self.stream_url}")
+            return True
         except Exception as e:
             logger.error(f"Failed to open IP camera {self.stream_url}: {e}")
             return False
 
     def _worker(self) -> None:
-        while self._is_capturing and self._cap and self._cap.isOpened():
-            ret, frame = self._cap.read()
-            if ret and frame is not None:
-                with self._lock:
-                    self._latest_frame = frame
-                    self._frame_time = time.time()
-            else:
-                time.sleep(0.02)
+        while self._is_capturing:
+            try:
+                if not self._cap or not self._cap.isOpened():
+                    time.sleep(1.0)
+                    self._cap = cv2.VideoCapture(self.stream_url)
+                    continue
+
+                ret, frame = self._cap.read()
+                if ret and frame is not None:
+                    with self._lock:
+                        self._latest_frame = frame
+                        self._frame_time = time.time()
+                else:
+                    time.sleep(0.04)
+                    if time.time() - self._frame_time > 3.0:
+                        try:
+                            if self._cap:
+                                self._cap.release()
+                            self._cap = cv2.VideoCapture(self.stream_url)
+                        except Exception:
+                            pass
+            except Exception as e:
+                time.sleep(1.0)
 
     def read(self) -> Tuple[bool, Optional[np.ndarray]]:
         with self._lock:
-            if self._latest_frame is not None and time.time() - self._frame_time < 2.0:
+            if self._latest_frame is not None and time.time() - self._frame_time < 3.0:
                 return True, self._latest_frame
         return False, None
 
@@ -290,14 +303,18 @@ class IPCameraSource(CameraSource):
             self._capture_thread.join(timeout=1.0)
             self._capture_thread = None
         if self._cap:
-            self._cap.release()
+            try:
+                self._cap.release()
+            except Exception:
+                pass
             self._cap = None
 
     def release(self) -> None:
         self._stop()
 
     def is_connected(self) -> bool:
-        return self._is_capturing and self._cap is not None and self._cap.isOpened()
+        with self._lock:
+            return self._is_capturing and (time.time() - self._frame_time < 3.0)
 
     def get_info(self) -> Dict[str, Any]:
         with self._lock:
@@ -305,7 +322,8 @@ class IPCameraSource(CameraSource):
             h = self._latest_frame.shape[0] if self._latest_frame is not None else 480
         return {
             "connected": self.is_connected(),
-            "type": "IP / Seeed XIAO",
+            "type": "Seeed XIAO (Wi-Fi)",
+            "camera_index": 0,
             "url": self.stream_url,
             "resolution": {"width": w, "height": h},
         }

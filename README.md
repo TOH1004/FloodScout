@@ -159,6 +159,8 @@ http://localhost:5173/dashboard
 | `HOG_DETECTION_THRESHOLD` | `0.0` | SVM hit threshold margin (typical range: 0.0 to 1.5; 0.0 = default sensitivity) |
 | `ALERT_COOLDOWN` | `3.0` | Debounce duration in seconds between consecutive alert triggers |
 | `BACKEND_PORT` | `8000` | HTTP port for the FastAPI server |
+| `XIAO_SERIAL_PORT` | `COM4` | USB Serial port for Seeed Studio XIAO ESP32-S3 Sense camera controls |
+| `XIAO_SERIAL_BAUD` | `115200` | Baud rate for XIAO USB Serial command interface |
 
 ### Frontend (`.env`)
 
@@ -194,39 +196,27 @@ http://localhost:5173/dashboard
 - **Adjust Sensitivity:**
   - In the **Controls** panel (`Controls`), use the **AI Detection Sensitivity** slider to adjust the HOG detection threshold live.
 
+### 3. Remote Camera Controls (Seeed XIAO ESP32-S3 Sense via USB)
+- **Arduino Firmware:**
+  - Flash or include the command handler from [firmware/xiao_camera_serial/xiao_camera_serial.ino](file:///c:/Users/tstho/Downloads/UTM/Y2S2/FloodScout/firmware/xiao_camera_serial/xiao_camera_serial.ino) into your XIAO sketch.
+  - Call `processSerialCommands()` inside your `loop()`.
+  - **Important:** Close the Arduino IDE Serial Monitor before starting the FloodScout backend so the backend can acquire COM4.
+- **In FloodScout Dashboard:**
+  - Open the **Controls** panel.
+  - Check the **Camera Remote Controls** section:
+    - **Status:** Shows `● Connected (COM4)` when connected.
+    - **Brightness:** Slider from -2 to +2 (debounced).
+    - **Contrast:** Slider from -2 to +2 (debounced).
+    - **Saturation:** Slider from -2 to +2 (debounced).
+    - **Horizontal Flip / Vertical Flip:** Toggle `[ ON ]` / `[ OFF ]`.
+    - **Live Feedback:** Shows `✓ Setting updated` or `✗ Failed to update setting`.
+
 ---
 
-## Migrating from USB Camera to ESP32-CAM (Future Architecture)
+## Future Architecture Roadmap
 
-The system is built around an extensible `CameraSource` abstract base class located in `backend/camera.py`.
-
-When you are ready to replace the USB camera with an ESP32-CAM:
-
-1. **Subclass `CameraSource` in `backend/camera.py`:**
-   ```python
-   class ESP32CameraSource(CameraSource):
-       def __init__(self, stream_url: str):
-           self.stream_url = stream_url
-           self._cap = cv2.VideoCapture(self.stream_url)
-
-       def read(self):
-           if not self._cap.isOpened():
-               self._cap.open(self.stream_url)
-           return self._cap.read()
-
-       def is_connected(self):
-           return self._cap.isOpened()
-
-       def release(self):
-           self._cap.release()
-
-       def get_info(self):
-           return {"connected": self.is_connected(), "type": "ESP32-CAM", "url": self.stream_url}
-   ```
-
-2. **Update `backend/main.py`:**
-   Swap `USBCameraSource(camera_index=...)` to `ESP32CameraSource(stream_url="http://<ESP32_IP>:81/stream")`.
-3. **No changes to `detector.py` or frontend components are required!**
-   The HOG+SVM inference, debounced alerts, MJPEG streaming, and dashboard panels remain completely identical.
-4. **Enable Brightness Control:**
-   Remove the `disabled` attribute on the Brightness slider in `src/pages/Dashboard.tsx` and connect it to the ESP32 `/control?var=brightness&val=...` endpoint.
+The system is designed to transition smoothly through future iterations:
+- **Phase 3:** USB → Wi-Fi stream
+- **Phase 4:** GPS + ultrasonic bathymetric sensors
+- **Phase 5:** OpenCV edge person detection
+- **Phase 6:** Autonomous incident dispatch & live survivor mapping

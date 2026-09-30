@@ -138,6 +138,14 @@ export function getBackendBaseUrl(): string {
     return cleaned.replace(/\/+$/, '');
   }
 
+  if (typeof window !== 'undefined' && window.location.hostname && window.location.hostname !== 'localhost') {
+    // If accessing over local Wi-Fi IP (e.g. http://10.185.112.238:5173 on phone),
+    // default backend to the same computer IP on port 8000
+    if (/^(\d{1,3}\.){3}\d{1,3}$/.test(window.location.hostname)) {
+      return `http://${window.location.hostname}:8000`;
+    }
+  }
+
   return 'http://localhost:8000';
 }
 

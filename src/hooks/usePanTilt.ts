@@ -17,6 +17,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { getEsp32BaseUrl, setEsp32BaseUrl, ESP32_BASE_URL } from '../config/esp32';
+import { getBackendBaseUrl } from './useDetectionApi';
 
 export { ESP32_BASE_URL, getEsp32BaseUrl, setEsp32BaseUrl };
 
@@ -67,13 +68,18 @@ export interface UsePanTiltReturn {
 }
 
 /**
- * Reusable function to dispatch an HTTP GET command directly to the ESP32 over Wi-Fi.
- * E.g., sendPanTiltCommand('left') -> GET http://<ESP32_IP>/api/pan-tilt/left
+ * Reusable function to dispatch an HTTP GET command to the ESP32 over Wi-Fi.
+ * When accessed from an HTTPS origin (e.g. mobile phone / Vercel), it routes through
+ * the backend proxy to prevent Mixed Content security blocking.
  */
 export async function sendPanTiltCommand(command: string, customBaseUrl?: string): Promise<PanTiltResponse> {
   const endpoint = command.toLowerCase().trim();
   const rootUrl = customBaseUrl || getEsp32BaseUrl();
-  const url = `${rootUrl}/api/pan-tilt/${endpoint}`;
+
+  const isHttpsOrigin = typeof window !== 'undefined' && window.location.protocol === 'https:';
+  const url = isHttpsOrigin && rootUrl.startsWith('http://')
+    ? `${getBackendBaseUrl()}/api/pan-tilt/${endpoint}`
+    : `${rootUrl}/api/pan-tilt/${endpoint}`;
 
   try {
     const response = await fetch(url, {
@@ -125,7 +131,10 @@ export async function sendPanTiltCommand(command: string, customBaseUrl?: string
  */
 export async function fetchPanTiltStatus(customBaseUrl?: string): Promise<PanTiltResponse> {
   const rootUrl = customBaseUrl || getEsp32BaseUrl();
-  const url = `${rootUrl}/api/pan-tilt/status`;
+  const isHttpsOrigin = typeof window !== 'undefined' && window.location.protocol === 'https:';
+  const url = isHttpsOrigin && rootUrl.startsWith('http://')
+    ? `${getBackendBaseUrl()}/api/pan-tilt/status`
+    : `${rootUrl}/api/pan-tilt/status`;
   const response = await fetch(url, {
     method: 'GET',
     headers: {

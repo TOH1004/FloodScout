@@ -716,6 +716,46 @@ async def incident_websocket(websocket: WebSocket):
         state.incident_manager.disconnect_websocket(websocket)
 
 
+# ─── ESP32 Wi-Fi Pan/Tilt Proxy (Enables mobile HTTPS clients to control ESP32) ───
+ESP32_PAN_TILT_URL = (os.getenv("ESP32_PAN_TILT_URL") or "http://10.185.112.106").rstrip("/")
+
+@app.get("/api/pan-tilt/{command}")
+def proxy_pan_tilt_command(command: str):
+    """Proxies pan/tilt commands to ESP32 over local Wi-Fi.
+    Allows mobile phones accessing over HTTPS to control the ESP32 without Mixed Content blocks."""
+    import urllib.request
+    import urllib.error
+    import json
+    
+    cmd = command.lower().strip()
+    target_url = f"{ESP32_PAN_TILT_URL}/api/pan-tilt/{cmd}"
+    try:
+        req = urllib.request.Request(
+            target_url,
+            headers={"User-Agent": "FloodScout-Backend-Proxy", "Accept": "*/*"}
+        )
+        with urllib.request.urlopen(req, timeout=2.5) as response:
+            body = response.read().decode("utf-8")
+            try:
+                return json.loads(body)
+            except Exception:
+                return {"success": True, "command": cmd, "message": body}
+    except urllib.error.URLError as e:
+        logger.warning(f"ESP32 Wi-Fi unreachable at {target_url}: {e}")
+        return JSONResponse(
+            status_code=504,
+            content={"success": False, "error": f"ESP32 unreachable at {ESP32_PAN_TILT_URL}: {e}", "connected": False},
+            headers={"Access-Control-Allow-Origin": "*"}
+        )
+    except Exception as e:
+        logger.error(f"Error proxying pan/tilt command {cmd}: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": str(e)},
+            headers={"Access-Control-Allow-Origin": "*"}
+        )
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(

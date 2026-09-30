@@ -113,12 +113,53 @@ export interface RescueIncident {
   status: 'NEW' | 'VERIFIED' | 'RESOLVED';
 }
 
-const API_BASE_URL = (import.meta.env.VITE_API_URL as string) || 'http://localhost:8000';
+const STORAGE_KEY = 'floodscout_backend_url';
 
-// Convert http/https URL to ws/wss
-const WS_BASE_URL = API_BASE_URL.replace(/^http:/, 'ws:').replace(/^https:/, 'wss:');
+export function getBackendBaseUrl(): string {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved && saved.trim()) {
+      let cleaned = saved.trim();
+      if (!cleaned.startsWith('http://') && !cleaned.startsWith('https://')) {
+        cleaned = `https://${cleaned}`;
+      }
+      return cleaned.replace(/\/+$/, '');
+    }
+  } catch {
+    // ignore
+  }
+
+  const envUrl = import.meta.env.VITE_API_URL as string | undefined;
+  if (envUrl && envUrl.trim()) {
+    let cleaned = envUrl.trim();
+    if (!cleaned.startsWith('http://') && !cleaned.startsWith('https://')) {
+      cleaned = `https://${cleaned}`;
+    }
+    return cleaned.replace(/\/+$/, '');
+  }
+
+  return 'http://localhost:8000';
+}
+
+export function setBackendBaseUrl(newUrl: string): string {
+  let cleaned = newUrl.trim();
+  if (!cleaned.startsWith('http://') && !cleaned.startsWith('https://')) {
+    cleaned = `https://${cleaned}`;
+  }
+  cleaned = cleaned.replace(/\/+$/, '');
+  try {
+    localStorage.setItem(STORAGE_KEY, cleaned);
+  } catch {
+    // ignore
+  }
+  return cleaned;
+}
 
 export function useDetectionApi() {
+  const [apiBaseUrl, setApiBaseUrlState] = useState<string>(() => getBackendBaseUrl());
+  const wsBaseUrl = apiBaseUrl.startsWith('https://')
+    ? `wss://${apiBaseUrl.replace(/^https?:\/\//, '')}`
+    : `ws://${apiBaseUrl.replace(/^https?:\/\//, '')}`;
   const [backendOnline, setBackendOnline] = useState<boolean>(false);
   const [cameraStatus, setCameraStatus] = useState<CameraStatus>({ connected: false, camera_index: 0 });
   const [detectionStatus, setDetectionStatus] = useState<DetectionStatus>({
@@ -129,6 +170,7 @@ export function useDetectionApi() {
     alertActive: false,
     detections: [],
   });
+
   const [history, setHistory] = useState<DetectionHistoryItem[]>([]);
   const [lastAlertTimestamp, setLastAlertTimestamp] = useState<string | null>(null);
 
@@ -181,7 +223,7 @@ export function useDetectionApi() {
   // Fetch Incidents via REST
   const fetchIncidents = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/incidents?limit=25`, { signal: AbortSignal.timeout(2000) });
+      const res = await fetch(`${apiBaseUrl}/incidents?limit=25`, { signal: AbortSignal.timeout(2000) });
       if (res.ok) {
         const data: RescueIncident[] = await res.json();
         setIncidents(data);
@@ -197,13 +239,13 @@ export function useDetectionApi() {
     } catch {
       // Handled silently
     }
-  }, [activeIncident]);
+  }, [activeIncident, apiBaseUrl]);
 
   // Poll Detection Status & Camera Status
   const fetchData = useCallback(async () => {
     try {
       // 1. Fetch Detection Status (primary health ping)
-      const detRes = await fetch(`${API_BASE_URL}/detection/status`, { signal: AbortSignal.timeout(2000) });
+      const detRes = await fetch(`${apiBaseUrl}/detection/status`, { signal: AbortSignal.timeout(2000) });
       if (detRes.ok) {
         const detData: DetectionStatus = await detRes.json();
         setDetectionStatus(detData);
@@ -218,7 +260,7 @@ export function useDetectionApi() {
       }
 
       // 2. Fetch Camera Status
-      const camRes = await fetch(`${API_BASE_URL}/camera/status`, { signal: AbortSignal.timeout(2000) });
+      const camRes = await fetch(`${apiBaseUrl}/camera/status`, { signal: AbortSignal.timeout(2000) });
       if (camRes.ok) {
         const camData: CameraStatus = await camRes.json();
         setCameraStatus(camData);
@@ -235,7 +277,7 @@ export function useDetectionApi() {
       }
 
       // 3. Fetch Detection History
-      const histRes = await fetch(`${API_BASE_URL}/detection/history?limit=25`, { signal: AbortSignal.timeout(2000) });
+      const histRes = await fetch(`${apiBaseUrl}/detection/history?limit=25`, { signal: AbortSignal.timeout(2000) });
       if (histRes.ok) {
         const histData: DetectionHistoryItem[] = await histRes.json();
         setHistory(histData);
@@ -248,7 +290,7 @@ export function useDetectionApi() {
       setCameraStatus((prev) => ({ ...prev, connected: false }));
       setXiaoStatus((prev) => ({ ...prev, connected: false }));
     }
-  }, [fetchIncidents]);
+  }, [fetchIncidents, apiBaseUrl]);
 
   // Connect WebSocket for Real-Time Incident Push (only when backend is confirmed online)
   useEffect(() => {
@@ -264,7 +306,7 @@ export function useDetectionApi() {
 
     function connectWs() {
       try {
-        const ws = new WebSocket(`${WS_BASE_URL}/ws/incidents`);
+        const ws = new WebSocket(`${wsBaseUrl}/ws/incidents`);
         wsRef.current = ws;
 
         ws.onopen = () => {
@@ -308,7 +350,7 @@ export function useDetectionApi() {
         wsRef.current.close();
       }
     };
-  }, []);
+  }, [backendOnline, wsBaseUrl]);
 
   // Periodic polling interval
   useEffect(() => {
@@ -331,7 +373,7 @@ export function useDetectionApi() {
   // Adjust HOG+SVM hit threshold (SVM score, NOT a YOLO confidence percentage)
   const setConfidenceThreshold = async (threshold: number): Promise<boolean> => {
     try {
-      const res = await fetch(`${API_BASE_URL}/detection/threshold`, {
+      const res = await fetch(`${apiBaseUrl}/detection/threshold`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ threshold }),
@@ -344,7 +386,7 @@ export function useDetectionApi() {
 
   const setHogMode = async (mode: 'fast' | 'balanced' | 'accurate'): Promise<boolean> => {
     try {
-      const res = await fetch(`${API_BASE_URL}/detection/mode`, {
+      const res = await fetch(`${apiBaseUrl}/detection/mode`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mode }),
@@ -361,7 +403,7 @@ export function useDetectionApi() {
   ): Promise<boolean> => {
     setIsUpdatingSetting(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/camera/settings`, {
+      const res = await fetch(`${apiBaseUrl}/camera/settings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ setting, value }),
@@ -400,7 +442,12 @@ export function useDetectionApi() {
     setActiveIncident(null);
   };
 
-  const videoFeedUrl = `${API_BASE_URL}/video_feed`;
+  const updateBackendUrl = useCallback((newUrl: string) => {
+    const saved = setBackendBaseUrl(newUrl);
+    setApiBaseUrlState(saved);
+  }, []);
+
+  const videoFeedUrl = `${apiBaseUrl}/video_feed`;
 
   return {
     backendOnline,
@@ -412,7 +459,8 @@ export function useDetectionApi() {
     visionAiStatus,
     lastAlertTimestamp,
     videoFeedUrl,
-    apiBaseUrl: API_BASE_URL,
+    apiBaseUrl,
+    setBackendUrl: updateBackendUrl,
     xiaoStatus,
     cameraSettings,
     settingFeedback,

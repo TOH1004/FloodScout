@@ -4,7 +4,7 @@ import {
   ArrowLeft, Clock, Compass, MapPin, ArrowUp, ArrowDown, ArrowRight,
   Camera, X, Activity, Cpu, Target, FileText,
   GripVertical, AlertTriangle, VideoOff, Eye, User, Users, ArrowUpDown,
-  Navigation, Laptop, Maximize2, Minimize2, Wifi
+  Navigation, Laptop, Maximize2, Minimize2, Wifi, Settings, Check, RefreshCw, Globe
 } from 'lucide-react';
 import { useDetectionApi, type RescueIncident } from '../hooks/useDetectionApi';
 import { usePanTilt, type UsePanTiltReturn } from '../hooks/usePanTilt';
@@ -1954,6 +1954,29 @@ export default function Dashboard() {
   const [focusedLocation, setFocusedLocation] = useState<[number, number] | null>(null);
   const [previousLayout, setPreviousLayout] = useState<LayoutNode | null>(null);
 
+  // Connection & Server Settings Modal
+  const [showConnectionModal, setShowConnectionModal] = useState<boolean>(false);
+  const [backendInput, setBackendInput] = useState<string>(() => detectionApi.apiBaseUrl);
+  const [esp32Input, setEsp32Input] = useState<string>(() => panTilt.esp32Url);
+  const [connSavedMsg, setConnSavedMsg] = useState<string | null>(null);
+
+  const handleSaveConnection = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (backendInput.trim()) {
+      detectionApi.setBackendUrl(backendInput.trim());
+    }
+    if (esp32Input.trim()) {
+      panTilt.setEsp32Url(esp32Input.trim());
+    }
+    setConnSavedMsg('Settings saved! Reconnecting...');
+    setTimeout(() => {
+      detectionApi.refresh();
+      panTilt.fetchStatus();
+      setConnSavedMsg(null);
+      setShowConnectionModal(false);
+    }, 800);
+  };
+
   const handleInspectIncident = useCallback((inc: RescueIncident, personId?: number) => {
     setInspectedIncident(inc);
     setInspectedPersonId(personId ?? null);
@@ -2149,21 +2172,36 @@ export default function Dashboard() {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          {/* AI Vision Status Indicator */}
-          <div className={`hidden md:flex items-center gap-2 text-[11px] font-mono px-3 py-1 rounded-full border ${
-            detectionApi.backendOnline && detectionApi.cameraStatus.connected
-              ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
-              : detectionApi.backendOnline
-              ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
-              : 'bg-slate-500/20 text-slate-300 border-slate-500/30'
-          }`}>
-            <span className={`w-2 h-2 rounded-full ${detectionApi.backendOnline && detectionApi.cameraStatus.connected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
-            {detectionApi.backendOnline && detectionApi.cameraStatus.connected
-              ? 'AI VISION: ACTIVE'
-              : detectionApi.backendOnline
-              ? 'CAM DISCONNECTED'
-              : 'AI BACKEND: OFFLINE'}
-          </div>
+          {/* AI Vision Status Indicator (Clickable to configure AI Backend / ESP32 URLs) */}
+          <button
+            type="button"
+            onClick={() => {
+              setBackendInput(detectionApi.apiBaseUrl);
+              setEsp32Input(panTilt.esp32Url);
+              setShowConnectionModal(true);
+            }}
+            className={`flex items-center gap-1.5 text-[11px] font-mono px-3 py-1 rounded-full border transition-all hover:opacity-90 active:scale-95 cursor-pointer ${
+              detectionApi.backendOnline && detectionApi.cameraStatus.connected
+                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                : detectionApi.backendOnline
+                ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                : 'bg-slate-500/20 text-slate-300 border-slate-500/30'
+            }`}
+            title="Configure AI Backend & ESP32 connection URLs"
+          >
+            <span className={`w-2 h-2 rounded-full shrink-0 ${detectionApi.backendOnline && detectionApi.cameraStatus.connected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+            <span className="hidden sm:inline">
+              {detectionApi.backendOnline && detectionApi.cameraStatus.connected
+                ? 'AI VISION: ACTIVE'
+                : detectionApi.backendOnline
+                ? 'CAM DISCONNECTED'
+                : 'AI BACKEND: OFFLINE'}
+            </span>
+            <span className="sm:hidden font-bold">
+              {detectionApi.backendOnline ? 'AI: ON' : 'AI: OFF'}
+            </span>
+            <Settings size={12} className="opacity-75 ml-0.5" />
+          </button>
 
           <div className={`flex items-center gap-2 text-[11px] font-mono px-3 py-1 rounded-full border ${robotOnline ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-rose-500/20 text-rose-300 border-rose-500/30'}`}>
             <span className={`w-2 h-2 rounded-full ${robotOnline ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`} />
@@ -2222,6 +2260,114 @@ export default function Dashboard() {
             setInspectedPersonId(null);
           }}
         />
+      )}
+
+      {/* Connection & HTTPS Backend Settings Modal */}
+      {showConnectionModal && (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-[#162347] text-[#FAF7F2] border border-[#24355E] rounded-xl shadow-2xl w-full max-w-lg overflow-hidden">
+            <div className="px-5 py-4 border-b border-[#24355E] flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Settings size={18} className="text-[#BED6EE]" />
+                <h3 className="font-bold text-sm tracking-wider uppercase text-white">Connection &amp; Backend Settings</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowConnectionModal(false)}
+                className="text-[#BED6EE] hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveConnection} className="p-5 space-y-4 text-xs">
+              {/* Alert message if saved */}
+              {connSavedMsg && (
+                <div className="p-2.5 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 flex items-center gap-2 font-mono">
+                  <Check size={14} /> {connSavedMsg}
+                </div>
+              )}
+
+              {/* Mobile HTTPS Note */}
+              <div className="p-3 rounded-lg bg-[#0284C7]/15 border border-[#0284C7]/30 text-[#BED6EE] space-y-1.5">
+                <div className="font-semibold text-white flex items-center gap-1.5">
+                  <Globe size={14} className="text-[#BED6EE]" /> Mobile Phone / HTTPS Notice
+                </div>
+                <p className="leading-relaxed text-[11px]">
+                  When opening on a mobile phone over HTTPS (e.g. Vercel), mobile browsers block plain <code className="text-amber-300 font-mono">http://</code> backends. Run Cloudflare Tunnel on your laptop to get a secure HTTPS link:
+                </p>
+                <div className="font-mono bg-black/40 text-emerald-300 px-2.5 py-1.5 rounded select-all text-[11px] border border-white/5">
+                  cloudflared tunnel --url http://localhost:8000
+                </div>
+              </div>
+
+              {/* AI Backend URL */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="font-semibold text-white uppercase tracking-wider text-[11px]">
+                    AI Detection Backend URL (HTTPS / HTTP)
+                  </label>
+                  <span className={`font-mono text-[10px] px-2 py-0.5 rounded-full ${
+                    detectionApi.backendOnline ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'
+                  }`}>
+                    {detectionApi.backendOnline ? 'CONNECTED' : 'DISCONNECTED'}
+                  </span>
+                </div>
+                <input
+                  type="text"
+                  value={backendInput}
+                  onChange={(e) => setBackendInput(e.target.value)}
+                  placeholder="e.g. https://xxx.trycloudflare.com or http://localhost:8000"
+                  className="w-full bg-[#0E172C] border border-[#24355E] rounded-lg px-3 py-2 text-white font-mono text-xs focus:outline-none focus:border-[#BED6EE]"
+                />
+                <p className="text-[10px] text-white/50">
+                  Current: <code className="text-[#BED6EE] font-mono">{detectionApi.apiBaseUrl}</code>
+                </p>
+              </div>
+
+              {/* ESP32 URL */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="font-semibold text-white uppercase tracking-wider text-[11px]">
+                    ESP32 Pan/Tilt Wi-Fi URL
+                  </label>
+                  <span className={`font-mono text-[10px] px-2 py-0.5 rounded-full ${
+                    panTilt.connected ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'
+                  }`}>
+                    {panTilt.connected ? 'ESP32 ONLINE' : 'ESP32 OFFLINE'}
+                  </span>
+                </div>
+                <input
+                  type="text"
+                  value={esp32Input}
+                  onChange={(e) => setEsp32Input(e.target.value)}
+                  placeholder="e.g. http://10.185.112.106"
+                  className="w-full bg-[#0E172C] border border-[#24355E] rounded-lg px-3 py-2 text-white font-mono text-xs focus:outline-none focus:border-[#BED6EE]"
+                />
+                <p className="text-[10px] text-white/50">
+                  Current: <code className="text-[#BED6EE] font-mono">{panTilt.esp32Url}</code> (proxied securely on HTTPS)
+                </p>
+              </div>
+
+              {/* Actions */}
+              <div className="pt-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowConnectionModal(false)}
+                  className="px-3.5 py-1.5 rounded-lg border border-[#24355E] hover:bg-white/5 text-white/70 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 rounded-lg bg-[#0284C7] hover:bg-[#0284C7]/80 text-white font-semibold transition-colors flex items-center gap-1.5 shadow-md shadow-[#0284C7]/20 cursor-pointer"
+                >
+                  <RefreshCw size={13} /> Save &amp; Reconnect
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       {/* Drag ghost overlay */}

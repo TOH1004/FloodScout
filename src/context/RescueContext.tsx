@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
 export type RobotMode = 'MANUAL' | 'AUTO_SEARCH' | 'RETURN_TO_BASE' | 'EMERGENCY_STOP';
 export type VictimStatus = 'Detected' | 'Verified' | 'Rescue Assigned' | 'Rescued';
@@ -59,6 +59,11 @@ interface RescueContextType {
   robotLocation: [number, number];
   computerLocation: [number, number];
   computerAccuracy: number | null;
+  locationStatus: 'locating' | 'ready' | 'denied' | 'timeout' | 'error' | 'idle';
+  locationSource: 'gps' | 'wifi' | 'ip' | 'manual' | 'default';
+  locationError: string | null;
+  refreshComputerLocation: () => Promise<[number, number] | null>;
+  setManualComputerLocation: (coords: [number, number]) => void;
   robotHeading: number;
   operatingMode: RobotMode;
   thrusterPwm: number;
@@ -108,24 +113,199 @@ export const RescueProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [waterDepth, setWaterDepth] = useState(1.85);
   const [robotSpeed, setRobotSpeed] = useState(2.4);
   const [robotLocation, setRobotLocation] = useState<[number, number]>(INITIAL_COORDS);
-  const [computerLocation, setComputerLocation] = useState<[number, number]>([1.5588, 103.6375]);
-  const [computerAccuracy, setComputerAccuracy] = useState<number | null>(null);
 
-  // Fetch Computer / Ground Control Browser Geolocation
-  useEffect(() => {
-    if (typeof window !== 'undefined' && 'geolocation' in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setComputerLocation([pos.coords.latitude, pos.coords.longitude]);
-          setComputerAccuracy(Math.round(pos.coords.accuracy));
-        },
-        (err) => {
-          console.warn('Geolocation fallback used (Johor default):', err.message);
-        },
-        { enableHighAccuracy: true, timeout: 8000 }
-      );
+  // Multi-tier Ground Control Computer Geolocation
+  const [computerLocation, setComputerLocation] = useState<[number, number]>(() => {
+    try {
+      const saved = localStorage.getItem('floodscout_pc_coords');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length === 2 && !isNaN(parsed[0]) && !isNaN(parsed[1])) {
+          // If stored coords are the exact initial placeholder, allow fresh auto-detection
+          if (Math.abs(parsed[0] - INITIAL_COORDS[0]) > 0.0001 || Math.abs(parsed[1] - INITIAL_COORDS[1]) > 0.0001) {
+            return [parsed[0], parsed[1]];
+          }
+        }
+      }
+    } catch {
+      // ignore
     }
+    return INITIAL_COORDS;
+  });
+  const [computerAccuracy, setComputerAccuracy] = useState<number | null>(null);
+  const [locationStatus, setLocationStatus] = useState<'locating' | 'ready' | 'denied' | 'timeout' | 'error' | 'idle'>('idle');
+  const [locationSource, setLocationSource] = useState<'gps' | 'wifi' | 'ip' | 'manual' | 'default'>('default');
+  const [locationError, setLocationError] = useState<string | null>(null);
+
+  // Core Geolocation Engine:
+  // 1. Instant IP Geolocation (HTTPS, CORS-enabled, runs in parallel in ~200ms)
+  // 2. Wi-Fi Positioning (fast, reliable on laptops without hardware GPS)
+  // 3. High-Accuracy GPS (for phones/GPS hardware)
+  const acquireLocation = useCallback(async (): Promise<[number, number] | null> => {
+    setLocationStatus('locating');
+    setLocationError(null);
+
+    // Fast CORS-compatible IP Geolocation provider
+    const tryIpGeo = async (): Promise<[number, number] | null> => {
+      // Tier A: GeoJS (verified 200 OK + CORS * in Malaysia)
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 4000);
+        const res = await fetch('https://get.geojs.io/v1/ip/geo.json', { signal: controller.signal });
+        clearTimeout(timeoutId);
+        if (res.ok) {
+          const data = await res.json();
+          const lat = parseFloat(data.latitude);
+          const lng = parseFloat(data.longitude);
+          if (!isNaN(lat) && !isNaN(lng) && (lat !== 0 || lng !== 0)) {
+            const coords: [number, number] = [lat, lng];
+            setComputerLocation(coords);
+            setComputerAccuracy(typeof data.accuracy === 'number' ? data.accuracy : 1200);
+            setLocationStatus('ready');
+            setLocationSource((prev) => (prev === 'gps' || prev === 'wifi' ? prev : 'ip'));
+            setLocationError(null);
+            try {
+              localStorage.setItem('floodscout_pc_coords', JSON.stringify(coords));
+            } catch {}
+            return coords;
+          }
+        }
+      } catch (e) {
+        console.warn('[Geolocation] GeoJS IP lookup failed:', e);
+      }
+
+      // Tier B: IPWhoIs fallback (verified 200 OK + CORS * in Malaysia)
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 4000);
+        const res = await fetch('https://ipwho.is/', { signal: controller.signal });
+        clearTimeout(timeoutId);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.success && typeof data.latitude === 'number' && typeof data.longitude === 'number') {
+            const coords: [number, number] = [data.latitude, data.longitude];
+            setComputerLocation(coords);
+            setComputerAccuracy(1500);
+            setLocationStatus('ready');
+            setLocationSource((prev) => (prev === 'gps' || prev === 'wifi' ? prev : 'ip'));
+            setLocationError(null);
+            try {
+              localStorage.setItem('floodscout_pc_coords', JSON.stringify(coords));
+            } catch {}
+            return coords;
+          }
+        }
+      } catch (e) {
+        console.warn('[Geolocation] IPWhoIs fallback failed:', e);
+      }
+
+      return null;
+    };
+
+    // Kick off IP lookup immediately in parallel so the user gets their real computer location in <300ms
+    const ipPromise = tryIpGeo();
+
+    const tryBrowserGeo = (options: PositionOptions, sourceLabel: 'gps' | 'wifi'): Promise<[number, number]> => {
+      return new Promise((resolve, reject) => {
+        if (typeof window === 'undefined' || !('geolocation' in navigator)) {
+          return reject(new Error('Geolocation not supported (requires HTTPS or localhost)'));
+        }
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            const coords: [number, number] = [pos.coords.latitude, pos.coords.longitude];
+            setComputerLocation(coords);
+            setComputerAccuracy(Math.round(pos.coords.accuracy));
+            setLocationStatus('ready');
+            setLocationSource(sourceLabel);
+            setLocationError(null);
+            try {
+              localStorage.setItem('floodscout_pc_coords', JSON.stringify(coords));
+            } catch {}
+            resolve(coords);
+          },
+          (err) => reject(err),
+          options
+        );
+      });
+    };
+
+    // Step 1: Query Wi-Fi/Cell positioning (enableHighAccuracy: false).
+    // On Windows laptops without GPS hardware, this succeeds rapidly using Windows Location Service.
+    try {
+      const coords = await tryBrowserGeo({ enableHighAccuracy: false, timeout: 5000, maximumAge: 30000 }, 'wifi');
+      // If successful, attempt to refine with high-accuracy in the background if GNSS hardware exists
+      tryBrowserGeo({ enableHighAccuracy: true, timeout: 6000, maximumAge: 0 }, 'gps').catch(() => {});
+      return coords;
+    } catch (err: unknown) {
+      const errObj = err as GeolocationPositionError;
+      console.warn('[Geolocation] Fast Wi-Fi query failed/timeout:', errObj?.message || err);
+    }
+
+    // Step 2: Try High Accuracy GPS query
+    try {
+      const coords = await tryBrowserGeo({ enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }, 'gps');
+      return coords;
+    } catch (err: unknown) {
+      const errObj = err as GeolocationPositionError;
+      if (errObj?.code === 1) {
+        setLocationError('Browser location permission denied. Using IP location.');
+      } else if (errObj?.code === 2) {
+        setLocationError('Position unavailable from Windows Location Service. Using IP location.');
+      } else if (errObj?.code === 3) {
+        setLocationError('GPS timed out. Using IP location.');
+      }
+    }
+
+    // Step 3: Wait for parallel IP-based Geolocation fallback
+    const ipCoords = await ipPromise;
+    if (ipCoords) return ipCoords;
+
+    setLocationStatus('error');
+    setLocationError('Could not determine location. Using default.');
+    return null;
   }, []);
+
+  const setManualComputerLocation = useCallback((coords: [number, number]) => {
+    setComputerLocation(coords);
+    setComputerAccuracy(5);
+    setLocationStatus('ready');
+    setLocationSource('manual');
+    setLocationError(null);
+    try {
+      localStorage.setItem('floodscout_pc_coords', JSON.stringify(coords));
+    } catch {}
+  }, []);
+
+  // Run on mount + watch for updates
+  useEffect(() => {
+    acquireLocation();
+
+    let watchId: number | null = null;
+    if (typeof window !== 'undefined' && 'geolocation' in navigator) {
+      try {
+        watchId = navigator.geolocation.watchPosition(
+          (pos) => {
+            const coords: [number, number] = [pos.coords.latitude, pos.coords.longitude];
+            setComputerLocation(coords);
+            setComputerAccuracy(Math.round(pos.coords.accuracy));
+            setLocationStatus('ready');
+            setLocationSource(pos.coords.accuracy < 30 ? 'gps' : 'wifi');
+            try {
+              localStorage.setItem('floodscout_pc_coords', JSON.stringify(coords));
+            } catch {}
+          },
+          () => {},
+          { enableHighAccuracy: false, maximumAge: 10000 }
+        );
+      } catch {}
+    }
+
+    return () => {
+      if (watchId !== null && typeof window !== 'undefined' && 'geolocation' in navigator) {
+        navigator.geolocation.clearWatch(watchId);
+      }
+    };
+  }, [acquireLocation]);
   const [robotHeading, setRobotHeading] = useState(65);
   const [operatingMode, setOperatingModeState] = useState<RobotMode>('AUTO_SEARCH');
   const [thrusterPwm, setThrusterPwm] = useState(48);
@@ -351,6 +531,11 @@ export const RescueProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         robotLocation,
         computerLocation,
         computerAccuracy,
+        locationStatus,
+        locationSource,
+        locationError,
+        refreshComputerLocation: acquireLocation,
+        setManualComputerLocation,
         robotHeading,
         operatingMode,
         thrusterPwm,

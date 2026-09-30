@@ -1,10 +1,10 @@
-import { useState, useEffect, useCallback, Fragment } from 'react';
+import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ArrowLeft, Clock, Compass, MapPin, ArrowUp, ArrowDown, ArrowRight,
   Camera, X, Activity, Cpu, Target, FileText,
   GripVertical, AlertTriangle, VideoOff, Eye, User, Users, ArrowUpDown,
-  Navigation, Laptop, Maximize2, Minimize2, Wifi, Settings, Check, RefreshCw, Globe
+  Navigation, Laptop, Maximize2, Minimize2, Wifi, Settings, Check, RefreshCw, Globe, Edit3
 } from 'lucide-react';
 import { useDetectionApi, type RescueIncident } from '../hooks/useDetectionApi';
 import { usePanTilt, type UsePanTiltReturn } from '../hooks/usePanTilt';
@@ -40,7 +40,7 @@ import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { useRescue } from '../context/RescueContext';
 import type { VictimStatus } from '../context/RescueContext';
-import { type LayoutNode, type PanelId, removeNode, insertNode, hasPanel, getFirstPanelId } from '../utils/layoutTree';
+import { type LayoutNode, type PanelId, removeNode, insertNode, hasPanel, addDockPanel } from '../utils/layoutTree';
 export type { PanelId, LayoutNode };
 
 // ─── Map Icons ────────────────────────────────────────────────────────────────
@@ -79,8 +79,15 @@ function MapClickHandler({ onMapClick }: { onMapClick: (lat: number, lng: number
   return null;
 }
 
-function MapResizerAndController({ center }: { center?: [number, number] | null }) {
+function MapResizerAndController({
+  center,
+  computerLocation,
+}: {
+  center?: [number, number] | null;
+  computerLocation?: [number, number];
+}) {
   const map = useMap();
+  const hasAutoCentered = useRef(false);
 
   // Guarantee Leaflet recalculates true container dimensions on mount, resize, and panel drag
   useEffect(() => {
@@ -123,25 +130,50 @@ function MapResizerAndController({ center }: { center?: [number, number] | null 
     }
   }, [center, map]);
 
+  // When real computerLocation arrives, center the map if not already focused
+  useEffect(() => {
+    if (computerLocation && !center && !hasAutoCentered.current) {
+      // Don't auto-center if it's the exact initial placeholder [1.5588, 103.6375]
+      const isDefault = Math.abs(computerLocation[0] - 1.5588) < 0.0001 && Math.abs(computerLocation[1] - 103.6375) < 0.0001;
+      if (!isDefault) {
+        hasAutoCentered.current = true;
+        map.flyTo(computerLocation, 15, { duration: 0.8 });
+      }
+    }
+  }, [computerLocation, center, map]);
+
   return null;
 }
 
-function LocateControl({ target }: { target: [number, number] }) {
+function LocateControl({
+  target,
+  onLocate,
+  isLocating,
+}: {
+  target: [number, number];
+  onLocate?: () => Promise<[number, number] | null> | void;
+  isLocating?: boolean;
+}) {
   const map = useMap();
   return (
     <div className="leaflet-top leaflet-right" style={{ marginTop: '55px', marginRight: '10px', zIndex: 999 }}>
       <div className="leaflet-control">
         <button
-          onClick={(e) => {
+          onClick={async (e) => {
             e.stopPropagation();
+            let dest = target;
+            if (onLocate) {
+              const res = await onLocate();
+              if (res && Array.isArray(res)) dest = res;
+            }
             map.invalidateSize({ animate: false });
-            map.panTo(target, { animate: true, duration: 0.35 });
+            map.flyTo(dest, 16, { duration: 0.75 });
           }}
           className="bg-white/95 backdrop-blur-md hover:bg-sky-50 text-sky-800 border-2 border-sky-400 rounded-md px-2.5 py-1.5 shadow-md flex items-center gap-1.5 transition-all cursor-pointer font-mono font-bold text-xs active:scale-95 group pointer-events-auto"
           title="Center and Locate Ground Control Computer"
         >
-          <Laptop size={14} className="text-sky-600 group-hover:scale-110 transition-transform" />
-          <span className="hidden sm:inline">Locate PC</span>
+          <Laptop size={14} className={`text-sky-600 group-hover:scale-110 transition-transform ${isLocating ? 'animate-spin' : ''}`} />
+          <span className="hidden sm:inline">{isLocating ? 'Locating...' : 'Locate PC'}</span>
         </button>
       </div>
     </div>
@@ -312,6 +344,8 @@ function PanelContent({
   const {
     waterDepth, robotSpeed, computerLocation, computerAccuracy, operatingMode,
     activeMission, victims, batteryLevel, connectionStatus,
+    locationStatus, locationSource, locationError,
+    refreshComputerLocation, setManualComputerLocation,
     setOperatingMode, moveRobot,
   } = useRescue();
 
@@ -324,12 +358,6 @@ function PanelContent({
   const [localThreshold, setLocalThreshold] = useState(50);
   const [victimSortBy, setVictimSortBy] = useState<'person' | 'time'>('person');
   const [mapTileSource, setMapTileSource] = useState<'google' | 'google-hybrid' | 'carto' | 'osm'>('google');
-
-  // Johor, Malaysia Geographic Boundaries (Segamat to Tanjung Piai, Muar to Mersing + coastal buffer)
-  const JOHOR_BOUNDS: [[number, number], [number, number]] = [
-    [1.10, 101.90], // South-West (Kukup / Pontian / Muar / Straits)
-    [3.15, 104.70], // North-East (Segamat / Mersing / Endau / South China Sea)
-  ];
 
   const floodZone: [number, number][] = [
     [1.5650, 103.6320], [1.5670, 103.6430], [1.5560, 103.6460], [1.5520, 103.6350],
@@ -799,27 +827,67 @@ function PanelContent({
             <div className="flex flex-wrap items-center gap-2 pointer-events-auto">
               {/* Computer / Ground Control Coordination + Quick Locate Button */}
               <button
-                onClick={() => {
-                  if (onTrackPerson) onTrackPerson(baseLocation);
+                onClick={async () => {
+                  const newLoc = await refreshComputerLocation();
+                  const target = newLoc || baseLocation;
+                  if (onTrackPerson) onTrackPerson(target);
                 }}
                 className="bg-[#162347]/95 hover:bg-[#1f2f5c] text-[#FAF7F2] backdrop-blur-md px-3 py-1.5 rounded-md shadow-md border border-sky-400/60 text-[11px] font-mono flex items-center gap-2 transition-all cursor-pointer active:scale-95 group"
-                title="Click to Center Tactical Map on Computer Ground Control"
+                title={locationError ? `${locationError} - Click to refresh GPS / IP detection` : 'Click to Refresh & Center Tactical Map on Computer Ground Control'}
               >
                 <span className="text-sky-400 flex items-center gap-1 font-bold">
-                  <Laptop size={14} className="text-sky-300 group-hover:scale-110 transition-transform" />
+                  {locationStatus === 'locating' ? (
+                    <RefreshCw size={13} className="text-sky-300 animate-spin" />
+                  ) : (
+                    <Laptop size={14} className="text-sky-300 group-hover:scale-110 transition-transform" />
+                  )}
                   PC GPS:
                 </span>
                 <span className="font-bold text-white">
                   {baseLocation[0].toFixed(6)}°, {baseLocation[1].toFixed(6)}°
+                </span>
+                {/* Source Badge */}
+                <span className={`text-[9px] px-1.5 py-0.2 rounded font-sans font-bold uppercase tracking-wider ${
+                  locationSource === 'gps'
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                    : locationSource === 'wifi'
+                    ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40'
+                    : locationSource === 'ip'
+                    ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40'
+                    : locationSource === 'manual'
+                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                    : 'bg-slate-500/20 text-slate-300 border border-slate-500/40'
+                }`}>
+                  {locationSource === 'ip' ? 'IP Net' : locationSource}
                 </span>
                 {computerAccuracy && (
                   <span className="text-[9px] text-sky-200/80 bg-sky-900/60 px-1 py-0.2 rounded font-sans">
                     ±{computerAccuracy}m
                   </span>
                 )}
-                <span className="text-[9px] bg-sky-500 text-white font-sans font-bold px-1.5 py-0.5 rounded shadow-xs ml-0.5">
-                  Locate
+                <span className="text-[9px] bg-sky-500 hover:bg-sky-400 text-white font-sans font-bold px-1.5 py-0.5 rounded shadow-xs ml-0.5 flex items-center gap-1">
+                  {locationStatus === 'locating' ? 'Locating...' : 'Locate'}
                 </span>
+              </button>
+
+              {/* Set Manual GPS Button */}
+              <button
+                onClick={() => {
+                  const input = window.prompt('Set Computer GPS Coordinates (lat, lng):', `${baseLocation[0]}, ${baseLocation[1]}`);
+                  if (input) {
+                    const parts = input.split(',').map((p) => parseFloat(p.trim()));
+                    if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+                      setManualComputerLocation([parts[0], parts[1]]);
+                      if (onTrackPerson) onTrackPerson([parts[0], parts[1]]);
+                    } else {
+                      alert('Invalid format. Please enter as: 1.5540, 103.7098');
+                    }
+                  }
+                }}
+                className="bg-[#162347]/80 hover:bg-[#1f2f5c] text-sky-300 hover:text-white px-2 py-1.5 rounded-md border border-sky-500/40 text-[10px] font-mono flex items-center gap-1 transition-all cursor-pointer active:scale-95"
+                title="Manually Set / Calibrate Computer Coordinates"
+              >
+                <Edit3 size={11} /> Manual
               </button>
 
               {/* Target GPS Coordination (Co-located with PC for now) */}
@@ -929,16 +997,21 @@ function PanelContent({
           <MapContainer
             center={focusedLocation || baseLocation}
             zoom={14}
-            minZoom={10}
+            minZoom={4}
             maxZoom={20}
-            maxBounds={JOHOR_BOUNDS}
-            maxBoundsViscosity={0.5}
             preferCanvas={true}
             scrollWheelZoom={true}
             className="w-full h-full bg-[#0F172A]"
           >
-            <MapResizerAndController center={focusedLocation} />
-            <LocateControl target={baseLocation} />
+            <MapResizerAndController center={focusedLocation} computerLocation={baseLocation} />
+            <LocateControl
+              target={baseLocation}
+              onLocate={async () => {
+                const loc = await refreshComputerLocation();
+                return loc || baseLocation;
+              }}
+              isLocating={locationStatus === 'locating'}
+            />
 
             {mapTileSource === 'google' && (
               <TileLayer
@@ -1891,9 +1964,7 @@ function LayoutRenderer({
       className="h-full w-full min-h-0 min-w-0"
     >
       {node.children.flatMap((child, index) => {
-        const isMap = child.type === 'panel' && child.id === 'map';
-        const isCamera = child.type === 'panel' && child.id === 'camera';
-        const defaultSize = isMap ? 65 : isCamera ? 35 : undefined;
+        const defaultSize = node.children.length > 0 ? Math.round(100 / node.children.length) : 50;
 
         const childEl = (
           <Panel
@@ -1987,7 +2058,7 @@ export default function Dashboard() {
     setLayout((prev) => {
       if (!prev) return { type: 'panel', id: 'map' };
       if (!hasPanel(prev, 'map')) {
-        return insertNode(prev, getFirstPanelId(prev), 'map', 'right');
+        return addDockPanel(prev, 'map');
       }
       return prev;
     });
@@ -2074,8 +2145,8 @@ export default function Dashboard() {
       if (hasPanel(prev, id)) {
         return removeNode(prev, id);
       }
-      // If adding from dock by clicking, split side-by-side to the right
-      return insertNode(prev, getFirstPanelId(prev), id, 'right');
+      // Smart dock insertion: 1st addition -> 1/2 & 1/2; 2nd addition -> 1/2 left, 1/4 right-top, 1/4 right-bottom
+      return addDockPanel(prev, id);
     });
   }, []);
 

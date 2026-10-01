@@ -128,10 +128,19 @@ export function getBackendBaseUrl(): string {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved && saved.trim()) {
       let cleaned = saved.trim();
-      if (!cleaned.startsWith('http://') && !cleaned.startsWith('https://')) {
-        cleaned = `https://${cleaned}`;
+      const isRemoteClient =
+        typeof window !== 'undefined' &&
+        window.location.hostname &&
+        window.location.hostname !== 'localhost' &&
+        window.location.hostname !== '127.0.0.1';
+
+      // If on mobile/remote client and saved URL points to localhost, ignore it (it's unreachable on mobile)
+      if (!isRemoteClient || (!cleaned.includes('localhost') && !cleaned.includes('127.0.0.1'))) {
+        if (!cleaned.startsWith('http://') && !cleaned.startsWith('https://')) {
+          cleaned = `https://${cleaned}`;
+        }
+        return cleaned.replace(/\/+$/, '');
       }
-      return cleaned.replace(/\/+$/, '');
     }
   } catch {
     // ignore
@@ -146,11 +155,13 @@ export function getBackendBaseUrl(): string {
     return cleaned.replace(/\/+$/, '');
   }
 
-  if (typeof window !== 'undefined' && window.location.hostname && window.location.hostname !== 'localhost') {
-    // If accessing over local Wi-Fi IP (e.g. http://10.185.112.238:5173 on phone),
-    // default backend to the same computer IP on port 8000
-    if (/^(\d{1,3}\.){3}\d{1,3}$/.test(window.location.hostname)) {
-      return `http://${window.location.hostname}:8000`;
+  if (typeof window !== 'undefined' && window.location.origin) {
+    const host = window.location.hostname;
+    const isCloudDeploy = host.includes('vercel.app') || host.includes('netlify.app') || host.includes('pages.dev');
+    if (!isCloudDeploy) {
+      // Use current Vite server origin (e.g. http://10.185.112.238:5174 or http://localhost:5174)
+      // Vite proxy forwards /video_feed, /camera, /detection to 127.0.0.1:8000 seamlessly
+      return window.location.origin;
     }
   }
 

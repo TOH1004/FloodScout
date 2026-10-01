@@ -13,6 +13,35 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/esp32-api/, '/api'),
       },
+      '/video_feed': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
+      '/camera': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
+      '/detection': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
+      '/incidents': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
+      '/captures': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
+      '/api': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
+      '/ws': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+        ws: true,
+      },
     },
   },
 })

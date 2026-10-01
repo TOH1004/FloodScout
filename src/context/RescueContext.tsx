@@ -531,9 +531,11 @@ export const RescueProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const newId = `V-00${victims.length + 1}`;
     const latOffset = (Math.random() - 0.5) * 0.003;
     const lngOffset = (Math.random() - 0.5) * 0.003;
+    const refLat = robotLocation ? robotLocation[0] : (computerLocation ? computerLocation[0] : 1.5588);
+    const refLng = robotLocation ? robotLocation[1] : (computerLocation ? computerLocation[1] : 103.6375);
     const newLoc: [number, number] = [
-      parseFloat((robotLocation[0] + latOffset).toFixed(6)),
-      parseFloat((robotLocation[1] + lngOffset).toFixed(6)),
+      parseFloat((refLat + latOffset).toFixed(6)),
+      parseFloat((refLng + lngOffset).toFixed(6)),
     ];
 
     const newVictim: Victim = {

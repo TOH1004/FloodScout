@@ -4,7 +4,7 @@ import {
   ArrowLeft, Clock, Compass, MapPin, ArrowUp, ArrowDown, ArrowRight,
   Camera, X, Cpu, Target, FileText,
   GripVertical, Eye, User, Users, ArrowUpDown,
-  Navigation, Laptop, Maximize2, Minimize2, Wifi, Settings, Check, RefreshCw, Globe, Edit3, Radio, Route,
+  Navigation, Laptop, Maximize2, Minimize2, Wifi, Settings, Check, RefreshCw, Globe, Edit3, Radio,
   History as HistoryIcon, AlertTriangle, Radar
 } from 'lucide-react';
 import { useDetectionApi, type RescueIncident } from '../hooks/useDetectionApi';
@@ -15,6 +15,8 @@ import { IncidentModal } from '../components/IncidentModal';
 import { CameraSettingsPanel } from '../components/CameraSettingsPanel';
 import { WifiCameraModal } from '../components/WifiCameraModal';
 import { extractCameraHost } from '../config/camera';
+import { MotorTelemetryCard } from '../components/MotorTelemetryCard';
+import { useMotorTelemetry } from '../hooks/useMotorTelemetry';
 import {
   DndContext,
   pointerWithin,
@@ -40,7 +42,7 @@ import {
   Panel,
   Separator as PanelResizeHandle,
 } from 'react-resizable-panels';
-import { MapContainer, TileLayer, Marker, Popup, Circle, Polygon, Polyline, useMapEvents, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Circle, useMapEvents, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { useRescue } from '../context/RescueContext';
@@ -103,8 +105,6 @@ const getRobotIcon = (personDetected: boolean) => {
   });
 };
 
-const robotIcon = getRobotIcon(false);
-
 function MapClickHandler({ onMapClick }: { onMapClick: (lat: number, lng: number) => void }) {
   useMapEvents({ click: (e) => onMapClick(e.latlng.lat, e.latlng.lng) });
   return null;
@@ -113,11 +113,9 @@ function MapClickHandler({ onMapClick }: { onMapClick: (lat: number, lng: number
 function MapResizerAndController({
   center,
   computerLocation,
-  robotLocation,
 }: {
   center?: [number, number] | null;
   computerLocation?: [number, number];
-  robotLocation?: [number, number];
 }) {
   const map = useMap();
   const hasAutoCentered = useRef(false);
@@ -384,9 +382,9 @@ function PanelContent({
     activeMission, victims, batteryLevel, connectionStatus,
     locationStatus, locationSource, locationError,
     refreshComputerLocation, setManualComputerLocation,
-    setOperatingMode, moveRobot,
+    setOperatingMode,
     robotLocation, robotHeading, trajectory, signalDbm,
-    hardwareGps, connectWebSerial,
+    hardwareGps,
   } = useRescue();
 
   const { detectionStatus } = detectionApi;
@@ -394,6 +392,8 @@ function PanelContent({
     detectionStatus.personDetected ||
     (detectionStatus.personCount && detectionStatus.personCount > 0)
   );
+
+  const motorTelemetry = useMotorTelemetry();
 
   const [aiBoxes, setAiBoxes] = useState(true);
   const [crosshair, setCrosshair] = useState(true);
@@ -591,7 +591,7 @@ function PanelContent({
                   onLoad={() => setDirectFeedError(false)}
                 />
               )
-            ) : backendOnline && cameraStatus.connected ? (
+            ) : backendOnline ? (
               <img
                 src={videoFeedUrl}
                 alt="FloodScout Live Stream"
@@ -771,6 +771,40 @@ function PanelContent({
                     </span>
                   </div>
                 )}
+
+                {/* Live Dual Thruster Motor Movement & Direction Indicator */}
+                <div
+                  className={`flex items-center gap-1.5 backdrop-blur-md border px-2.5 py-1 rounded shadow-lg text-[10px] font-mono transition-all ${
+                    motorTelemetry.motion.state.includes('FORWARD')
+                      ? 'bg-emerald-950/85 border-emerald-500/50 text-emerald-300'
+                      : motorTelemetry.motion.state.includes('REVERSE')
+                      ? 'bg-amber-950/85 border-amber-500/50 text-amber-300'
+                      : motorTelemetry.motion.state.includes('SPIN')
+                      ? 'bg-cyan-950/85 border-cyan-500/50 text-cyan-300'
+                      : 'bg-slate-900/85 border-slate-700/60 text-slate-400'
+                  }`}
+                  title={`Dual Thruster Propulsion (Left: ${motorTelemetry.motion.left.status} | Right: ${motorTelemetry.motion.right.status})`}
+                >
+                  <Navigation
+                    size={11}
+                    className={`transition-transform duration-200 ${
+                      motorTelemetry.motion.state.includes('FORWARD RIGHT') ? 'rotate-45 text-emerald-400' :
+                      motorTelemetry.motion.state.includes('FORWARD LEFT') ? '-rotate-45 text-emerald-400' :
+                      motorTelemetry.motion.state.includes('FORWARD') ? 'text-emerald-400' :
+                      motorTelemetry.motion.state.includes('REVERSE') ? 'rotate-180 text-amber-400' :
+                      motorTelemetry.motion.state.includes('SPIN RIGHT') ? 'rotate-90 text-cyan-400' :
+                      motorTelemetry.motion.state.includes('SPIN LEFT') ? '-rotate-90 text-cyan-400' : 'text-slate-500'
+                    }`}
+                  />
+                  <span className="font-bold uppercase tracking-wider text-[9px] text-white">
+                    {motorTelemetry.motion.state}
+                  </span>
+                  {motorTelemetry.motion.state !== 'STOP' && (
+                    <span className="text-[9px] font-mono opacity-85 text-sky-300">
+                      L:{motorTelemetry.motion.left.percent}% R:{motorTelemetry.motion.right.percent}%
+                    </span>
+                  )}
+                </div>
               </div>
 
               {backendOnline && cameraStatus.connected && (
@@ -1155,6 +1189,33 @@ function PanelContent({
                 </span>
               </button>
 
+              {/* Live Thruster Motion Status on Tactical Map */}
+              <div
+                className={`bg-[#162347]/95 backdrop-blur-md px-2.5 py-1.5 rounded-md shadow-md border text-[10px] font-mono flex items-center gap-1.5 transition-all ${
+                  motorTelemetry.motion.state.includes('FORWARD')
+                    ? 'border-emerald-500/60 text-emerald-300'
+                    : motorTelemetry.motion.state.includes('REVERSE')
+                    ? 'border-amber-500/60 text-amber-300'
+                    : motorTelemetry.motion.state.includes('SPIN')
+                    ? 'border-cyan-500/60 text-cyan-300'
+                    : 'border-slate-600/60 text-slate-400'
+                }`}
+                title={`Vessel Thruster Status (Left: ${motorTelemetry.motion.left.status} | Right: ${motorTelemetry.motion.right.status})`}
+              >
+                <Compass
+                  size={12}
+                  className={`text-sky-400 ${motorTelemetry.motion.state !== 'STOP' ? 'animate-spin' : ''}`}
+                />
+                <span className="font-bold text-white uppercase tracking-wider text-[9px]">
+                  {motorTelemetry.motion.state}
+                </span>
+                {motorTelemetry.motion.state !== 'STOP' && (
+                  <span className="text-[9px] text-sky-300">
+                    L:{motorTelemetry.motion.left.percent}% R:{motorTelemetry.motion.right.percent}%
+                  </span>
+                )}
+              </div>
+
               {/* Target GPS Coordination (Only if target is detected) */}
               {(manifestPersons.some(p => p.location !== null) || (detectionStatus.personDetected && robotLocation)) && (
                 <div className="bg-[#162347]/95 text-[#FAF7F2] backdrop-blur-md px-3 py-1.5 rounded-md shadow-md border border-rose-500/60 text-[11px] font-mono flex items-center gap-2">
@@ -1272,7 +1333,7 @@ function PanelContent({
             scrollWheelZoom={true}
             className="w-full h-full bg-[#0F172A]"
           >
-            <MapResizerAndController center={focusedLocation} computerLocation={baseLocation} robotLocation={robotLocation} />
+            <MapResizerAndController center={focusedLocation} computerLocation={baseLocation} />
             <LocateControl
               target={baseLocation}
               onLocate={async () => {
@@ -1510,31 +1571,6 @@ function PanelContent({
               )
             ))}
 
-            {/* Real-time Trace & Telemetry Vector between PC Location and Robot Location */}
-            {baseLocation && robotLocation && (
-              <Polyline
-                positions={[baseLocation, robotLocation]}
-                pathOptions={{
-                  color: isPersonDetectedAtRobot ? '#EF4444' : '#0284C7',
-                  weight: 3,
-                  opacity: 0.85,
-                  dashArray: '6 6',
-                }}
-              />
-            )}
-
-            {/* Robot Movement Trajectory Trace (Historical Breadcrumb Trail) */}
-            {robotLocation && trajectory && trajectory.length > 1 && (
-              <Polyline
-                positions={trajectory}
-                pathOptions={{
-                  color: '#06B6D4',
-                  weight: 3.5,
-                  opacity: 0.8,
-                }}
-              />
-            )}
-
             {/* Pulsing Alert Zone around Robot when Person is Detected */}
             {isPersonDetectedAtRobot && robotLocation && (
               <Circle
@@ -1633,30 +1669,34 @@ function PanelContent({
       return (
         <div className="h-full overflow-y-auto p-4 flex flex-col items-center min-h-0">
           <div className="m-auto flex flex-col items-center gap-4 w-full max-w-xs py-2">
-            {/* D-Pad */}
+            {/* Camera Pan/Tilt Servo Control Header */}
+            <div className="w-full text-center">
+              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#162347]/70 flex items-center justify-center gap-1.5">
+                <Compass size={12} className="text-[#162347]" /> Camera Pan & Tilt Arm
+              </span>
+              <span className="text-[9px] text-slate-500 font-sans block">
+                Aim water-level camera (GPIO 18 Pan • GPIO 19 Tilt)
+              </span>
+            </div>
+
+            {/* D-Pad for Camera Servos */}
             <div className="grid grid-cols-3 gap-2 w-40">
               <div />
               <button
-                onClick={() => {
-                  moveRobot(0, 0.0003, 0);
-                  panTilt.sendCommand('up');
-                }}
+                onClick={() => panTilt.sendCommand('up')}
                 disabled={panTilt.isProcessing}
                 className="h-10 rounded bg-[#FAF7F2] hover:bg-[#162347] text-[#162347] hover:text-white border border-[#E6DFD5] flex items-center justify-center transition-all active:scale-95 shadow-sm disabled:opacity-75 cursor-pointer select-none"
-                title="Forward / Tilt Up"
+                title="Tilt Camera Up (+10°)"
               >
                 <ArrowUp size={18} />
               </button>
               <div />
 
               <button
-                onClick={() => {
-                  moveRobot(-0.0003, 0, 270);
-                  panTilt.sendCommand('left');
-                }}
+                onClick={() => panTilt.sendCommand('left')}
                 disabled={panTilt.isProcessing}
                 className="h-10 rounded bg-[#FAF7F2] hover:bg-[#162347] text-[#162347] hover:text-white border border-[#E6DFD5] flex items-center justify-center transition-all active:scale-95 shadow-sm disabled:opacity-75 cursor-pointer select-none"
-                title="Port (Left) / Pan Left"
+                title="Pan Camera Left (-10°)"
               >
                 <ArrowLeft size={18} />
               </button>
@@ -1672,31 +1712,25 @@ function PanelContent({
                 onDoubleClick={() => panTilt.sendCommand('center')}
                 disabled={panTilt.isProcessing}
                 className="h-10 rounded bg-[#162347] text-[#FAF7F2] font-mono text-[10px] font-bold active:scale-95 shadow-sm disabled:opacity-75 cursor-pointer select-none"
-                title="Hold Position / Stop (Double-click or Shift-click to Center)"
+                title="Hold Camera Position (Double-click to Center 90°/90°)"
               >
                 STOP
               </button>
               <button
-                onClick={() => {
-                  moveRobot(0.0003, 0, 90);
-                  panTilt.sendCommand('right');
-                }}
+                onClick={() => panTilt.sendCommand('right')}
                 disabled={panTilt.isProcessing}
                 className="h-10 rounded bg-[#FAF7F2] hover:bg-[#162347] text-[#162347] hover:text-white border border-[#E6DFD5] flex items-center justify-center transition-all active:scale-95 shadow-sm disabled:opacity-75 cursor-pointer select-none"
-                title="Starboard (Right) / Pan Right"
+                title="Pan Camera Right (+10°)"
               >
                 <ArrowRight size={18} />
               </button>
 
               <div />
               <button
-                onClick={() => {
-                  moveRobot(0, -0.0003, 180);
-                  panTilt.sendCommand('down');
-                }}
+                onClick={() => panTilt.sendCommand('down')}
                 disabled={panTilt.isProcessing}
                 className="h-10 rounded bg-[#FAF7F2] hover:bg-[#162347] text-[#162347] hover:text-white border border-[#E6DFD5] flex items-center justify-center transition-all active:scale-95 shadow-sm disabled:opacity-75 cursor-pointer select-none"
-                title="Reverse / Tilt Down"
+                title="Tilt Camera Down (-10°)"
               >
                 <ArrowDown size={18} />
               </button>
@@ -1777,6 +1811,9 @@ function PanelContent({
                 <span>{panTilt.error} <span className="underline font-semibold ml-1">(Click to set IP)</span></span>
               </div>
             )}
+
+            {/* Dual Thruster & Motor Movement Telemetry */}
+            <MotorTelemetryCard />
           </div>
         </div>
       );

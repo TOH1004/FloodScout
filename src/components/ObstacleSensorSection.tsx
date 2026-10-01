@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import {
   Radar,
   ShieldAlert,
@@ -8,14 +8,8 @@ import {
   VolumeX,
   Sliders,
   Activity,
-  Radio,
-  RefreshCw,
-  Zap,
-  Gauge,
-  Navigation,
   CheckCircle2,
   XCircle,
-  HelpCircle,
 } from 'lucide-react';
 import { useObstacleSensor } from '../hooks/useObstacleSensor';
 
@@ -32,12 +26,10 @@ export function ObstacleSensorSection() {
     autoBrakeArmed,
     buzzerEnabled,
     sensorModel,
-    beamAngleDeg,
     maxRangeM,
     minRangeM,
     pingRateHz,
     isHardwareConnected,
-    dataSource,
     history,
     setWarningThresholdM,
     setCriticalThresholdM,

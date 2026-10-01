@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   Navigation,
   MapPin,
@@ -6,11 +6,8 @@ import {
   Route,
   Copy,
   Check,
-  Gauge,
   Milestone,
-  ExternalLink,
   Maximize2,
-  Eye,
   Radio,
   Activity,
   Laptop,
@@ -19,8 +16,79 @@ import {
   Target,
   FileSpreadsheet,
   Satellite,
+  Globe,
 } from 'lucide-react';
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import { useRescue, type Mission, type Victim } from '../context/RescueContext';
+
+// ─── Custom Leaflet Icons for History Google Map ──────────────────────────────
+const pcMapIcon = L.divIcon({
+  className: 'custom-pc-history-marker',
+  html: `<div style="position:relative;width:34px;height:34px;display:flex;align-items:center;justify-content:center;">
+    <div style="position:absolute;inset:0;border-radius:50%;background:rgba(2,132,199,0.35);animation:ping 2s cubic-bezier(0,0,0.2,1) infinite;"></div>
+    <div style="position:relative;width:28px;height:28px;background:#0284C7;border:2.5px solid #FAF7F2;border-radius:50%;box-shadow:0 0 12px rgba(2,132,199,0.9);display:flex;align-items:center;justify-content:center;font-size:13px;color:#FAF7F2;cursor:pointer;">💻</div>
+  </div>`,
+  iconSize: [34, 34],
+  iconAnchor: [17, 17],
+});
+
+const getRobotHistoryIcon = (isAlert: boolean) => L.divIcon({
+  className: 'custom-robot-history-marker',
+  html: `<div style="position:relative;width:36px;height:36px;display:flex;align-items:center;justify-content:center;cursor:pointer;">
+    <div style="position:absolute;inset:0;border-radius:50%;background:${isAlert ? 'rgba(239,68,68,0.5)' : 'rgba(6,182,212,0.45)'};animation:ping 1.5s infinite;"></div>
+    <div style="position:relative;width:30px;height:30px;background:${isAlert ? '#DC2626' : '#0891B2'};border:2.5px solid #FAF7F2;border-radius:50%;box-shadow:0 0 14px ${isAlert ? 'rgba(239,68,68,0.9)' : 'rgba(6,182,212,0.9)'};display:flex;align-items:center;justify-content:center;font-size:14px;color:#FAF7F2;">${isAlert ? '🚨' : '🤖'}</div>
+  </div>`,
+  iconSize: [36, 36],
+  iconAnchor: [18, 18],
+});
+
+const victimHistoryIcon = L.divIcon({
+  className: 'custom-victim-history-marker',
+  html: `<div style="position:relative;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;">
+    <div style="position:absolute;inset:0;border-radius:50%;background:rgba(239,68,68,0.45);animation:ping 1.5s infinite;"></div>
+    <div style="position:relative;width:26px;height:26px;background:#EF4444;border:2px solid #FAF7F2;border-radius:50%;box-shadow:0 0 10px rgba(239,68,68,0.9);display:flex;align-items:center;justify-content:center;font-size:12px;color:#FAF7F2;">👤</div>
+  </div>`,
+  iconSize: [32, 32],
+  iconAnchor: [16, 16],
+});
+
+const createWaypointMapIcon = (idx: number) => L.divIcon({
+  className: 'custom-waypoint-marker',
+  html: `<div style="width:18px;height:18px;background:#0284C7;border:2px solid #FFFFFF;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;font-size:9px;font-family:monospace;font-weight:bold;color:#FFFFFF;">${idx}</div>`,
+  iconSize: [18, 18],
+  iconAnchor: [9, 9],
+});
+
+function HistoryMapController({
+  points,
+  fitTrigger,
+}: {
+  points: [number, number][];
+  fitTrigger?: number;
+}) {
+  const map = useMap();
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      map.invalidateSize();
+      if (points.length > 0) {
+        try {
+          const bounds = L.latLngBounds(points);
+          if (bounds.isValid()) {
+            map.fitBounds(bounds, { padding: [40, 40], maxZoom: 18 });
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }, 150);
+    return () => clearTimeout(t);
+  }, [map, points, fitTrigger]);
+
+  return null;
+}
 
 export interface RescueLocationAnalysisProps {
   robotLocation: [number, number] | null;
@@ -119,6 +187,8 @@ export function RescueLocationAnalysis({
   const [activeTab, setActiveTab] = useState<'all' | 'trace' | 'pc' | 'robot' | 'victim' | 'history'>('all');
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [coordFormat, setCoordFormat] = useState<'DD' | 'DMS'>('DD');
+  const [historyMapLayer, setHistoryMapLayer] = useState<'google' | 'google-hybrid'>('google');
+  const [fitCounter, setFitCounter] = useState(0);
 
   // Check if person is currently detected at robot location
   const isPersonDetectedAtRobot = Boolean(
@@ -183,6 +253,21 @@ export function RescueLocationAnalysis({
 
   // Victim location only if a victim is actually detected
   const displayVictimLoc: [number, number] | null = victimTarget ? victimTarget.location : null;
+
+  // Composite bounds points for Google Map fit
+  const mapPoints: [number, number][] = useMemo(() => {
+    const pts: [number, number][] = [pcLoc];
+    if (trajectory && trajectory.length > 0) {
+      pts.push(...trajectory);
+    }
+    if (currentRobotLoc) {
+      pts.push(currentRobotLoc);
+    }
+    if (displayVictimLoc) {
+      pts.push(displayVictimLoc);
+    }
+    return pts;
+  }, [pcLoc, trajectory, currentRobotLoc, displayVictimLoc]);
 
   // Geodesic Distances & Bearings between the 3 Locations
   const distPcToRobotKm = useMemo(() => {
@@ -330,7 +415,7 @@ export function RescueLocationAnalysis({
         title: `Victim Location (${victimTarget.label})`,
         sub: `${victimTarget.source} (${victimTarget.confidence.toFixed(1)}% Conf)`,
         coords: victimTarget.location,
-        distFromPcM: Math.round(distPcToVictimKm * 1000),
+        distFromPcM: distPcToVictimKm !== null ? Math.round(distPcToVictimKm * 1000) : 0,
         bearingFromPc: calculateBearing(pcLoc, victimTarget.location),
         type: 'victim',
         badge: 'SURVIVOR DETECTED',
@@ -355,50 +440,6 @@ export function RescueLocationAnalysis({
     activeMission.startTime,
     hardwareGps,
   ]);
-
-  // Mini 2D SVG Vector Trail & Trace Diagram (PC ↔ Robot ↔ Victim)
-  const svgTraceData = useMemo(() => {
-    const allPts: [number, number][] = [pcLoc];
-    if (trajectory.length > 0) allPts.push(...trajectory);
-    if (currentRobotLoc) allPts.push(currentRobotLoc);
-    if (victimTarget) allPts.push(victimTarget.location);
-
-    const lats = allPts.map(p => p[0]);
-    const lngs = allPts.map(p => p[1]);
-    const minLat = Math.min(...lats);
-    const maxLat = Math.max(...lats);
-    const minLng = Math.min(...lngs);
-    const maxLng = Math.max(...lngs);
-
-    const latSpan = maxLat - minLat || 0.001;
-    const lngSpan = maxLng - minLng || 0.001;
-
-    const width = 340;
-    const height = 110;
-    const padding = 24;
-
-    const scaleX = (lng: number) => padding + ((lng - minLng) / lngSpan) * (width - padding * 2);
-    const scaleY = (lat: number) => height - (padding + ((lat - minLat) / latSpan) * (height - padding * 2));
-
-    // Robot historical trajectory polyline
-    const trajPts = trajectory.length > 0
-      ? trajectory
-      : (currentRobotLoc ? [pcLoc, currentRobotLoc] : [pcLoc]);
-    const pathD = trajPts.length > 1 ? trajPts.reduce((acc, pt, i) => {
-      const x = scaleX(pt[1]);
-      const y = scaleY(pt[0]);
-      return i === 0 ? `M ${x} ${y}` : `${acc} L ${x} ${y}`;
-    }, '') : '';
-
-    return {
-      pathD,
-      width,
-      height,
-      pc: { x: scaleX(pcLoc[1]), y: scaleY(pcLoc[0]) },
-      robot: currentRobotLoc ? { x: scaleX(currentRobotLoc[1]), y: scaleY(currentRobotLoc[0]) } : null,
-      victim: victimTarget ? { x: scaleX(victimTarget.location[1]), y: scaleY(victimTarget.location[0]) } : null,
-    };
-  }, [pcLoc, trajectory, currentRobotLoc, victimTarget]);
 
   return (
     <div className="h-full flex flex-col bg-[#FAF7F2] text-[#162347] overflow-hidden select-none">
@@ -815,7 +856,7 @@ export function RescueLocationAnalysis({
                         <span>Distance from Robot:</span>
                         <strong className="text-rose-700">
                           {distRobotToVictimKm !== null
-                            ? `${(distRobotToVictimKm * 1000).toFixed(0)}m (ETA ~${etaRobotToVictimSeconds}s)`
+                            ? `${(distRobotToVictimKm * 1000).toFixed(0)}m (${compassRobotToVictim}, ETA ~${etaRobotToVictimSeconds}s)`
                             : 'N/A'}
                         </strong>
                       </div>
@@ -933,143 +974,169 @@ export function RescueLocationAnalysis({
               </div>
             </div>
 
-            {/* Visual 2D Geo-Spatial Vector Trace Rendering */}
-            <div className="bg-slate-900 rounded-lg p-3 text-white">
-              <div className="flex items-center justify-between text-[9px] font-mono text-slate-400 mb-2">
-                <span className="uppercase tracking-wider flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-                  Geo-Spatial Vector Trace: PC Station → Robot Trajectory
-                </span>
-                <span>WGS 84 Projection</span>
-              </div>
-              <div className="flex justify-center">
-                <svg width="100%" height="100" viewBox={`0 0 ${svgTraceData.width} ${svgTraceData.height}`} className="overflow-visible">
-                  <defs>
-                    <linearGradient id="traceGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                      <stop offset="0%" stopColor="#38BDF8" />
-                      <stop offset="60%" stopColor="#06B6D4" />
-                      <stop offset="100%" stopColor={isPersonDetectedAtRobot ? '#EF4444' : '#06B6D4'} />
-                    </linearGradient>
-                  </defs>
+            {/* ─── GOOGLE MAP MISSION TRACE & TRAJECTORY VIEWER ──────────────────── */}
+            <div className="bg-[#FAF7F2] border border-[#E6DFD5] rounded-xl overflow-hidden shadow-xs flex flex-col space-y-0">
+              {/* Map Header with Tile Layer Selector & Reset Zoom */}
+              <div className="bg-white px-3 py-2 border-b border-[#E6DFD5] flex items-center justify-between">
+                <div className="flex items-center gap-1.5 font-mono text-xs font-bold text-[#162347]">
+                  <Globe size={13} className="text-sky-600" />
+                  <span className="uppercase tracking-wider">Google Maps Mission Trajectory Trace</span>
+                </div>
 
-                  {/* Robot Trajectory Historical Trail */}
-                  {svgTraceData.pathD && (
-                    <path
-                      d={svgTraceData.pathD}
-                      fill="none"
-                      stroke="#0284C7"
-                      strokeWidth="2.5"
-                      strokeLinecap="round"
-                      strokeDasharray="4 3"
-                      className="opacity-70"
-                    />
-                  )}
-
-                  {/* Direct Vector Line of Sight: PC -> Robot */}
-                  {svgTraceData.robot && (
-                    <line
-                      x1={svgTraceData.pc.x}
-                      y1={svgTraceData.pc.y}
-                      x2={svgTraceData.robot.x}
-                      y2={svgTraceData.robot.y}
-                      stroke="url(#traceGrad)"
-                      strokeWidth="2.5"
-                      strokeDasharray="6 4"
-                      className="animate-pulse"
-                    />
-                  )}
-
-                  {/* Line from Robot to Victim if detected */}
-                  {svgTraceData.robot && svgTraceData.victim && (
-                    <line
-                      x1={svgTraceData.robot.x}
-                      y1={svgTraceData.robot.y}
-                      x2={svgTraceData.victim.x}
-                      y2={svgTraceData.victim.y}
-                      stroke="#F43F5E"
-                      strokeWidth="2"
-                      strokeDasharray="3 3"
-                    />
-                  )}
-
-                  {/* Node: PC Location */}
-                  <circle
-                    cx={svgTraceData.pc.x}
-                    cy={svgTraceData.pc.y}
-                    r="6"
-                    fill="#0284C7"
-                    stroke="#FFFFFF"
-                    strokeWidth="2"
-                    className="cursor-pointer hover:r-8 transition-all"
-                    onClick={() => onSelectLocation?.(pcLoc)}
-                  />
-                  <text x={svgTraceData.pc.x} y={svgTraceData.pc.y - 10} fill="#7DD3FC" fontSize="9" fontWeight="bold" textAnchor="middle" fontFamily="monospace">
-                    PC Station
-                  </text>
-
-                  {/* Node: Robot Location (turns RED if person detected!) */}
-                  {svgTraceData.robot && (
-                    <>
-                      <circle
-                        cx={svgTraceData.robot.x}
-                        cy={svgTraceData.robot.y}
-                        r="7"
-                        fill={isPersonDetectedAtRobot ? '#EF4444' : '#06B6D4'}
-                        stroke="#FFFFFF"
-                        strokeWidth="2"
-                        className="cursor-pointer hover:r-9 transition-all animate-pulse"
-                        onClick={() => {
-                          if (currentRobotLoc) onSelectLocation?.(currentRobotLoc);
-                          if (isPersonDetectedAtRobot && onShowVictimManifest) onShowVictimManifest();
-                        }}
-                      />
-                      <text
-                        x={svgTraceData.robot.x}
-                        y={svgTraceData.robot.y - 11}
-                        fill={isPersonDetectedAtRobot ? '#FDA4AF' : '#67E8F9'}
-                        fontSize="9"
-                        fontWeight="bold"
-                        textAnchor="middle"
-                        fontFamily="monospace"
-                      >
-                        {isPersonDetectedAtRobot ? 'Robot (🚨 TARGET)' : 'Robot Vessel'}
-                      </text>
-                    </>
-                  )}
-
-                  {/* Node: Victim Location if present */}
-                  {svgTraceData.victim && (
-                    <>
-                      <circle
-                        cx={svgTraceData.victim.x}
-                        cy={svgTraceData.victim.y}
-                        r="6"
-                        fill="#F43F5E"
-                        stroke="#FFFFFF"
-                        strokeWidth="2"
-                        className="cursor-pointer hover:r-8 transition-all"
-                        onClick={() => onSelectLocation?.(svgTraceData.victim ? (displayVictimLoc || pcLoc) : pcLoc)}
-                      />
-                      <text x={svgTraceData.victim.x} y={svgTraceData.victim.y - 10} fill="#FDA4AF" fontSize="9" fontWeight="bold" textAnchor="middle" fontFamily="monospace">
-                        Victim
-                      </text>
-                    </>
-                  )}
-
-                  {!svgTraceData.robot && (
-                    <text
-                      x={svgTraceData.width / 2}
-                      y={svgTraceData.height - 15}
-                      fill="#94A3B8"
-                      fontSize="9"
-                      fontStyle="italic"
-                      textAnchor="middle"
-                      fontFamily="monospace"
+                <div className="flex items-center gap-1.5">
+                  {/* Layer Switcher */}
+                  <div className="flex border border-[#E6DFD5] rounded overflow-hidden text-[9px] font-mono font-bold">
+                    <button
+                      onClick={() => setHistoryMapLayer('google')}
+                      className={`px-2 py-0.5 transition-colors cursor-pointer ${
+                        historyMapLayer === 'google' ? 'bg-[#162347] text-white' : 'bg-[#FAF7F2] text-slate-600 hover:bg-[#E6DFD5]'
+                      }`}
                     >
-                      Awaiting Robot GNSS Fix...
-                    </text>
+                      Google Street
+                    </button>
+                    <button
+                      onClick={() => setHistoryMapLayer('google-hybrid')}
+                      className={`px-2 py-0.5 transition-colors cursor-pointer ${
+                        historyMapLayer === 'google-hybrid' ? 'bg-[#162347] text-white' : 'bg-[#FAF7F2] text-slate-600 hover:bg-[#E6DFD5]'
+                      }`}
+                    >
+                      Google Hybrid
+                    </button>
+                  </div>
+
+                  {/* Fit Trace Bounds */}
+                  <button
+                    onClick={() => setFitCounter(c => c + 1)}
+                    className="flex items-center gap-1 text-[9px] font-mono font-bold px-2 py-0.5 rounded bg-sky-50 text-sky-800 border border-sky-200 hover:bg-sky-100 transition-colors cursor-pointer"
+                    title="Fit view to entire trajectory path"
+                  >
+                    <Maximize2 size={10} /> Fit Trace
+                  </button>
+                </div>
+              </div>
+
+              {/* Leaflet MapContainer with Google Tiles */}
+              <div className="h-72 w-full relative z-0 isolate">
+                <MapContainer
+                  center={currentRobotLoc || pcLoc}
+                  zoom={16}
+                  scrollWheelZoom={true}
+                  className="h-full w-full"
+                >
+                  <HistoryMapController points={mapPoints} fitTrigger={fitCounter} />
+
+                  {historyMapLayer === 'google' && (
+                    <TileLayer
+                      attribution='&copy; Google Maps'
+                      url="https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}"
+                      subdomains={['0', '1', '2', '3']}
+                      maxZoom={20}
+                      minZoom={5}
+                    />
                   )}
-                </svg>
+
+                  {historyMapLayer === 'google-hybrid' && (
+                    <TileLayer
+                      attribution='&copy; Google Maps'
+                      url="https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}"
+                      subdomains={['0', '1', '2', '3']}
+                      maxZoom={20}
+                      minZoom={5}
+                    />
+                  )}
+
+                  {/* Real-time Line-of-Sight Vector: PC Station ↔ Robot */}
+                  {currentRobotLoc && (
+                    <Polyline
+                      positions={[pcLoc, currentRobotLoc]}
+                      pathOptions={{
+                        color: isPersonDetectedAtRobot ? '#EF4444' : '#0284C7',
+                        weight: 2.5,
+                        dashArray: '6 6',
+                        opacity: 0.85,
+                      }}
+                    />
+                  )}
+
+                  {/* Robot Trajectory Trace (Full Historical Path) */}
+                  {trajectory && trajectory.length > 1 && (
+                    <Polyline
+                      positions={trajectory}
+                      pathOptions={{
+                        color: '#06B6D4',
+                        weight: 4,
+                        opacity: 0.9,
+                      }}
+                    />
+                  )}
+
+                  {/* Waypoint Breadcrumbs along the Trace */}
+                  {trajectory && trajectory.length > 0 && trajectory.map((pt, idx) => {
+                    const step = Math.max(1, Math.floor(trajectory.length / 8));
+                    if (idx % step !== 0 && idx !== trajectory.length - 1) return null;
+                    return (
+                      <Marker key={`wp-${idx}`} position={pt} icon={createWaypointMapIcon(idx + 1)}>
+                        <Popup>
+                          <div className="font-mono text-xs">
+                            <strong>Trace Point #{idx + 1}</strong>
+                            <div>GPS: {pt[0].toFixed(6)}°, {pt[1].toFixed(6)}°</div>
+                          </div>
+                        </Popup>
+                      </Marker>
+                    );
+                  })}
+
+                  {/* PC Ground Control Marker */}
+                  <Marker position={pcLoc} icon={pcMapIcon}>
+                    <Popup>
+                      <div className="font-mono text-xs space-y-1">
+                        <strong className="text-sky-700">💻 PC Ground Control Station</strong>
+                        <div>GPS: {pcLoc[0].toFixed(6)}°, {pcLoc[1].toFixed(6)}°</div>
+                        <div className="text-[10px] text-slate-500">Operator Command Baseline</div>
+                      </div>
+                    </Popup>
+                  </Marker>
+
+                  {/* Robot Vessel Marker */}
+                  {currentRobotLoc && (
+                    <Marker position={currentRobotLoc} icon={getRobotHistoryIcon(isPersonDetectedAtRobot)}>
+                      <Popup>
+                        <div className="font-mono text-xs space-y-1">
+                          <strong className={isPersonDetectedAtRobot ? 'text-rose-600' : 'text-cyan-700'}>
+                            {isPersonDetectedAtRobot ? '🚨 Person Detected at Robot!' : '🤖 FloodScout-01 Vessel'}
+                          </strong>
+                          <div>GPS: {currentRobotLoc[0].toFixed(6)}°, {currentRobotLoc[1].toFixed(6)}°</div>
+                          <div>Speed: {robotSpeed} km/h • Heading: {robotHeading}°</div>
+                        </div>
+                      </Popup>
+                    </Marker>
+                  )}
+
+                  {/* Victim Target Marker */}
+                  {displayVictimLoc && (
+                    <Marker position={displayVictimLoc} icon={victimHistoryIcon}>
+                      <Popup>
+                        <div className="font-mono text-xs space-y-1">
+                          <strong className="text-rose-600">👤 {victimTarget?.label || 'Victim Target'}</strong>
+                          <div>GPS: {displayVictimLoc[0].toFixed(6)}°, {displayVictimLoc[1].toFixed(6)}°</div>
+                          {victimTarget && <div>Confidence: {victimTarget.confidence.toFixed(1)}%</div>}
+                        </div>
+                      </Popup>
+                    </Marker>
+                  )}
+                </MapContainer>
+              </div>
+
+              {/* Sub-bar below map */}
+              <div className="bg-white px-3 py-1.5 border-t border-[#E6DFD5] flex items-center justify-between text-[10px] font-mono text-slate-500">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-1 bg-[#06B6D4] rounded-full inline-block" />
+                  Cyan Line = Historical Robot Trajectory Trace ({trajectory.length} waypoints)
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-1 bg-[#0284C7] border-t border-dashed border-[#0284C7] inline-block" />
+                  Dashed Blue = Line of Sight to PC Ground Station
+                </span>
               </div>
             </div>
           </section>

@@ -4,10 +4,12 @@ import {
   ArrowLeft, Clock, Compass, MapPin, ArrowUp, ArrowDown, ArrowRight,
   Camera, X, Cpu, Target, FileText,
   GripVertical, Eye, User, Users, ArrowUpDown,
-  Navigation, Laptop, Maximize2, Minimize2, Wifi, Settings, Check, RefreshCw, Globe, Edit3, Radio, Route
+  Navigation, Laptop, Maximize2, Minimize2, Wifi, Settings, Check, RefreshCw, Globe, Edit3, Radio, Route,
+  History as HistoryIcon, AlertTriangle, Radar
 } from 'lucide-react';
 import { useDetectionApi, type RescueIncident } from '../hooks/useDetectionApi';
 import { RescueLocationAnalysis } from '../components/RescueLocationAnalysis';
+import { ObstacleSensorSection } from '../components/ObstacleSensorSection';
 import { usePanTilt, type UsePanTiltReturn } from '../hooks/usePanTilt';
 import { IncidentModal } from '../components/IncidentModal';
 import { CameraSettingsPanel } from '../components/CameraSettingsPanel';
@@ -77,29 +79,31 @@ const getVictimMarkerIcon = (status: VictimStatus) => {
   });
 };
 
-const robotIcon = L.divIcon({
-  className: 'custom-robot-marker',
-  html: `<div style="position:relative;width:38px;height:38px;display:flex;align-items:center;justify-content:center;">
-    <div style="position:absolute;inset:0;border-radius:50%;background:rgba(6,182,212,0.45);animation:ping 2s cubic-bezier(0,0,0.2,1) infinite;"></div>
-    <div style="position:relative;width:32px;height:32px;background:#0891B2;border:3px solid #FAF7F2;border-radius:50%;box-shadow:0 0 16px rgba(6,182,212,0.9);display:flex;align-items:center;justify-content:center;font-size:14px;color:#FAF7F2;cursor:pointer;">🤖</div>
-  </div>`,
-  iconSize: [38, 38],
-  iconAnchor: [19, 19],
-});
+const getRobotIcon = (personDetected: boolean) => {
+  if (personDetected) {
+    return L.divIcon({
+      className: 'custom-robot-marker-alert',
+      html: `<div style="position:relative;width:44px;height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer;">
+        <div style="position:absolute;inset:0;border-radius:50%;background:rgba(239,68,68,0.65);animation:ping 1.2s cubic-bezier(0,0,0.2,1) infinite;"></div>
+        <div style="position:relative;width:36px;height:36px;background:#DC2626;border:3px solid #FFFFFF;border-radius:50%;box-shadow:0 0 20px rgba(239,68,68,1);display:flex;align-items:center;justify-content:center;font-size:16px;color:#FFFFFF;">🚨</div>
+        <div style="position:absolute;bottom:-8px;background:#991B1B;color:#FFFFFF;font-family:monospace;font-size:8px;font-weight:bold;padding:1px 4px;border-radius:4px;border:1px solid #FECACA;white-space:nowrap;box-shadow:0 2px 4px rgba(0,0,0,0.5);">TARGET!</div>
+      </div>`,
+      iconSize: [44, 44],
+      iconAnchor: [22, 22],
+    });
+  }
+  return L.divIcon({
+    className: 'custom-robot-marker',
+    html: `<div style="position:relative;width:38px;height:38px;display:flex;align-items:center;justify-content:center;cursor:pointer;">
+      <div style="position:absolute;inset:0;border-radius:50%;background:rgba(6,182,212,0.45);animation:ping 2s cubic-bezier(0,0,0.2,1) infinite;"></div>
+      <div style="position:relative;width:32px;height:32px;background:#0891B2;border:3px solid #FAF7F2;border-radius:50%;box-shadow:0 0 16px rgba(6,182,212,0.9);display:flex;align-items:center;justify-content:center;font-size:14px;color:#FAF7F2;">🤖</div>
+    </div>`,
+    iconSize: [38, 38],
+    iconAnchor: [19, 19],
+  });
+};
 
-const startIcon = L.divIcon({
-  className: 'custom-start-marker',
-  html: `<div style="width:30px;height:30px;background:#4338CA;border:2.5px solid #FAF7F2;border-radius:50%;box-shadow:0 0 14px rgba(67,56,202,0.8);display:flex;align-items:center;justify-content:center;font-size:13px;color:#FAF7F2;cursor:pointer;">🚩</div>`,
-  iconSize: [30, 30],
-  iconAnchor: [15, 15],
-});
-
-const rescueHavenIcon = L.divIcon({
-  className: 'custom-rescue-marker',
-  html: `<div style="width:32px;height:32px;background:#059669;border:3px solid #FAF7F2;border-radius:50%;box-shadow:0 0 16px rgba(5,150,105,0.85);display:flex;align-items:center;justify-content:center;font-size:14px;color:#FAF7F2;cursor:pointer;">🛡️</div>`,
-  iconSize: [32, 32],
-  iconAnchor: [16, 16],
-});
+const robotIcon = getRobotIcon(false);
 
 function MapClickHandler({ onMapClick }: { onMapClick: (lat: number, lng: number) => void }) {
   useMapEvents({ click: (e) => onMapClick(e.latlng.lat, e.latlng.lng) });
@@ -109,9 +113,11 @@ function MapClickHandler({ onMapClick }: { onMapClick: (lat: number, lng: number
 function MapResizerAndController({
   center,
   computerLocation,
+  robotLocation,
 }: {
   center?: [number, number] | null;
   computerLocation?: [number, number];
+  robotLocation?: [number, number];
 }) {
   const map = useMap();
   const hasAutoCentered = useRef(false);
@@ -157,14 +163,16 @@ function MapResizerAndController({
     }
   }, [center, map]);
 
-  // When real computerLocation arrives, center the map if not already focused
+  // When live computerLocation arrives, center the map strictly on PC location
   useEffect(() => {
-    if (computerLocation && !center && !hasAutoCentered.current) {
-      // Don't auto-center if it's the exact initial placeholder [1.5588, 103.6375]
-      const isDefault = Math.abs(computerLocation[0] - 1.5588) < 0.0001 && Math.abs(computerLocation[1] - 103.6375) < 0.0001;
-      if (!isDefault) {
+    if (center) return;
+    const target = computerLocation;
+    if (target && !hasAutoCentered.current) {
+      // Discard old mock Johor Bahru placeholder [1.5588, 103.6375]
+      const isMockJohor = Math.abs(target[0] - 1.5588) < 0.005 && Math.abs(target[1] - 103.6375) < 0.005;
+      if (!isMockJohor) {
         hasAutoCentered.current = true;
-        map.flyTo(computerLocation, 15, { duration: 0.8 });
+        map.flyTo(target, 16, { duration: 0.8 });
       }
     }
   }, [computerLocation, center, map]);
@@ -213,9 +221,10 @@ interface PanelDef { id: PanelId; label: string; icon: React.ElementType }
 const PANEL_DEFS: PanelDef[] = [
   { id: 'camera',     label: 'Water-Level Camera', icon: Camera },
   { id: 'map',        label: 'Tactical Map',        icon: MapPin },
+  { id: 'sensors',    label: 'Obstacle Sensor',     icon: Radar },
   { id: 'navigation', label: 'Navigation',          icon: Compass },
   { id: 'victims',    label: 'Victim Manifest',     icon: Target },
-  { id: 'status',     label: 'Rescue / Location Analysis', icon: Route },
+  { id: 'status',     label: 'History',             icon: HistoryIcon },
   { id: 'controls',   label: 'Controls',            icon: Cpu },
   { id: 'log',        label: 'Detection Log',       icon: FileText },
 ];
@@ -358,6 +367,7 @@ function PanelContent({
   onTrackPerson,
   onMaximizeMap,
   isMapMaximized,
+  onShowVictimManifest,
 }: {
   id: PanelId;
   detectionApi: ReturnType<typeof useDetectionApi>;
@@ -367,6 +377,7 @@ function PanelContent({
   onTrackPerson?: (loc: [number, number]) => void;
   onMaximizeMap?: () => void;
   isMapMaximized?: boolean;
+  onShowVictimManifest?: () => void;
 }) {
   const {
     waterDepth, robotSpeed, computerLocation, computerAccuracy, operatingMode,
@@ -375,9 +386,14 @@ function PanelContent({
     refreshComputerLocation, setManualComputerLocation,
     setOperatingMode, moveRobot,
     robotLocation, robotHeading, trajectory, signalDbm,
+    hardwareGps, connectWebSerial,
   } = useRescue();
 
   const { detectionStatus } = detectionApi;
+  const isPersonDetectedAtRobot = Boolean(
+    detectionStatus.personDetected ||
+    (detectionStatus.personCount && detectionStatus.personCount > 0)
+  );
 
   const [aiBoxes, setAiBoxes] = useState(true);
   const [crosshair, setCrosshair] = useState(true);
@@ -394,27 +410,26 @@ function PanelContent({
     setDirectFeedError(false);
   }, [detectionApi.cameraStreamUrl, detectionApi.feedMode]);
 
-  const floodZone: [number, number][] = [
-    [1.5650, 103.6320], [1.5670, 103.6430], [1.5560, 103.6460], [1.5520, 103.6350],
-  ];
+  // GPS coordination for Operator Ground Control Station (PC)
+  const isComputerJohorMock = computerLocation && Math.abs(computerLocation[0] - 1.5588) < 0.005 && Math.abs(computerLocation[1] - 103.6375) < 0.005;
+  const baseLocation: [number, number] = (!isComputerJohorMock && computerLocation) || robotLocation || [1.8642, 103.1142];
 
-  // GPS coordination for detected persons (aligned with Ground Control Computer in Johor)
-  const baseLocation: [number, number] = computerLocation || [1.5588, 103.6375];
-
-  const getPersonGps = (personId: number, base: [number, number]): [number, number] => {
-    // Both computer and detected person location are aligned (same coordinates)
+  const getPersonGps = (personId: number, _base: [number, number]): [number, number] | null => {
+    // When robot detects a person, anchor victim coordinates directly to live robot vessel position
+    if (!robotLocation) return null;
+    const anchor = robotLocation;
     if (personId <= 1) {
       return [
-        parseFloat(base[0].toFixed(6)),
-        parseFloat(base[1].toFixed(6)),
+        parseFloat(anchor[0].toFixed(6)),
+        parseFloat(anchor[1].toFixed(6)),
       ];
     }
     // Subtle micro-spread (~3 meters) for multiple targets so markers don't overlap completely
     const angle = ((personId - 1) * 72) * (Math.PI / 180);
     const dist = 0.00003;
     return [
-      parseFloat((base[0] + Math.sin(angle) * dist).toFixed(6)),
-      parseFloat((base[1] + Math.cos(angle) * dist).toFixed(6)),
+      parseFloat((anchor[0] + Math.sin(angle) * dist).toFixed(6)),
+      parseFloat((anchor[1] + Math.cos(angle) * dist).toFixed(6)),
     ];
   };
 
@@ -430,7 +445,7 @@ function PanelContent({
     description?: string;
     descriptionStatus?: string;
     captureCount: number;
-    location: [number, number];
+    location: [number, number] | null;
   }
 
   const personCaptureCounts = new Map<number, number>();
@@ -514,15 +529,6 @@ function PanelContent({
 
   const manifestPersons = Array.from(personsMap.values());
   manifestPersons.sort((a, b) => b.personId - a.personId);
-
-  // Corridor Milestones: Start -> Robot -> Person -> Rescue Point
-  const startPoint: [number, number] = (trajectory && trajectory.length > 0)
-    ? trajectory[0]
-    : [baseLocation[0] - 0.0028, baseLocation[1] - 0.0025];
-  const rescuePoint: [number, number] = [startPoint[0] + 0.0045, startPoint[1] + 0.0042];
-  const targetPersonLoc: [number, number] = manifestPersons[0]?.location ||
-    victims[0]?.location ||
-    (detectionStatus.personDetected ? [baseLocation[0] + 0.0014, baseLocation[1] + 0.0016] : [startPoint[0] + 0.0024, startPoint[1] + 0.0028]);
 
   const incidentsByTime = [...(detectionApi.incidents || [])].sort((a, b) => {
     return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
@@ -1081,7 +1087,7 @@ function PanelContent({
                       setManualComputerLocation([parts[0], parts[1]]);
                       if (onTrackPerson) onTrackPerson([parts[0], parts[1]]);
                     } else {
-                      alert('Invalid format. Please enter as: 1.5540, 103.7098');
+                      alert('Invalid format. Please enter as: 1.8642, 103.1142');
                     }
                   }
                 }}
@@ -1091,38 +1097,100 @@ function PanelContent({
                 <Edit3 size={11} /> Manual
               </button>
 
-              {/* Target GPS Coordination (Co-located with PC for now) */}
-              <div className="bg-[#162347]/95 text-[#FAF7F2] backdrop-blur-md px-3 py-1.5 rounded-md shadow-md border border-rose-500/60 text-[11px] font-mono flex items-center gap-2">
-                <span className="text-rose-400 flex items-center gap-1 font-bold">
-                  <MapPin size={13} className="text-rose-400 animate-bounce" />
-                  TARGET GPS:
+              {/* Robot Location Coordination & Quick Locate */}
+              <button
+                onClick={() => {
+                  if (robotLocation && onTrackPerson) onTrackPerson(robotLocation);
+                  else if (baseLocation && onTrackPerson) onTrackPerson(baseLocation);
+                }}
+                className={`backdrop-blur-md px-3 py-1.5 rounded-md shadow-md border text-[11px] font-mono flex items-center gap-2 transition-all cursor-pointer active:scale-95 group ${
+                  isPersonDetectedAtRobot
+                    ? 'bg-rose-950/95 hover:bg-rose-900 text-white border-rose-500 ring-1 ring-rose-400 animate-pulse'
+                    : 'bg-[#162347]/95 hover:bg-[#1f2f5c] text-[#FAF7F2] border-cyan-400/60'
+                }`}
+                title={isPersonDetectedAtRobot ? "🚨 Person detected at robot position! Click to center map" : "Click to Center Tactical Map on Robot"}
+              >
+                <span className={`flex items-center gap-1 font-bold ${
+                  isPersonDetectedAtRobot ? 'text-rose-400' : 'text-cyan-400'
+                }`}>
+                  {isPersonDetectedAtRobot ? (
+                    <AlertTriangle size={13} className="text-rose-400 animate-bounce" />
+                  ) : (
+                    <Navigation size={13} className="text-cyan-300 group-hover:scale-110 transition-transform" />
+                  )}
+                  ROBOT GPS:
                 </span>
                 <span className="font-bold text-white">
-                  {baseLocation[0].toFixed(6)}°, {baseLocation[1].toFixed(6)}°
+                  {robotLocation ? `${robotLocation[0].toFixed(6)}°, ${robotLocation[1].toFixed(6)}°` : 'No Signal / Awaiting Fix'}
                 </span>
-                <span className="font-bold text-rose-300 bg-rose-950/70 border border-rose-500/40 px-1.5 py-0.5 rounded text-[10px]">
-                  {manifestPersons.length > 0
-                    ? `${manifestPersons.length} detected`
-                    : detectionStatus.personDetected
-                    ? 'Target Active'
-                    : 'Monitoring'}
-                </span>
-                {(manifestPersons.length > 0 || detectionApi.activeIncident) && (
-                  <button
-                    onClick={() => {
-                      const inc = detectionApi.activeIncident || manifestPersons[0]?.incident;
-                      if (inc) {
-                        onInspectIncident(inc, manifestPersons[0]?.personId);
-                      }
-                    }}
-                    className="bg-rose-600 hover:bg-rose-500 text-white px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all active:scale-95 shadow-xs"
-                    title="Inspect detected person with AI analysis"
-                  >
-                    <Eye size={11} />
-                    <span>Inspect</span>
-                  </button>
+                {hardwareGps?.isValid && (
+                  <span className="text-[9px] px-1.5 py-0.5 rounded font-sans font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    {hardwareGps.satellites} Sats • {hardwareGps.port || 'COM5'}
+                  </span>
                 )}
-              </div>
+                <span className={`text-[9px] px-1.5 py-0.2 rounded font-sans font-bold uppercase tracking-wider ${
+                  isPersonDetectedAtRobot
+                    ? 'bg-rose-600 text-white border border-rose-400'
+                    : 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
+                }`}>
+                  {isPersonDetectedAtRobot ? '🚨 TARGET DETECTED' : `${robotSpeed} km/h • ${robotHeading}°`}
+                </span>
+                {isPersonDetectedAtRobot && (
+                  <span
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onShowVictimManifest?.();
+                    }}
+                    className="text-[9px] bg-rose-600 hover:bg-rose-500 text-white font-sans font-bold px-1.5 py-0.5 rounded shadow-xs ml-0.5 flex items-center gap-1 cursor-pointer"
+                    title="Open Victim Manifest"
+                  >
+                    Manifest
+                  </span>
+                )}
+                <span className={`text-[9px] font-sans font-bold px-1.5 py-0.5 rounded shadow-xs ml-0.5 flex items-center gap-1 ${
+                  isPersonDetectedAtRobot ? 'bg-rose-700 hover:bg-rose-600 text-white' : 'bg-cyan-600 hover:bg-cyan-500 text-white'
+                }`}>
+                  Locate
+                </span>
+              </button>
+
+              {/* Target GPS Coordination (Only if target is detected) */}
+              {(manifestPersons.some(p => p.location !== null) || (detectionStatus.personDetected && robotLocation)) && (
+                <div className="bg-[#162347]/95 text-[#FAF7F2] backdrop-blur-md px-3 py-1.5 rounded-md shadow-md border border-rose-500/60 text-[11px] font-mono flex items-center gap-2">
+                  <span className="text-rose-400 flex items-center gap-1 font-bold">
+                    <MapPin size={13} className="text-rose-400 animate-bounce" />
+                    TARGET GPS:
+                  </span>
+                  <span className="font-bold text-white">
+                    {manifestPersons[0]?.location
+                      ? `${manifestPersons[0].location[0].toFixed(6)}°, ${manifestPersons[0].location[1].toFixed(6)}°`
+                      : robotLocation
+                      ? `${robotLocation[0].toFixed(6)}°, ${robotLocation[1].toFixed(6)}°`
+                      : 'Fix Pending'}
+                  </span>
+                  <span className="font-bold text-rose-300 bg-rose-950/70 border border-rose-500/40 px-1.5 py-0.5 rounded text-[10px]">
+                    {manifestPersons.filter(p => p.location !== null).length > 0
+                      ? `${manifestPersons.filter(p => p.location !== null).length} detected`
+                      : 'Target Active'}
+                  </span>
+                  {(manifestPersons.length > 0 || detectionApi.activeIncident) && (
+                    <button
+                      onClick={() => {
+                        const inc = detectionApi.activeIncident || manifestPersons[0]?.incident;
+                        if (inc) {
+                          onInspectIncident(inc, manifestPersons[0]?.personId);
+                        }
+                      }}
+                      className="bg-rose-600 hover:bg-rose-500 text-white px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all active:scale-95 shadow-xs"
+                      title="Inspect detected person with AI analysis"
+                    >
+                      <Eye size={11} />
+                      <span>Inspect</span>
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Free OSM / CARTO Tile Switcher & Maximize Map Control */}
@@ -1144,7 +1212,7 @@ function PanelContent({
 
               <div className="bg-white/95 backdrop-blur-md p-1 rounded-md shadow-md border border-slate-200 flex items-center gap-1 text-[10px] font-mono font-bold">
                 <span className="text-[9px] text-[#162347]/70 font-sans px-1 font-bold uppercase tracking-wider">
-                  Johor, MY
+                  {hardwareGps?.isValid ? `${hardwareGps.satellites} Sats • Live` : 'Tactical Map'}
                 </span>
                 <span className="text-slate-300">|</span>
                 <button
@@ -1197,14 +1265,14 @@ function PanelContent({
 
           <MapContainer
             center={focusedLocation || baseLocation}
-            zoom={14}
+            zoom={15}
             minZoom={4}
             maxZoom={20}
             preferCanvas={true}
             scrollWheelZoom={true}
             className="w-full h-full bg-[#0F172A]"
           >
-            <MapResizerAndController center={focusedLocation} computerLocation={baseLocation} />
+            <MapResizerAndController center={focusedLocation} computerLocation={baseLocation} robotLocation={robotLocation} />
             <LocateControl
               target={baseLocation}
               onLocate={async () => {
@@ -1262,7 +1330,6 @@ function PanelContent({
             )}
 
             <MapClickHandler onMapClick={(lat, lng) => setWaypoint([lat, lng])} />
-            <Polygon positions={floodZone} pathOptions={{ color: '#0284C7', fillColor: '#BED6EE', fillOpacity: 0.35, weight: 1.5, dashArray: '4 4' }} />
 
             {/* Operator Ground Control PC Marker */}
             {baseLocation && (
@@ -1296,11 +1363,11 @@ function PanelContent({
               </Marker>
             )}
 
-            {/* Real-Time Live Detected Person Marker (active while camera detects a person) */}
-            {detectionStatus.personDetected && (
+            {/* Real-Time Live Detected Person Marker (active while camera detects a person and robot location is detected) */}
+            {detectionStatus.personDetected && robotLocation && (
               <Fragment key="live-person-marker">
                 <Circle
-                  center={baseLocation}
+                  center={robotLocation}
                   radius={22}
                   pathOptions={{
                     color: '#EF4444',
@@ -1310,7 +1377,7 @@ function PanelContent({
                     dashArray: '4 4',
                   }}
                 />
-                <Marker position={baseLocation} icon={livePersonIcon}>
+                <Marker position={robotLocation} icon={livePersonIcon}>
                   <Popup>
                     <div className="font-mono text-xs space-y-1.5 min-w-[220px]">
                       <div className="flex items-center justify-between border-b pb-1">
@@ -1327,13 +1394,13 @@ function PanelContent({
                           Target GPS Coordination (Live)
                         </div>
                         <div className="text-[#162347] font-bold">
-                          LAT: <span className="text-rose-600 font-mono">{baseLocation[0].toFixed(6)}° N</span>
+                          LAT: <span className="text-rose-600 font-mono">{robotLocation[0].toFixed(6)}° N</span>
                         </div>
                         <div className="text-[#162347] font-bold">
-                          LNG: <span className="text-rose-600 font-mono">{baseLocation[1].toFixed(6)}° E</span>
+                          LNG: <span className="text-rose-600 font-mono">{robotLocation[1].toFixed(6)}° E</span>
                         </div>
                         <div className="text-[10px] text-slate-500 font-sans italic">
-                          (Co-located with Ground Control Computer)
+                          (Co-located at FloodScout-01 Vessel)
                         </div>
                       </div>
 
@@ -1362,185 +1429,200 @@ function PanelContent({
 
             {/* AI Camera Detected Persons (Recorded Manifest) */}
             {manifestPersons.map(p => (
-              <Fragment key={`person-marker-${p.personId}`}>
-                <Circle
-                  center={p.location}
-                  radius={18}
-                  pathOptions={{
-                    color: '#EF4444',
-                    fillColor: '#EF4444',
-                    fillOpacity: 0.25,
-                    weight: 1.5,
-                  }}
-                />
-                <Marker position={p.location} icon={getVictimMarkerIcon('Detected')}>
-                  <Popup>
-                    <div className="font-mono text-xs space-y-1.5 min-w-[220px]">
-                      <div className="flex items-center justify-between border-b pb-1">
-                        <span className="font-bold text-rose-600 flex items-center gap-1">
-                          🚨 PERSON DETECTED
-                        </span>
-                        <span className="bg-rose-100 text-rose-800 text-[10px] font-bold px-1.5 py-0.5 rounded">
-                          #{p.personId}
-                        </span>
+              p.location && (
+                <Fragment key={`person-marker-${p.personId}`}>
+                  <Circle
+                    center={p.location}
+                    radius={18}
+                    pathOptions={{
+                      color: '#EF4444',
+                      fillColor: '#EF4444',
+                      fillOpacity: 0.25,
+                      weight: 1.5,
+                    }}
+                  />
+                  <Marker position={p.location} icon={getVictimMarkerIcon('Detected')}>
+                    <Popup>
+                      <div className="font-mono text-xs space-y-1.5 min-w-[220px]">
+                        <div className="flex items-center justify-between border-b pb-1">
+                          <span className="font-bold text-rose-600 flex items-center gap-1">
+                            🚨 PERSON DETECTED
+                          </span>
+                          <span className="bg-rose-100 text-rose-800 text-[10px] font-bold px-1.5 py-0.5 rounded">
+                            #{p.personId}
+                          </span>
+                        </div>
+
+                        <div className="bg-rose-50 border border-rose-200 p-2 rounded space-y-1 text-[11px]">
+                          <div className="text-rose-800 font-sans text-[10px] uppercase font-bold tracking-wider">
+                            Target GPS Coordination
+                          </div>
+                          <div className="text-[#162347] font-bold">
+                            LAT: <span className="text-rose-600 font-mono">{p.location[0].toFixed(6)}° N</span>
+                          </div>
+                          <div className="text-[#162347] font-bold">
+                            LNG: <span className="text-rose-600 font-mono">{p.location[1].toFixed(6)}° E</span>
+                          </div>
+                        </div>
+
+                        {p.cropUrl && (
+                          <div className="rounded overflow-hidden border border-slate-200 shadow-xs">
+                            <img
+                              src={`${detectionApi.apiBaseUrl}${p.cropUrl}`}
+                              alt={p.label}
+                              className="w-full h-24 object-cover"
+                            />
+                          </div>
+                        )}
+
+                        <div className="text-[10px] text-slate-600 flex items-center justify-between pt-0.5">
+                          <span>Confidence: <strong className="text-emerald-700">{(p.score).toFixed(1)}%</strong></span>
+                          <span className="text-slate-400">{p.time}</span>
+                        </div>
+
+                        <button
+                          onClick={() => onInspectIncident(p.incident, p.personId)}
+                          className="w-full mt-2 bg-[#162347] hover:bg-[#24355E] text-white text-[11px] font-mono font-bold py-1.5 px-3 rounded flex items-center justify-center gap-1.5 cursor-pointer transition-colors shadow-xs active:scale-98"
+                        >
+                          <Eye size={13} className="text-emerald-400" />
+                          <span>Inspect Person #{p.personId}</span>
+                        </button>
                       </div>
-
-                      <div className="bg-rose-50 border border-rose-200 p-2 rounded space-y-1 text-[11px]">
-                        <div className="text-rose-800 font-sans text-[10px] uppercase font-bold tracking-wider">
-                          Target GPS Coordination
-                        </div>
-                        <div className="text-[#162347] font-bold">
-                          LAT: <span className="text-rose-600 font-mono">{p.location[0].toFixed(6)}° N</span>
-                        </div>
-                        <div className="text-[#162347] font-bold">
-                          LNG: <span className="text-rose-600 font-mono">{p.location[1].toFixed(6)}° E</span>
-                        </div>
-                      </div>
-
-                      {p.cropUrl && (
-                        <div className="rounded overflow-hidden border border-slate-200 shadow-xs">
-                          <img
-                            src={`${detectionApi.apiBaseUrl}${p.cropUrl}`}
-                            alt={p.label}
-                            className="w-full h-24 object-cover"
-                          />
-                        </div>
-                      )}
-
-                      <div className="text-[10px] text-slate-600 flex items-center justify-between pt-0.5">
-                        <span>Confidence: <strong className="text-emerald-700">{(p.score).toFixed(1)}%</strong></span>
-                        <span className="text-slate-400">{p.time}</span>
-                      </div>
-
-                      <button
-                        onClick={() => onInspectIncident(p.incident, p.personId)}
-                        className="w-full mt-2 bg-[#162347] hover:bg-[#24355E] text-white text-[11px] font-mono font-bold py-1.5 px-3 rounded flex items-center justify-center gap-1.5 cursor-pointer transition-colors shadow-xs active:scale-98"
-                      >
-                        <Eye size={13} className="text-emerald-400" />
-                        <span>Inspect Person #{p.personId}</span>
-                      </button>
-                    </div>
-                  </Popup>
-                </Marker>
-              </Fragment>
+                    </Popup>
+                  </Marker>
+                </Fragment>
+              )
             ))}
 
             {/* Context Victims (Simulated / Initial) */}
             {victims.map(v => (
-              <Marker key={v.id} position={v.location} icon={getVictimMarkerIcon(v.status)}>
-                <Popup>
-                  <div className="font-mono text-xs space-y-1">
-                    <strong className="text-rose-600">🚨 {v.id} ({v.status})</strong>
-                    <div className="text-[10px] text-slate-600">
-                      GPS: {v.location[0].toFixed(6)}°, {v.location[1].toFixed(6)}°
+              v.location && (
+                <Marker key={v.id} position={v.location} icon={getVictimMarkerIcon(v.status)}>
+                  <Popup>
+                    <div className="font-mono text-xs space-y-1">
+                      <strong className="text-rose-600">🚨 {v.id} ({v.status})</strong>
+                      <div className="text-[10px] text-slate-600">
+                        GPS: {v.location[0].toFixed(6)}°, {v.location[1].toFixed(6)}°
+                      </div>
                     </div>
-                  </div>
-                </Popup>
-              </Marker>
+                  </Popup>
+                </Marker>
+              )
             ))}
 
-            {/* Mission Trajectory (Historic Breadcrumb Line) */}
-            {trajectory && trajectory.length > 1 && (
+            {/* Real-time Trace & Telemetry Vector between PC Location and Robot Location */}
+            {baseLocation && robotLocation && (
               <Polyline
-                positions={trajectory}
+                positions={[baseLocation, robotLocation]}
                 pathOptions={{
-                  color: '#6366F1',
+                  color: isPersonDetectedAtRobot ? '#EF4444' : '#0284C7',
                   weight: 3,
-                  opacity: 0.75,
-                  dashArray: '3 4',
+                  opacity: 0.85,
+                  dashArray: '6 6',
                 }}
               />
             )}
 
-            {/* Rescue Corridor Polyline: Start -> Robot -> Person -> Rescue Point */}
-            <Polyline
-              positions={[startPoint, robotLocation, targetPersonLoc, rescuePoint]}
-              pathOptions={{
-                color: '#06B6D4',
-                weight: 3.5,
-                opacity: 0.85,
-                dashArray: '8 6',
-              }}
-            />
+            {/* Robot Movement Trajectory Trace (Historical Breadcrumb Trail) */}
+            {robotLocation && trajectory && trajectory.length > 1 && (
+              <Polyline
+                positions={trajectory}
+                pathOptions={{
+                  color: '#06B6D4',
+                  weight: 3.5,
+                  opacity: 0.8,
+                }}
+              />
+            )}
 
-            {/* 1. Start Point Marker (Launch Dock) */}
-            <Marker position={startPoint} icon={startIcon}>
-              <Popup>
-                <div className="font-mono text-xs space-y-1.5 min-w-[200px]">
-                  <div className="border-b pb-1 font-bold text-indigo-700 flex items-center gap-1.5">
-                    <span>🚩</span> 1. MISSION LAUNCH BASE
-                  </div>
-                  <div className="bg-indigo-50 border border-indigo-200 p-2 rounded space-y-1">
-                    <div className="text-[10px] text-indigo-800 font-sans font-bold uppercase tracking-wider">
-                      Deployment Slipway
-                    </div>
-                    <div className="text-[#162347] font-bold">
-                      LAT: <span className="text-indigo-700">{startPoint[0].toFixed(6)}° N</span>
-                    </div>
-                    <div className="text-[#162347] font-bold">
-                      LNG: <span className="text-indigo-700">{startPoint[1].toFixed(6)}° E</span>
-                    </div>
-                  </div>
-                  <div className="text-[10px] text-slate-500 font-sans">
-                    Mission Start: {activeMission.startTime || '14:15:00'}
-                  </div>
-                </div>
-              </Popup>
-            </Marker>
+            {/* Pulsing Alert Zone around Robot when Person is Detected */}
+            {isPersonDetectedAtRobot && robotLocation && (
+              <Circle
+                center={robotLocation}
+                radius={24}
+                pathOptions={{
+                  color: '#EF4444',
+                  fillColor: '#EF4444',
+                  fillOpacity: 0.35,
+                  weight: 2,
+                  dashArray: '4 4',
+                }}
+              />
+            )}
 
-            {/* 2. Robot Vessel Marker (Live Vessel) */}
-            <Marker position={robotLocation} icon={robotIcon}>
-              <Popup>
-                <div className="font-mono text-xs space-y-1.5 min-w-[210px]">
-                  <div className="border-b pb-1 font-bold text-cyan-700 flex items-center gap-1.5">
-                    <span>🤖</span> 2. FLOODSCOUT-01 (VESSEL)
-                  </div>
-                  <div className="bg-cyan-50 border border-cyan-200 p-2 rounded space-y-1">
-                    <div className="text-[10px] text-cyan-900 font-sans font-bold uppercase tracking-wider">
-                      Live Telemetry Fix
+            {/* 2. Robot Vessel Marker (Only rendered when real robot GPS is detected) */}
+            {robotLocation && (
+              <Marker
+                position={robotLocation}
+                icon={getRobotIcon(isPersonDetectedAtRobot)}
+                eventHandlers={{
+                  click: () => {
+                    if (isPersonDetectedAtRobot) {
+                      onShowVictimManifest?.();
+                    }
+                  },
+                }}
+              >
+                <Popup>
+                  <div className="font-mono text-xs space-y-1.5 min-w-[220px]">
+                    <div className={`border-b pb-1 font-bold flex items-center justify-between ${
+                      isPersonDetectedAtRobot ? 'text-rose-600' : 'text-cyan-700'
+                    }`}>
+                      <span className="flex items-center gap-1.5">
+                        {isPersonDetectedAtRobot ? '🚨 2. PERSON DETECTED AT ROBOT!' : '🤖 2. FLOODSCOUT-01 (ROBOT)'}
+                      </span>
+                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                        isPersonDetectedAtRobot
+                          ? 'bg-rose-600 text-white animate-pulse'
+                          : 'bg-cyan-100 text-cyan-900 border border-cyan-300'
+                      }`}>
+                        {isPersonDetectedAtRobot ? 'ALERT' : 'LIVE'}
+                      </span>
                     </div>
-                    <div className="text-[#162347] font-bold">
-                      LAT: <span className="text-cyan-700">{robotLocation[0].toFixed(6)}° N</span>
-                    </div>
-                    <div className="text-[#162347] font-bold">
-                      LNG: <span className="text-cyan-700">{robotLocation[1].toFixed(6)}° E</span>
-                    </div>
-                    <div className="text-[10px] text-slate-600 flex justify-between pt-0.5">
-                      <span>Speed: {robotSpeed} km/h</span>
-                      <span>Heading: {robotHeading}°</span>
-                    </div>
-                  </div>
-                  <div className="text-[10px] text-slate-500 font-sans">
-                    Bat: {batteryLevel}% • Link: {connectionStatus} • Depth: {waterDepth}m
-                  </div>
-                </div>
-              </Popup>
-            </Marker>
 
-            {/* 4. Rescue Safe Haven Marker */}
-            <Marker position={rescuePoint} icon={rescueHavenIcon}>
-              <Popup>
-                <div className="font-mono text-xs space-y-1.5 min-w-[210px]">
-                  <div className="border-b pb-1 font-bold text-emerald-800 flex items-center gap-1.5">
-                    <span>🛡️</span> 4. RESCUE SAFE HAVEN ALPHA
-                  </div>
-                  <div className="bg-emerald-50 border border-emerald-200 p-2 rounded space-y-1">
-                    <div className="text-[10px] text-emerald-900 font-sans font-bold uppercase tracking-wider">
-                      Evacuation Assembly Post
+                    <div className={`p-2 rounded space-y-1 ${
+                      isPersonDetectedAtRobot
+                        ? 'bg-rose-50 border border-rose-200'
+                        : 'bg-cyan-50 border border-cyan-200'
+                    }`}>
+                      <div className={`text-[10px] font-sans font-bold uppercase tracking-wider ${
+                        isPersonDetectedAtRobot ? 'text-rose-800' : 'text-cyan-900'
+                      }`}>
+                        {isPersonDetectedAtRobot ? 'Victim Flagged at Coordinates' : 'Live Real-Time Telemetry'}
+                      </div>
+                      <div className="text-[#162347] font-bold">
+                        LAT: <span className={isPersonDetectedAtRobot ? 'text-rose-600 font-mono' : 'text-cyan-700 font-mono'}>
+                          {robotLocation[0].toFixed(6)}° N
+                        </span>
+                      </div>
+                      <div className="text-[#162347] font-bold">
+                        LNG: <span className={isPersonDetectedAtRobot ? 'text-rose-600 font-mono' : 'text-cyan-700 font-mono'}>
+                          {robotLocation[1].toFixed(6)}° E
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-slate-600 flex justify-between pt-0.5">
+                        <span>Speed: {robotSpeed} km/h</span>
+                        <span>Heading: {robotHeading}°</span>
+                      </div>
                     </div>
-                    <div className="text-[#162347] font-bold">
-                      LAT: <span className="text-emerald-800">{rescuePoint[0].toFixed(6)}° N</span>
+
+                    <div className="text-[10px] text-slate-500 font-sans">
+                      Bat: {batteryLevel}% • Link: {connectionStatus} • Depth: {waterDepth}m
                     </div>
-                    <div className="text-[#162347] font-bold">
-                      LNG: <span className="text-emerald-800">{rescuePoint[1].toFixed(6)}° E</span>
-                    </div>
+
+                    {isPersonDetectedAtRobot && (
+                      <button
+                        onClick={() => onShowVictimManifest?.()}
+                        className="w-full mt-2 bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-mono font-bold py-1.5 px-3 rounded flex items-center justify-center gap-1.5 cursor-pointer transition-colors shadow-xs active:scale-98"
+                      >
+                        <Target size={13} />
+                        <span>Open Victim Manifest</span>
+                      </button>
+                    )}
                   </div>
-                  <div className="text-[10px] text-slate-500 font-sans">
-                    UTM High Ground Helipad &amp; Medical Triage
-                  </div>
-                </div>
-              </Popup>
-            </Marker>
+                </Popup>
+              </Marker>
+            )}
 
             {waypoint && <Circle center={waypoint} radius={20} pathOptions={{ color: '#F59E0B', fillColor: '#F59E0B', fillOpacity: 0.4 }} />}
           </MapContainer>
@@ -1555,18 +1637,6 @@ function PanelContent({
             <div className="grid grid-cols-3 gap-2 w-40">
               <div />
               <button
-                onMouseDown={() => {
-                  moveRobot(0, 0.0003, 0);
-                  panTilt.sendCommand('up');
-                }}
-                onMouseUp={() => panTilt.sendCommand('stop')}
-                onMouseLeave={() => panTilt.sendCommand('stop')}
-                onTouchStart={(e) => {
-                  e.preventDefault();
-                  moveRobot(0, 0.0003, 0);
-                  panTilt.sendCommand('up');
-                }}
-                onTouchEnd={() => panTilt.sendCommand('stop')}
                 onClick={() => {
                   moveRobot(0, 0.0003, 0);
                   panTilt.sendCommand('up');
@@ -1580,18 +1650,6 @@ function PanelContent({
               <div />
 
               <button
-                onMouseDown={() => {
-                  moveRobot(-0.0003, 0, 270);
-                  panTilt.sendCommand('left');
-                }}
-                onMouseUp={() => panTilt.sendCommand('stop')}
-                onMouseLeave={() => panTilt.sendCommand('stop')}
-                onTouchStart={(e) => {
-                  e.preventDefault();
-                  moveRobot(-0.0003, 0, 270);
-                  panTilt.sendCommand('left');
-                }}
-                onTouchEnd={() => panTilt.sendCommand('stop')}
                 onClick={() => {
                   moveRobot(-0.0003, 0, 270);
                   panTilt.sendCommand('left');
@@ -1619,18 +1677,6 @@ function PanelContent({
                 STOP
               </button>
               <button
-                onMouseDown={() => {
-                  moveRobot(0.0003, 0, 90);
-                  panTilt.sendCommand('right');
-                }}
-                onMouseUp={() => panTilt.sendCommand('stop')}
-                onMouseLeave={() => panTilt.sendCommand('stop')}
-                onTouchStart={(e) => {
-                  e.preventDefault();
-                  moveRobot(0.0003, 0, 90);
-                  panTilt.sendCommand('right');
-                }}
-                onTouchEnd={() => panTilt.sendCommand('stop')}
                 onClick={() => {
                   moveRobot(0.0003, 0, 90);
                   panTilt.sendCommand('right');
@@ -1644,18 +1690,6 @@ function PanelContent({
 
               <div />
               <button
-                onMouseDown={() => {
-                  moveRobot(0, -0.0003, 180);
-                  panTilt.sendCommand('down');
-                }}
-                onMouseUp={() => panTilt.sendCommand('stop')}
-                onMouseLeave={() => panTilt.sendCommand('stop')}
-                onTouchStart={(e) => {
-                  e.preventDefault();
-                  moveRobot(0, -0.0003, 180);
-                  panTilt.sendCommand('down');
-                }}
-                onTouchEnd={() => panTilt.sendCommand('stop')}
                 onClick={() => {
                   moveRobot(0, -0.0003, 180);
                   panTilt.sendCommand('down');
@@ -1858,11 +1892,13 @@ function PanelContent({
                     <div className="flex items-center justify-between text-[11px] font-mono bg-rose-50 border border-rose-200/80 px-2.5 py-1.5 rounded text-rose-800">
                       <div className="flex items-center gap-1.5 font-bold">
                         <MapPin size={12} className="text-rose-600 animate-pulse shrink-0" />
-                        <span>GPS: {v.location[0].toFixed(6)}° N, {v.location[1].toFixed(6)}° E</span>
+                        <span>
+                          {v.location ? `GPS: ${v.location[0].toFixed(6)}° N, ${v.location[1].toFixed(6)}° E` : 'GPS: No Location Detected'}
+                        </span>
                       </div>
-                      {onTrackPerson && (
+                      {v.location && onTrackPerson && (
                         <button
-                          onClick={() => onTrackPerson(v.location)}
+                          onClick={() => onTrackPerson(v.location!)}
                           className="bg-[#162347] hover:bg-[#24355E] text-[#FAF7F2] text-[10px] font-mono font-bold px-2 py-1 rounded flex items-center gap-1 transition-colors cursor-pointer shadow-xs active:scale-95"
                           title="Locate person on Tactical Map"
                         >
@@ -1913,9 +1949,11 @@ function PanelContent({
                       <div className="flex items-center justify-between text-[11px] font-mono bg-rose-50 border border-rose-200/80 px-2.5 py-1.5 rounded text-rose-800">
                         <div className="flex items-center gap-1.5 font-bold">
                           <MapPin size={12} className="text-rose-600 animate-pulse shrink-0" />
-                          <span>GPS: {incLocation[0].toFixed(6)}° N, {incLocation[1].toFixed(6)}° E</span>
+                          <span>
+                            {incLocation ? `GPS: ${incLocation[0].toFixed(6)}° N, ${incLocation[1].toFixed(6)}° E` : 'GPS: No Location Detected'}
+                          </span>
                         </div>
-                        {onTrackPerson && (
+                        {incLocation && onTrackPerson && (
                           <button
                             onClick={() => onTrackPerson(incLocation)}
                             className="bg-[#162347] hover:bg-[#24355E] text-[#FAF7F2] text-[10px] font-mono font-bold px-2 py-1 rounded flex items-center gap-1 transition-colors cursor-pointer shadow-xs active:scale-95"
@@ -2063,6 +2101,7 @@ function PanelContent({
           baseLocation={baseLocation}
           onSelectLocation={onTrackPerson}
           onInspectIncident={onInspectIncident}
+          onShowVictimManifest={onShowVictimManifest}
         />
       );
 
@@ -2170,6 +2209,9 @@ function PanelContent({
         </div>
       );
     }
+
+    case 'sensors':
+      return <ObstacleSensorSection />;
   }
 }
 
@@ -2184,6 +2226,7 @@ function LayoutRenderer({
   onTrackPerson,
   onMaximize,
   isMaximized,
+  onShowVictimManifest,
 }: {
   node: LayoutNode | null;
   dropIndicator: { panelId: PanelId; position: 'top' | 'bottom' | 'left' | 'right' } | null;
@@ -2195,6 +2238,7 @@ function LayoutRenderer({
   onTrackPerson?: (loc: [number, number]) => void;
   onMaximize: (id: PanelId) => void;
   isMaximized: (id: PanelId) => boolean;
+  onShowVictimManifest?: () => void;
 }) {
   if (!node) {
     return (
@@ -2225,6 +2269,7 @@ function LayoutRenderer({
             onTrackPerson={onTrackPerson}
             onMaximizeMap={() => onMaximize('map')}
             isMapMaximized={isMaximized('map')}
+            onShowVictimManifest={onShowVictimManifest}
           />
         </SortablePanel>
       </div>
@@ -2264,6 +2309,7 @@ function LayoutRenderer({
                   onTrackPerson={onTrackPerson}
                   onMaximizeMap={() => onMaximize('map')}
                   isMapMaximized={isMaximized('map')}
+                  onShowVictimManifest={onShowVictimManifest}
                 />
               </SortablePanel>
             ) : (
@@ -2278,6 +2324,7 @@ function LayoutRenderer({
                 onTrackPerson={onTrackPerson}
                 onMaximize={onMaximize}
                 isMaximized={isMaximized}
+                onShowVictimManifest={onShowVictimManifest}
               />
             )}
           </Panel>
@@ -2338,7 +2385,25 @@ export default function Dashboard() {
     });
   }, []);
 
-  const [layout, setLayout] = useState<LayoutNode | null>({ type: 'panel', id: 'camera' });
+  const handleShowVictimManifest = useCallback(() => {
+    setLayout((prev) => {
+      if (!prev) return { type: 'panel', id: 'victims' };
+      if (!hasPanel(prev, 'victims')) {
+        return addDockPanel(prev, 'victims');
+      }
+      return prev;
+    });
+  }, []);
+
+  const [layout, setLayout] = useState<LayoutNode | null>({
+    type: 'group',
+    id: 'root-default-group',
+    direction: 'horizontal',
+    children: [
+      { type: 'panel', id: 'camera' },
+      { type: 'panel', id: 'map' },
+    ],
+  });
 
   const handleMaximizePanel = useCallback((id: PanelId) => {
     setLayout((prev) => {
@@ -2588,6 +2653,7 @@ export default function Dashboard() {
               onTrackPerson={handleTrackPerson}
               onMaximize={handleMaximizePanel}
               isMaximized={isPanelMaximized}
+              onShowVictimManifest={handleShowVictimManifest}
             />
           </div>
         </SortableContext>

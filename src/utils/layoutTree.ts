@@ -1,4 +1,4 @@
-export type PanelId = 'camera' | 'map' | 'navigation' | 'victims' | 'status' | 'controls' | 'log';
+export type PanelId = 'camera' | 'map' | 'navigation' | 'victims' | 'status' | 'controls' | 'log' | 'sensors';
 
 export type LayoutNode =
   | { type: 'panel'; id: PanelId }

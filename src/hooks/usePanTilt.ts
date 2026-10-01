@@ -101,6 +101,26 @@ export async function sendPanTiltCommand(command: string, customBaseUrl?: string
       return { success: true, message: text, command: endpoint, connected: true };
     }
   } catch (error: unknown) {
+    // Fallback: try Vite proxy /esp32-api to bypass browser CORS / mixed-content
+    try {
+      const fbUrl = `/esp32-api/pan-tilt/${endpoint}`;
+      const fbRes = await fetch(fbUrl, {
+        method: 'GET',
+        headers: { Accept: 'application/json, text/plain, */*' },
+        signal: AbortSignal.timeout(1500),
+      });
+      if (fbRes.ok) {
+        const fbText = await fbRes.text();
+        try {
+          return JSON.parse(fbText);
+        } catch {
+          return { success: true, message: fbText, command: endpoint, connected: true };
+        }
+      }
+    } catch {
+      // Fallback failed, proceed to normal error handling
+    }
+
     const err = error as Error;
     const isTimeout = err?.name === 'TimeoutError' || err?.message?.includes('timeout');
 
@@ -135,23 +155,41 @@ export async function fetchPanTiltStatus(customBaseUrl?: string): Promise<PanTil
   const url = isHttpsOrigin && rootUrl.startsWith('http://')
     ? `${getBackendBaseUrl()}/api/pan-tilt/status`
     : `${rootUrl}/api/pan-tilt/status`;
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: {
-      Accept: 'application/json, text/plain, */*',
-    },
-    signal: AbortSignal.timeout(2000),
-  });
-
-  if (!response.ok) {
-    throw new Error(`ESP32 status check failed: ${response.status}`);
-  }
-
-  const text = await response.text();
   try {
-    return JSON.parse(text);
-  } catch {
-    return { success: true, connected: true, status: text };
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json, text/plain, */*',
+      },
+      signal: AbortSignal.timeout(2000),
+    });
+
+    if (!response.ok) {
+      throw new Error(`ESP32 status check failed: ${response.status}`);
+    }
+
+    const text = await response.text();
+    try {
+      return JSON.parse(text);
+    } catch {
+      return { success: true, connected: true, status: text };
+    }
+  } catch (err) {
+    // Try Vite proxy fallback
+    try {
+      const fbResponse = await fetch('/esp32-api/pan-tilt/status', {
+        method: 'GET',
+        headers: { Accept: 'application/json, text/plain, */*' },
+        signal: AbortSignal.timeout(1500),
+      });
+      if (fbResponse.ok) {
+        const fbText = await fbResponse.text();
+        return JSON.parse(fbText);
+      }
+    } catch {
+      // ignore
+    }
+    throw err;
   }
 }
 

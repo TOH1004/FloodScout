@@ -141,6 +141,7 @@ class PipelineState:
         self.incident_manager: Optional[IncidentManager] = None
         self.serial_bridge: Optional[XiaoSerialBridge] = None
         self.pan_tilt_controller: PanTiltController = get_pan_tilt_controller()
+        self.gps_reader: Optional[Any] = None
         self.running = False
 
         # Current frame JPEG bytes for streaming
@@ -171,6 +172,72 @@ class PipelineState:
         self.logged_person_ids: Set[int] = set()
 
 state = PipelineState()
+
+# ── Forward Obstacle Detection State (HC-SR04 / JSN-SR04T) ───────────────────
+_obstacle_state: Dict[str, Any] = {
+    "distanceM": 2.45,
+    "distanceCm": 245.0,
+    "isObstacleDetected": False,
+    "warningThresholdM": 1.50,
+    "criticalThresholdM": 0.60,
+    "status": "CLEAR",
+    "hardwareConnected": False,
+    "sensor_model": "HC-SR04 Ultrasonic Distance Sensor",
+    "last_updated": None
+}
+
+
+def _on_hardware_distance(dist_cm: float):
+    """Callback to update forward obstacle telemetry from ESP32 HC-SR04 sensor."""
+    now = time.time()
+    if dist_cm > 0 and dist_cm <= 450.0:
+        dist_m = round(dist_cm / 100.0, 2)
+        _obstacle_state["distanceM"] = dist_m
+        _obstacle_state["distanceCm"] = round(dist_cm, 1)
+        _obstacle_state["hardwareConnected"] = True
+        _obstacle_state["last_updated"] = now
+        crit = _obstacle_state["criticalThresholdM"]
+        warn = _obstacle_state["warningThresholdM"]
+        _obstacle_state["status"] = "DANGER" if dist_m <= crit else ("CAUTION" if dist_m <= warn else "CLEAR")
+        _obstacle_state["isObstacleDetected"] = dist_m <= warn
+    else:
+        _obstacle_state["distanceM"] = 4.0
+        _obstacle_state["distanceCm"] = 400.0
+        _obstacle_state["status"] = "CLEAR"
+        _obstacle_state["isObstacleDetected"] = False
+        _obstacle_state["hardwareConnected"] = True
+        _obstacle_state["last_updated"] = now
+
+
+def esp32_sensor_wifi_loop():
+    """Polls ESP32 /api/sensors over Wi-Fi every 800ms."""
+    import urllib.request
+    import json
+    esp32_url = (os.getenv("ESP32_PAN_TILT_URL") or os.getenv("ESP32_BASE_URL") or "http://10.185.112.106").rstrip("/")
+    logger.info(f"ESP32 Wi-Fi Sensor poller active targeting {esp32_url}/api/sensors")
+    while state.running:
+        try:
+            target_url = f"{esp32_url}/api/sensors"
+            req = urllib.request.Request(
+                target_url,
+                headers={"User-Agent": "FloodScout-Backend-SensorPoller", "Accept": "application/json"}
+            )
+            with urllib.request.urlopen(req, timeout=1.5) as resp:
+                body = resp.read().decode("utf-8")
+                data = json.loads(body)
+                if data.get("success"):
+                    dist_cm = data.get("distance_cm")
+                    gps_data = data.get("gps", {})
+
+                    if dist_cm is not None:
+                        _on_hardware_distance(float(dist_cm))
+
+                    if state.gps_reader and gps_data:
+                        state.gps_reader.update_from_wifi(gps_data, dist_cm)
+        except Exception:
+            pass
+        time.sleep(0.8)
+
 
 
 def capture_and_detect_loop():
@@ -380,10 +447,22 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Could not initialize XIAO serial bridge: {e}")
 
+    # Initialize Hardware GPS Reader (NEO-8M on ESP32 Serial2)
+    try:
+        from gps_reader import get_gps_reader
+        state.gps_reader = get_gps_reader()
+        state.gps_reader.distance_callback = _on_hardware_distance
+        logger.info("NEO-8M Hardware GPS reader active.")
+    except Exception as e:
+        logger.warning(f"Could not initialize GPS reader: {e}")
+
     state.running = True
 
     worker_thread = threading.Thread(target=capture_and_detect_loop, daemon=True)
     worker_thread.start()
+
+    wifi_sensor_thread = threading.Thread(target=esp32_sensor_wifi_loop, daemon=True)
+    wifi_sensor_thread.start()
 
     yield
 
@@ -394,6 +473,8 @@ async def lifespan(app: FastAPI):
         state.camera_source.release()
     if state.serial_bridge:
         state.serial_bridge.disconnect()
+    if state.gps_reader:
+        state.gps_reader.stop()
 
 
 app = FastAPI(
@@ -876,6 +957,152 @@ def proxy_pan_tilt_command(command: str):
         )
 
 
+# ── Hardware GPS Endpoints (NEO-8M on ESP32 Serial2) ──────────────────────────
+
+@app.get("/api/gps")
+@app.get("/gps/status")
+def get_gps_telemetry():
+    """Return real-time GPS telemetry from NEO-8M hardware module."""
+    try:
+        from gps_reader import get_gps_reader
+        reader = get_gps_reader()
+        return reader.get_status()
+    except Exception as e:
+        return {"connected": False, "is_valid": False, "error": str(e)}
+
+
+@app.websocket("/ws/gps")
+async def websocket_gps(websocket: WebSocket):
+    """Real-time WebSocket stream for NEO-8M GPS coordinate updates."""
+    await websocket.accept()
+    from gps_reader import get_gps_reader
+    reader = get_gps_reader()
+    loop = asyncio.get_running_loop()
+    queue = asyncio.Queue()
+
+    def on_new_fix(record):
+        try:
+            loop.call_soon_threadsafe(queue.put_nowait, record)
+        except Exception:
+            pass
+
+    reader.subscribe(on_new_fix)
+    try:
+        # Send initial status snapshot immediately
+        await websocket.send_json({"type": "init", **reader.get_status()})
+        while True:
+            record = await queue.get()
+            await websocket.send_json({
+                "type": "gps_update",
+                **reader.get_status(),
+                **record
+            })
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        logger.debug(f"GPS websocket disconnected: {e}")
+    finally:
+        reader.unsubscribe(on_new_fix)
+
+
+# ── Forward Obstacle Detection Sensor Endpoints ──────────────────────────────
+# Supports JSN-SR04T / HC-SR04 / TF-Luna LiDAR / Sonar mounted on vessel bow
+
+class ObstacleUpdatePayload(BaseModel):
+    distanceM: Optional[float] = Field(None, description="Distance to front obstacle in meters")
+    distanceCm: Optional[float] = Field(None, description="Distance to front obstacle in centimeters")
+    sensor_id: Optional[str] = Field("HC-SR04", description="Hardware sensor identifier")
+    confidence: Optional[float] = Field(1.0, description="Measurement confidence 0.0 - 1.0")
+
+@app.get("/api/sensors")
+@app.get("/api/esp32/sensors")
+def proxy_esp32_sensors():
+    """Proxy ESP32 /api/sensors over Wi-Fi with CORS and fallback."""
+    import urllib.request
+    import json
+    esp32_url = (os.getenv("ESP32_PAN_TILT_URL") or os.getenv("ESP32_BASE_URL") or "http://10.185.112.106").rstrip("/")
+    target_url = f"{esp32_url}/api/sensors"
+    try:
+        req = urllib.request.Request(
+            target_url,
+            headers={"User-Agent": "FloodScout-Backend-SensorProxy", "Accept": "application/json"}
+        )
+        with urllib.request.urlopen(req, timeout=1.8) as response:
+            body = response.read().decode("utf-8")
+            data = json.loads(body)
+            if data.get("success"):
+                dist_cm = data.get("distance_cm")
+                gps_data = data.get("gps", {})
+                if dist_cm is not None:
+                    _on_hardware_distance(float(dist_cm))
+                if state.gps_reader and gps_data:
+                    state.gps_reader.update_from_wifi(gps_data, dist_cm)
+            return JSONResponse(content=data, headers={"Access-Control-Allow-Origin": "*"})
+    except Exception as e:
+        gps_status = state.gps_reader.get_status() if state.gps_reader else {}
+        return JSONResponse(
+            content={
+                "success": False,
+                "error": f"ESP32 Wi-Fi offline ({target_url}): {e}",
+                "distance_cm": _obstacle_state["distanceCm"],
+                "distance_m": _obstacle_state["distanceM"],
+                "gps": {
+                    "fix": gps_status.get("is_valid", False),
+                    "lat": gps_status.get("latitude") or 0.0,
+                    "lng": gps_status.get("longitude") or 0.0,
+                    "satellites": gps_status.get("satellites", 0),
+                    "altitude_m": gps_status.get("altitude", 0.0),
+                }
+            },
+            headers={"Access-Control-Allow-Origin": "*"}
+        )
+
+@app.get("/api/sensor/obstacle")
+@app.get("/sensor/obstacle")
+def get_obstacle_sensor_data():
+    """Retrieve the latest forward obstacle sensor distance and threat status."""
+    dist_m = _obstacle_state["distanceM"]
+    crit = _obstacle_state["criticalThresholdM"]
+    warn = _obstacle_state["warningThresholdM"]
+    status = "DANGER" if dist_m <= crit else ("CAUTION" if dist_m <= warn else "CLEAR")
+    _obstacle_state["status"] = status
+    _obstacle_state["isObstacleDetected"] = dist_m <= warn
+    return {
+        "success": True,
+        **_obstacle_state
+    }
+
+@app.post("/api/sensor/obstacle")
+@app.post("/sensor/obstacle")
+def update_obstacle_sensor_data(payload: ObstacleUpdatePayload):
+    """Receive real-time forward obstacle distance from ESP32 / Arduino / ROS bridge."""
+    import time
+    dist_m = payload.distanceM
+    if dist_m is None and payload.distanceCm is not None:
+        dist_m = round(payload.distanceCm / 100.0, 3)
+    elif dist_m is not None and payload.distanceCm is None:
+        payload.distanceCm = round(dist_m * 100.0, 1)
+
+    if dist_m is not None:
+        _obstacle_state["distanceM"] = round(dist_m, 2)
+        _obstacle_state["distanceCm"] = round(dist_m * 100.0, 1)
+        _obstacle_state["hardwareConnected"] = True
+        _obstacle_state["last_updated"] = time.time()
+        crit = _obstacle_state["criticalThresholdM"]
+        warn = _obstacle_state["warningThresholdM"]
+        _obstacle_state["status"] = "DANGER" if dist_m <= crit else ("CAUTION" if dist_m <= warn else "CLEAR")
+        _obstacle_state["isObstacleDetected"] = dist_m <= warn
+
+    if payload.sensor_id:
+        _obstacle_state["sensor_model"] = payload.sensor_id
+
+    return {
+        "success": True,
+        "message": "Obstacle sensor telemetry updated",
+        **_obstacle_state
+    }
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
@@ -883,3 +1110,4 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=BACKEND_PORT,
     )
+

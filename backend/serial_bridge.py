@@ -132,10 +132,12 @@ class XiaoSerialBridge:
         if not serial:
             return None
 
+        gps_port = (os.getenv("GPS_SERIAL_PORT") or "COM5").upper()
         pan_tilt_port = (os.getenv("PAN_TILT_SERIAL_PORT", "COM5") if os.getenv("PAN_TILT_MODE") == "serial" else "").upper()
         available_ports = [
             p for p in serial.tools.list_ports.comports()
             if not (pan_tilt_port and p.device.upper() == pan_tilt_port)
+            and not (gps_port and p.device.upper() == gps_port)
         ]
 
         # 1. First check if configured_port exists in available ports

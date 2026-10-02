@@ -1,8 +1,110 @@
-export type PanelId = 'camera' | 'map' | 'navigation' | 'victims' | 'status' | 'controls' | 'log' | 'sensors';
+export type PanelId =
+  | 'camera'
+  | 'map'
+  | 'navigation'
+  | 'sensors'
+  | 'victims'
+  | 'status'
+  | 'log';
 
 export type LayoutNode =
   | { type: 'panel'; id: PanelId }
   | { type: 'group'; id: string; direction: 'horizontal' | 'vertical'; children: LayoutNode[] };
+
+export const DEFAULT_MISSION_LAYOUT: LayoutNode = {
+  type: 'group',
+  id: 'mission-root',
+  direction: 'vertical',
+  children: [
+    {
+      type: 'group',
+      id: 'mission-upper-row',
+      direction: 'horizontal',
+      children: [
+        { type: 'panel', id: 'camera' },
+        { type: 'panel', id: 'map' },
+      ],
+    },
+    {
+      type: 'group',
+      id: 'mission-bottom-row',
+      direction: 'horizontal',
+      children: [
+        { type: 'panel', id: 'navigation' },
+        { type: 'panel', id: 'sensors' },
+        { type: 'panel', id: 'victims' },
+        { type: 'panel', id: 'log' },
+        { type: 'panel', id: 'status' },
+      ],
+    },
+  ],
+};
+
+export const DEFAULT_OBS_LAYOUT: LayoutNode = DEFAULT_MISSION_LAYOUT;
+
+export const TACTICAL_QUAD_LAYOUT: LayoutNode = {
+  type: 'group',
+  id: 'quad-root',
+  direction: 'horizontal',
+  children: [
+    {
+      type: 'group',
+      id: 'quad-left',
+      direction: 'vertical',
+      children: [
+        { type: 'panel', id: 'camera' },
+        { type: 'panel', id: 'sensors' },
+      ],
+    },
+    {
+      type: 'group',
+      id: 'quad-right',
+      direction: 'vertical',
+      children: [
+        { type: 'panel', id: 'map' },
+        { type: 'panel', id: 'victims' },
+      ],
+    },
+  ],
+};
+
+export const AI_FOCUS_LAYOUT: LayoutNode = {
+  type: 'group',
+  id: 'ai-focus-root',
+  direction: 'horizontal',
+  children: [
+    { type: 'panel', id: 'camera' },
+    {
+      type: 'group',
+      id: 'ai-sidebar',
+      direction: 'vertical',
+      children: [
+        { type: 'panel', id: 'victims' },
+        { type: 'panel', id: 'status' },
+        { type: 'panel', id: 'log' },
+      ],
+    },
+  ],
+};
+
+export const MAP_FOCUS_LAYOUT: LayoutNode = {
+  type: 'group',
+  id: 'map-focus-root',
+  direction: 'horizontal',
+  children: [
+    { type: 'panel', id: 'map' },
+    {
+      type: 'group',
+      id: 'map-sidebar',
+      direction: 'vertical',
+      children: [
+        { type: 'panel', id: 'camera' },
+        { type: 'panel', id: 'status' },
+        { type: 'panel', id: 'sensors' },
+      ],
+    },
+  ],
+};
 
 let groupIdCounter = 0;
 export const generateGroupId = () => `group-${Date.now()}-${groupIdCounter++}`;
@@ -134,82 +236,67 @@ export function getLeafPanels(node: LayoutNode | null): PanelId[] {
   return node.children.flatMap(getLeafPanels);
 }
 
+export const UPPER_DOCK_ORDER: PanelId[] = ['camera', 'map'];
+export const BOTTOM_DOCK_ORDER: PanelId[] = ['navigation', 'sensors', 'victims', 'status', 'log'];
+
 /**
- * Smart dock panel insertion:
- * - 0 active: Single full-screen panel.
- * - 1 active: Splits horizontally 50% / 50% (1/2 first section on left, 1/2 second section on right).
- * - 2 active: First section stays 1/2 on left, right side splits vertically into 1/4 top (second) and 1/4 bottom (third).
- * - 3 active: First section on left splits vertically as well, creating a balanced 2x2 grid (1/4 each).
- * - 4+ active: Inserts at bottom-right or uses insertNode.
+ * Builds a clean, designated layout tree where:
+ * - Upper Canvas holds the primary video feed, tactical map, or victim manifest.
+ * - Bottom Row holds the canonical docks in designated order:
+ *   [ Recon Profiles | Vision Layers | Telemetry Levels | Thrusters & PTZ / Sonar | Mission Controls | Log ]
+ * - The user can freely resize any panel with split handles.
  */
-export function addDockPanel(root: LayoutNode | null, newPanelId: PanelId): LayoutNode {
-  const newNode: LayoutNode = { type: 'panel', id: newPanelId };
-  if (!root) return newNode;
+export function buildDesignatedLayout(activePanels: PanelId[]): LayoutNode {
+  const upper = UPPER_DOCK_ORDER.filter(id => activePanels.includes(id));
+  const bottom = BOTTOM_DOCK_ORDER.filter(id => activePanels.includes(id));
 
-  const leaves = getLeafPanels(root);
+  const upperRow: LayoutNode | null = upper.length === 0
+    ? null
+    : upper.length === 1
+    ? { type: 'panel', id: upper[0] }
+    : {
+        type: 'group',
+        id: 'mission-upper-row',
+        direction: 'horizontal',
+        children: upper.map(id => ({ type: 'panel', id })),
+      };
 
-  // Case 1: Only 1 section active -> split 50% / 50% horizontally (1/2 left, 1/2 right)
-  if (leaves.length === 1) {
+  const bottomRow: LayoutNode | null = bottom.length === 0
+    ? null
+    : bottom.length === 1
+    ? { type: 'panel', id: bottom[0] }
+    : {
+        type: 'group',
+        id: 'mission-bottom-row',
+        direction: 'horizontal',
+        children: bottom.map(id => ({ type: 'panel', id })),
+      };
+
+  if (upperRow && bottomRow) {
     return {
       type: 'group',
-      id: generateGroupId(),
-      direction: 'horizontal',
-      children: [root, newNode],
+      id: 'mission-root',
+      direction: 'vertical',
+      children: [upperRow, bottomRow],
     };
   }
 
-  // Case 2: 2 sections active -> 1/2 (First section on left), 1/4 (Second section) on right top, 1/4 (Third section) on right bottom
-  if (leaves.length === 2) {
-    if (root.type === 'group' && root.direction === 'horizontal' && root.children.length === 2) {
-      const firstChild = root.children[0];
-      const secondChild = root.children[1];
-      return {
-        type: 'group',
-        id: generateGroupId(),
-        direction: 'horizontal',
-        children: [
-          firstChild, // 1/2 of screen on left
-          {
-            type: 'group',
-            id: generateGroupId(),
-            direction: 'vertical',
-            children: [
-              secondChild, // 1/4 on right top
-              newNode,     // 1/4 on right bottom
-            ],
-          },
-        ],
-      };
-    }
-    // Fallback if not a simple horizontal group
-    return insertNode(root, leaves[1], newPanelId, 'bottom') || root;
-  }
+  if (upperRow) return upperRow;
+  if (bottomRow) return bottomRow;
 
-  // Case 3: 3 sections active -> split the left side vertically as well (2x2 grid, 1/4 each)
-  if (leaves.length === 3) {
-    if (root.type === 'group' && root.direction === 'horizontal' && root.children.length === 2) {
-      const leftChild = root.children[0];
-      const rightChild = root.children[1];
-      if (leftChild.type === 'panel') {
-        return {
-          type: 'group',
-          id: generateGroupId(),
-          direction: 'horizontal',
-          children: [
-            {
-              type: 'group',
-              id: generateGroupId(),
-              direction: 'vertical',
-              children: [leftChild, newNode],
-            },
-            rightChild,
-          ],
-        };
-      }
-    }
-  }
+  // Fallback default
+  return { type: 'panel', id: 'camera' };
+}
 
-  // Fallback for 4+ panels
-  const lastLeaf = leaves[leaves.length - 1];
-  return insertNode(root, lastLeaf, newPanelId, 'bottom') || root;
+/**
+ * Canonical designated dock insertion:
+ * When user toggles on any dock, it immediately slots into its designated OBS position!
+ */
+export function addDockPanel(root: LayoutNode | null, newPanelId: PanelId): LayoutNode {
+  const currentPanels = getLeafPanels(root);
+  if (currentPanels.includes(newPanelId)) {
+    return root || { type: 'panel', id: newPanelId };
+  }
+  const allPanels = [...currentPanels, newPanelId];
+  return buildDesignatedLayout(allPanels);
 }

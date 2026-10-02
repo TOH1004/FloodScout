@@ -60,3 +60,78 @@
 .leaflet-tile {
   will-change: transform;
 }
+
+/* ─── OBS Studio Broadcast Suite Theme ───────────────────────────────────────── */
+.obs-theme {
+  --obs-bg-canvas: #0c0d11;
+  --obs-bg-panel: #14161d;
+  --obs-bg-header: #1b1e28;
+  --obs-border: #262b3a;
+  --obs-border-active: #384259;
+  --obs-live: #10b981;
+  --obs-rec: #ef4444;
+  --obs-accent: #0284c7;
+}
+
+.obs-theme ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.obs-theme ::-webkit-scrollbar-track {
+  background: #101218;
+}
+.obs-theme ::-webkit-scrollbar-thumb {
+  background: #252a38;
+  border-radius: 3px;
+}
+.obs-theme ::-webkit-scrollbar-thumb:hover {
+  background: #3b4358;
+}
+
+/* OBS LED VU Peak Meter gradient */
+.obs-vu-gradient {
+  background: linear-gradient(
+    to right,
+    #10b981 0%,
+    #10b981 60%,
+    #eab308 60%,
+    #eab308 85%,
+    #ef4444 85%,
+    #ef4444 100%
+  );
+}
+
+.obs-vu-gradient-v {
+  background: linear-gradient(
+    to top,
+    #10b981 0%,
+    #10b981 60%,
+    #eab308 60%,
+    #eab308 85%,
+    #ef4444 85%,
+    #ef4444 100%
+  );
+}
+
+/* Broadcast safe-area corner brackets */
+.obs-safe-area {
+  position: absolute;
+  inset: 5%;
+  border: 1px dashed rgba(255, 255, 255, 0.15);
+  pointer-events: none;
+}
+.obs-safe-area::before {
+  content: '';
+  position: absolute;
+  inset: 5%;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Pulsing REC Dot */
+@keyframes obs-rec-blink {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.3; transform: scale(0.9); }
+}
+.obs-rec-indicator {
+  animation: obs-rec-blink 1.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}

@@ -442,38 +442,38 @@ export function RescueLocationAnalysis({
   ]);
 
   return (
-    <div className="h-full flex flex-col bg-[#FAF7F2] text-[#162347] overflow-hidden select-none">
+    <div className="h-full flex flex-col bg-[#12141a] text-slate-200 overflow-hidden select-none">
       {/* ─── Top Control & Sub-tab Bar ────────────────────────────────────────── */}
-      <div className="px-3.5 py-2.5 bg-white border-b border-[#E6DFD5] flex flex-wrap items-center justify-between gap-2 shrink-0">
+      <div className="px-3.5 py-2 bg-[#171a23] border-b border-[#232733] flex flex-wrap items-center justify-between gap-2 shrink-0">
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-md bg-[#162347] flex items-center justify-center text-cyan-300">
+          <div className="w-6 h-6 rounded-md bg-[#202534] flex items-center justify-center text-cyan-400 border border-[#2b3348]">
             <History size={14} />
           </div>
           <div>
-            <h3 className="font-editorial-serif font-bold text-sm text-[#162347] leading-none flex items-center gap-2">
-              <span>Location History</span>
+            <h3 className="font-mono font-bold text-xs uppercase tracking-wider text-slate-200 leading-none flex items-center gap-2">
+              <span>Location &amp; Telemetry History</span>
               {isPersonDetectedAtRobot && (
                 <span className="text-[9px] bg-rose-600 text-white font-mono font-bold px-1.5 py-0.2 rounded-full animate-pulse">
                   🚨 PERSON DETECTED
                 </span>
               )}
             </h3>
-            <p className="text-[10px] font-mono text-[#162347]/60 mt-0.5">
+            <p className="text-[10px] font-mono text-slate-400 mt-1">
               3 Primary Locations: 1. PC Location • 2. Robot Location • 3. Victim Location
             </p>
           </div>
         </div>
 
         {/* View Filter Pill Switcher */}
-        <div className="flex items-center gap-1 bg-[#FAF7F2] p-0.5 rounded-lg border border-[#E6DFD5] text-[10px] font-mono font-bold">
+        <div className="flex items-center gap-1 bg-[#12141a] p-0.5 rounded-lg border border-[#242938] text-[10px] font-mono font-bold">
           {(['all', 'trace', 'pc', 'robot', 'victim', 'history'] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={`px-2 py-1 rounded capitalize transition-all cursor-pointer ${
                 activeTab === tab
-                  ? 'bg-[#162347] text-white shadow-xs'
-                  : 'text-[#162347]/70 hover:text-[#162347] hover:bg-[#E6DFD5]/40'
+                  ? 'bg-emerald-600 text-white shadow-xs font-bold'
+                  : 'text-slate-400 hover:text-white hover:bg-white/5'
               }`}
             >
               {tab === 'all'

@@ -351,6 +351,16 @@ export function useDetectionApi() {
               const updatedInc: RescueIncident = data.incident;
               setIncidents((prev) => prev.map((i) => (i.id === updatedInc.id ? updatedInc : i)));
               setActiveIncident((prev) => (prev && prev.id === updatedInc.id ? updatedInc : prev));
+            } else if (data.type === 'detection_log' && data.entry) {
+              // Real-time live detection log entry direct from OpenCV pipeline
+              const newEntry = data.entry;
+              setHistory((prev) => [newEntry, ...prev.filter((h) => h.id !== newEntry.id)].slice(0, 50));
+            } else if (data.type === 'detection_status' && data.status) {
+              // Real-time detection status update
+              setDetectionStatus(data.status);
+              if (data.status.alertActive && data.status.personDetected) {
+                setLastAlertTimestamp(new Date().toLocaleTimeString());
+              }
             }
           } catch {
             // Non-JSON or ping

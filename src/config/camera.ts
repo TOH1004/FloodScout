@@ -97,17 +97,18 @@ export function setCameraStreamUrl(newUrl: string): string {
   return normalized;
 }
 
-export type CameraFeedMode = 'ai' | 'direct';
+export type CameraFeedMode = 'ai' | 'direct' | 'webcam';
 
 /**
  * Returns the selected camera feed mode:
  * - 'ai': Live stream with AI HOG+SVM person detection bounding boxes (via Python backend)
- * - 'direct': Direct, zero-latency Wi-Fi stream directly from the camera
+ * - 'direct': Direct, zero-latency Wi-Fi stream directly from ESP32 / XIAO camera
+ * - 'webcam': Integrated laptop / USB webcam with client-side detection & demonstration
  */
 export function getCameraFeedMode(): CameraFeedMode {
   try {
     const saved = localStorage.getItem(STORAGE_MODE_KEY);
-    if (saved === 'direct' || saved === 'ai') return saved;
+    if (saved === 'direct' || saved === 'ai' || saved === 'webcam') return saved;
   } catch {
     // ignore
   }

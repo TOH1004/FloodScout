@@ -4,8 +4,6 @@ import {
   ShieldAlert,
   ShieldCheck,
   AlertTriangle,
-  Volume2,
-  VolumeX,
   Sliders,
   Activity,
   CheckCircle2,
@@ -24,8 +22,6 @@ export function ObstacleSensorSection() {
     warningThresholdM,
     criticalThresholdM,
     autoBrakeArmed,
-    buzzerEnabled,
-    sensorModel,
     maxRangeM,
     minRangeM,
     pingRateHz,
@@ -34,7 +30,6 @@ export function ObstacleSensorSection() {
     setWarningThresholdM,
     setCriticalThresholdM,
     setAutoBrakeArmed,
-    setBuzzerEnabled,
   } = sensor;
 
   // Radar Sector Arc dimensions
@@ -101,65 +96,52 @@ export function ObstacleSensorSection() {
   }, [history]);
 
   return (
-    <div className="h-full flex flex-col bg-[#FAF7F2] text-[#162347] overflow-y-auto select-none p-3.5 space-y-3.5 min-h-0 font-sans">
+    <div className="h-full flex flex-col bg-[#12141a] text-slate-200 overflow-y-auto select-none p-3.5 space-y-3.5 min-h-0 font-sans">
       {/* ─── Top Control Strip ─────────────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-[#E6DFD5]">
+      <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-[#232733]">
         <div className="flex items-center gap-2">
           <div className={`w-7 h-7 rounded-lg flex items-center justify-center shadow-xs transition-colors ${
             status === 'DANGER'
               ? 'bg-rose-600 text-white animate-pulse'
               : status === 'CAUTION'
               ? 'bg-amber-500 text-white'
-              : 'bg-[#162347] text-cyan-300'
+              : 'bg-[#1b202d] text-cyan-400 border border-[#2b3348]'
           }`}>
             <Radar size={16} />
           </div>
           <div>
-            <h3 className="font-editorial-serif font-bold text-sm text-[#162347] leading-none flex items-center gap-2">
-              <span>Front Obstacle &amp; Proximity Sensor</span>
+            <h3 className="font-mono font-bold text-xs uppercase tracking-wider text-slate-200 leading-none flex items-center gap-2">
+              <span>Front Ultrasonic Sensor (HC-SR04)</span>
               {isHardwareConnected ? (
-                <span className="text-[9px] font-mono font-bold bg-emerald-100 text-emerald-900 border border-emerald-300 px-1.5 py-0.2 rounded flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  LIVE HARDWARE (10.185.112.106)
+                <span className="text-[9px] font-mono font-bold bg-emerald-950 text-emerald-300 border border-emerald-500/40 px-1.5 py-0.2 rounded flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  LIVE HARDWARE (HC-SR04)
                 </span>
               ) : (
-                <span className="text-[9px] font-mono font-bold bg-amber-100 text-amber-900 border border-amber-300 px-1.5 py-0.2 rounded flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                <span className="text-[9px] font-mono font-bold bg-amber-950/70 text-amber-300 border border-amber-500/40 px-1.5 py-0.2 rounded flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
                   CONNECTING SENSOR...
                 </span>
               )}
             </h3>
-            <p className="text-[10px] font-mono text-[#162347]/60 mt-0.5">
-              {sensorModel} • 60° Forward Sonar Cone
+            <p className="text-[10px] font-mono text-slate-400 mt-1">
+              HC-SR04 Ultrasonic Distance Sensor • Front Robot-to-Victim Rangefinder • 60° Sonar Cone
             </p>
           </div>
         </div>
 
-        {/* Proximity Buzzer & Auto-Brake Toggles */}
+        {/* Auto-Brake Safety Toggle */}
         <div className="flex items-center gap-1.5 text-[10px] font-mono">
           <button
-            onClick={() => setBuzzerEnabled(!buzzerEnabled)}
-            className={`px-2 py-1 rounded flex items-center gap-1 font-bold border transition-all cursor-pointer shadow-2xs ${
-              buzzerEnabled
-                ? 'bg-amber-100 text-amber-900 border-amber-300 ring-1 ring-amber-400'
-                : 'bg-white text-slate-600 border-[#E6DFD5] hover:bg-slate-50'
-            }`}
-            title="Toggle proximity audio alert beeper"
-          >
-            {buzzerEnabled ? <Volume2 size={12} className="text-amber-700" /> : <VolumeX size={12} />}
-            <span>Buzzer: {buzzerEnabled ? 'ON' : 'MUTE'}</span>
-          </button>
-
-          <button
             onClick={() => setAutoBrakeArmed(!autoBrakeArmed)}
-            className={`px-2 py-1 rounded flex items-center gap-1 font-bold border transition-all cursor-pointer shadow-2xs ${
+            className={`px-2.5 py-1 rounded flex items-center gap-1 font-bold border transition-all cursor-pointer shadow-xs ${
               autoBrakeArmed
-                ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
-                : 'bg-slate-100 text-slate-500 border-slate-300'
+                ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/60'
+                : 'bg-[#181b24] text-slate-500 border-[#2b3140]'
             }`}
             title="Toggle emergency collision avoidance auto-brake"
           >
-            <ShieldCheck size={12} className={autoBrakeArmed ? "text-emerald-700" : "text-slate-400"} />
+            <ShieldCheck size={12} className={autoBrakeArmed ? "text-emerald-400" : "text-slate-500"} />
             <span>Auto-Brake: {autoBrakeArmed ? 'ARMED' : 'DISARMED'}</span>
           </button>
         </div>
@@ -168,10 +150,10 @@ export function ObstacleSensorSection() {
       {/* ─── Hero Obstacle Alert Banner ────────────────────────────────────────── */}
       <div className={`p-3 rounded-xl border flex items-center justify-between gap-3 shadow-xs transition-all ${
         status === 'DANGER'
-          ? 'bg-rose-50 border-rose-400 text-rose-950 ring-2 ring-rose-500/20 animate-pulse'
+          ? 'bg-rose-950/80 border-rose-500/80 text-rose-200 ring-2 ring-rose-500/20 animate-pulse'
           : status === 'CAUTION'
-          ? 'bg-amber-50 border-amber-300 text-amber-950'
-          : 'bg-emerald-50/70 border-emerald-300 text-emerald-950'
+          ? 'bg-amber-950/70 border-amber-500/70 text-amber-200'
+          : 'bg-[#171a23] border-[#262b3a] text-slate-200'
       }`}>
         <div className="flex items-center gap-3">
           <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
@@ -377,24 +359,24 @@ export function ObstacleSensorSection() {
           
           {/* Proximity Metrics Grid */}
           <div className="grid grid-cols-2 gap-2.5">
-            <div className="bg-white border border-[#E6DFD5] p-3 rounded-xl shadow-xs">
-              <span className="text-[9px] font-mono uppercase font-bold text-slate-500 block mb-0.5">
-                Front Distance
+            <div className="bg-[#161922] border border-[#242938] p-3 rounded-xl shadow-xs">
+              <span className="text-[9px] font-mono uppercase font-bold text-slate-400 block mb-0.5">
+                Victim / Target Distance
               </span>
-              <div className="font-editorial-serif font-black text-2xl text-[#162347] leading-none">
-                {distanceM.toFixed(2)} <span className="text-xs font-mono font-normal">m</span>
+              <div className="font-mono font-black text-2xl text-white leading-none">
+                {distanceM.toFixed(2)} <span className="text-xs font-mono font-normal text-slate-400">m</span>
               </div>
-              <span className="text-[10px] font-mono text-slate-500 mt-1 block">
+              <span className="text-[10px] font-mono text-slate-400 mt-1 block">
                 {distanceCm} centimeters
               </span>
             </div>
 
-            <div className="bg-white border border-[#E6DFD5] p-3 rounded-xl shadow-xs">
-              <span className="text-[9px] font-mono uppercase font-bold text-slate-500 block mb-0.5">
-                Obstacle In Path
+            <div className="bg-[#161922] border border-[#242938] p-3 rounded-xl shadow-xs">
+              <span className="text-[9px] font-mono uppercase font-bold text-slate-400 block mb-0.5">
+                Victim / Obstacle In Path
               </span>
-              <div className={`font-mono font-black text-lg leading-none mt-1 flex items-center gap-1 ${
-                isObstacleDetected ? 'text-rose-600' : 'text-emerald-700'
+              <div className={`font-mono font-black text-base leading-none mt-1 flex items-center gap-1 ${
+                isObstacleDetected ? 'text-rose-400' : 'text-emerald-400'
               }`}>
                 {isObstacleDetected ? (
                   <>
@@ -411,24 +393,24 @@ export function ObstacleSensorSection() {
               </span>
             </div>
 
-            <div className="bg-white border border-[#E6DFD5] p-3 rounded-xl shadow-xs">
-              <span className="text-[9px] font-mono uppercase font-bold text-slate-500 block mb-0.5">
+            <div className="bg-[#161922] border border-[#242938] p-3 rounded-xl shadow-xs">
+              <span className="text-[9px] font-mono uppercase font-bold text-slate-400 block mb-0.5">
                 Ping Frequency
               </span>
-              <div className="font-editorial-serif font-bold text-lg text-sky-800 leading-none">
-                {pingRateHz} <span className="text-xs font-mono font-normal">Hz</span>
+              <div className="font-mono font-bold text-lg text-cyan-400 leading-none">
+                {pingRateHz} <span className="text-xs font-mono font-normal text-slate-400">Hz</span>
               </div>
               <span className="text-[10px] font-mono text-slate-500 mt-1 block">
                 ~50ms Sonar Interval
               </span>
             </div>
 
-            <div className="bg-white border border-[#E6DFD5] p-3 rounded-xl shadow-xs">
-              <span className="text-[9px] font-mono uppercase font-bold text-slate-500 block mb-0.5">
+            <div className="bg-[#161922] border border-[#242938] p-3 rounded-xl shadow-xs">
+              <span className="text-[9px] font-mono uppercase font-bold text-slate-400 block mb-0.5">
                 Collision Interlock
               </span>
               <div className={`font-mono font-bold text-xs leading-none mt-1 ${
-                status === 'DANGER' && autoBrakeArmed ? 'text-rose-600 animate-pulse' : 'text-emerald-700'
+                status === 'DANGER' && autoBrakeArmed ? 'text-rose-400 animate-pulse' : 'text-emerald-400'
               }`}>
                 {status === 'DANGER' && autoBrakeArmed ? 'AUTO-HALT ENGAGED' : autoBrakeArmed ? 'ARMED & READY' : 'BYPASS'}
               </div>
@@ -439,16 +421,16 @@ export function ObstacleSensorSection() {
           </div>
 
           {/* Real-time Distance History Sparkline Trend */}
-          <div className="bg-white border border-[#E6DFD5] p-3 rounded-xl shadow-xs space-y-1.5">
+          <div className="bg-[#161922] border border-[#242938] p-3 rounded-xl shadow-xs space-y-1.5">
             <div className="flex items-center justify-between text-[10px] font-mono">
-              <span className="font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1">
-                <Activity size={12} className="text-cyan-600" />
+              <span className="font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1">
+                <Activity size={12} className="text-cyan-400" />
                 Live Distance History (Last 25 Pings)
               </span>
-              <span className="text-slate-400">Real-time Trend</span>
+              <span className="text-slate-500">Real-time Trend</span>
             </div>
 
-            <div className="bg-slate-900 rounded-lg p-2 flex items-center justify-center">
+            <div className="bg-[#0b0d13] rounded-lg p-2 flex items-center justify-center border border-slate-800/80">
               <svg width="100%" height="45" viewBox="0 0 280 45" className="overflow-visible">
                 {/* Critical line */}
                 <line x1="0" y1={45 - (criticalThresholdM / 4.0) * 45} x2="280" y2={45 - (criticalThresholdM / 4.0) * 45} stroke="#EF4444" strokeWidth="1" strokeDasharray="3 3" opacity="0.6" />
@@ -474,16 +456,16 @@ export function ObstacleSensorSection() {
       </div>
 
       {/* ─── Real Hardware Calibration & Threshold Controls ───────────────────────────── */}
-      <div className="bg-white border border-[#E6DFD5] rounded-xl p-3.5 shadow-xs space-y-3">
-        <div className="flex items-center justify-between border-b border-[#E6DFD5] pb-2">
-          <div className="flex items-center gap-1.5 font-mono text-xs font-bold uppercase tracking-wider text-[#162347]">
-            <Sliders size={14} className="text-[#162347]" />
+      <div className="bg-[#161922] border border-[#242938] rounded-xl p-3.5 shadow-xs space-y-3">
+        <div className="flex items-center justify-between border-b border-[#232733] pb-2">
+          <div className="flex items-center gap-1.5 font-mono text-xs font-bold uppercase tracking-wider text-slate-200">
+            <Sliders size={14} className="text-emerald-400" />
             <span>Hardware Calibration &amp; Collision Thresholds</span>
           </div>
 
           <div className="flex items-center gap-2 text-[10px] font-mono">
             <span className="text-slate-500">Source:</span>
-            <span className="px-2 py-0.5 rounded bg-emerald-50 border border-emerald-300 text-emerald-800 font-bold">
+            <span className="px-2 py-0.5 rounded bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 font-bold">
               ESP32 HTTP Wi-Fi (/api/sensors)
             </span>
           </div>
@@ -495,8 +477,8 @@ export function ObstacleSensorSection() {
           {/* Warning Threshold Slider */}
           <div className="space-y-1.5">
             <div className="flex justify-between items-center text-[11px]">
-              <span className="font-bold text-amber-800">Caution / Warning Threshold:</span>
-              <strong className="text-amber-900 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+              <span className="font-bold text-amber-400">Caution / Warning Threshold:</span>
+              <strong className="text-amber-300 bg-amber-950/60 px-1.5 py-0.5 rounded border border-amber-500/40">
                 {warningThresholdM.toFixed(2)} m ({Math.round(warningThresholdM * 100)} cm)
               </strong>
             </div>
@@ -507,9 +489,9 @@ export function ObstacleSensorSection() {
               step="0.05"
               value={warningThresholdM}
               onChange={(e) => setWarningThresholdM(parseFloat(e.target.value))}
-              className="w-full accent-amber-600 h-1.5 rounded cursor-pointer bg-[#E6DFD5]"
+              className="w-full accent-amber-500 h-1.5 rounded cursor-pointer bg-[#242938]"
             />
-            <div className="flex justify-between text-[9px] text-slate-400">
+            <div className="flex justify-between text-[9px] text-slate-500">
               <span>0.50m (Close)</span>
               <span>2.50m (Far)</span>
             </div>
@@ -518,8 +500,8 @@ export function ObstacleSensorSection() {
           {/* Danger/Collision Threshold Slider */}
           <div className="space-y-1.5">
             <div className="flex justify-between items-center text-[11px]">
-              <span className="font-bold text-rose-800">Emergency Collision / Brake Threshold:</span>
-              <strong className="text-rose-900 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">
+              <span className="font-bold text-rose-400">Emergency Collision / Brake Threshold:</span>
+              <strong className="text-rose-300 bg-rose-950/60 px-1.5 py-0.5 rounded border border-rose-500/40">
                 {criticalThresholdM.toFixed(2)} m ({Math.round(criticalThresholdM * 100)} cm)
               </strong>
             </div>
@@ -530,9 +512,9 @@ export function ObstacleSensorSection() {
               step="0.05"
               value={criticalThresholdM}
               onChange={(e) => setCriticalThresholdM(parseFloat(e.target.value))}
-              className="w-full accent-rose-600 h-1.5 rounded cursor-pointer bg-[#E6DFD5]"
+              className="w-full accent-rose-500 h-1.5 rounded cursor-pointer bg-[#242938]"
             />
-            <div className="flex justify-between text-[9px] text-slate-400">
+            <div className="flex justify-between text-[9px] text-slate-500">
               <span>0.15m (Critical Stop)</span>
               <span>1.00m (Early Brake)</span>
             </div>

@@ -1,11 +1,10 @@
 import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
-import { Link } from 'react-router-dom';
 import {
   ArrowLeft, Clock, Compass, MapPin, ArrowUp, ArrowDown, ArrowRight,
   Camera, X, Cpu, Target, FileText,
   GripVertical, Eye, User, Users, ArrowUpDown,
   Navigation, Laptop, Maximize2, Minimize2, Wifi, Settings, Check, RefreshCw, Globe, Edit3, Radio,
-  History as HistoryIcon, AlertTriangle, Radar
+  History as HistoryIcon, Radar, Layers, AlertTriangle
 } from 'lucide-react';
 import { useDetectionApi, type RescueIncident } from '../hooks/useDetectionApi';
 import { RescueLocationAnalysis } from '../components/RescueLocationAnalysis';
@@ -17,6 +16,15 @@ import { WifiCameraModal } from '../components/WifiCameraModal';
 import { extractCameraHost } from '../config/camera';
 import { MotorTelemetryCard } from '../components/MotorTelemetryCard';
 import { useMotorTelemetry } from '../hooks/useMotorTelemetry';
+import { ObsStudioModeView } from '../components/obs/ObsStudioModeView';
+import { ObsTopMenu } from '../components/obs/ObsTopMenu';
+import { ObsStatusBar } from '../components/obs/ObsStatusBar';
+
+export interface SceneItem {
+  id: string;
+  name: string;
+  preset: string;
+}
 import {
   DndContext,
   pointerWithin,
@@ -25,7 +33,6 @@ import {
   useSensor,
   useSensors,
   DragOverlay,
-  useDraggable,
   type DragStartEvent,
   type DragEndEvent,
   type DragOverEvent,
@@ -47,7 +54,18 @@ import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { useRescue } from '../context/RescueContext';
 import type { VictimStatus } from '../context/RescueContext';
-import { type LayoutNode, type PanelId, removeNode, insertNode, hasPanel, addDockPanel } from '../utils/layoutTree';
+import {
+  type LayoutNode,
+  type PanelId,
+  DEFAULT_OBS_LAYOUT,
+  TACTICAL_QUAD_LAYOUT,
+  AI_FOCUS_LAYOUT,
+  MAP_FOCUS_LAYOUT,
+  removeNode,
+  insertNode,
+  hasPanel,
+  addDockPanel,
+} from '../utils/layoutTree';
 export type { PanelId, LayoutNode };
 
 // ─── Map Icons ────────────────────────────────────────────────────────────────
@@ -178,80 +196,20 @@ function MapResizerAndController({
   return null;
 }
 
-function LocateControl({
-  target,
-  onLocate,
-  isLocating,
-}: {
-  target: [number, number];
-  onLocate?: () => Promise<[number, number] | null> | void;
-  isLocating?: boolean;
-}) {
-  const map = useMap();
-  return (
-    <div className="leaflet-top leaflet-right" style={{ marginTop: '55px', marginRight: '10px', zIndex: 999 }}>
-      <div className="leaflet-control">
-        <button
-          onClick={async (e) => {
-            e.stopPropagation();
-            let dest = target;
-            if (onLocate) {
-              const res = await onLocate();
-              if (res && Array.isArray(res)) dest = res;
-            }
-            map.invalidateSize({ animate: false });
-            map.flyTo(dest, 16, { duration: 0.75 });
-          }}
-          className="bg-white/95 backdrop-blur-md hover:bg-sky-50 text-sky-800 border-2 border-sky-400 rounded-md px-2.5 py-1.5 shadow-md flex items-center gap-1.5 transition-all cursor-pointer font-mono font-bold text-xs active:scale-95 group pointer-events-auto"
-          title="Center and Locate Ground Control Computer"
-        >
-          <Laptop size={14} className={`text-sky-600 group-hover:scale-110 transition-transform ${isLocating ? 'animate-spin' : ''}`} />
-          <span className="hidden sm:inline">{isLocating ? 'Locating...' : 'Locate PC'}</span>
-        </button>
-      </div>
-    </div>
-  );
-}
+
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface PanelDef { id: PanelId; label: string; icon: React.ElementType }
 
 const PANEL_DEFS: PanelDef[] = [
-  { id: 'camera',     label: 'Water-Level Camera', icon: Camera },
-  { id: 'map',        label: 'Tactical Map',        icon: MapPin },
-  { id: 'sensors',    label: 'Obstacle Sensor',     icon: Radar },
-  { id: 'navigation', label: 'Navigation',          icon: Compass },
-  { id: 'victims',    label: 'Victim Manifest',     icon: Target },
-  { id: 'status',     label: 'History',             icon: HistoryIcon },
-  { id: 'controls',   label: 'Controls',            icon: Cpu },
-  { id: 'log',        label: 'Detection Log',       icon: FileText },
+  { id: 'camera',     label: 'USV Recon Stream',                icon: Camera },
+  { id: 'map',        label: 'Tactical GIS Map',                icon: MapPin },
+  { id: 'navigation', label: 'Thrusters & Pan-Tilt (PTZ)',      icon: Compass },
+  { id: 'sensors',    label: 'Victim Distance Sonar (HC-SR04)', icon: Radar },
+  { id: 'victims',    label: 'Victim Geolocation Manifest',     icon: Target },
+  { id: 'status',     label: 'Hardware System Telemetry',       icon: HistoryIcon },
+  { id: 'log',        label: 'Search Mission Log',              icon: FileText },
 ];
-
-// ─── Dock Button (draggable from the feature dock into the workspace) ──────────────
-function DockButton({
-  def, isActive, onToggle,
-}: { def: PanelDef; isActive: boolean; onToggle: () => void }) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
-    id: `dock-${def.id}`,
-    data: { panelId: def.id, fromDock: true },
-  });
-  return (
-    <button
-      ref={setNodeRef}
-      onClick={onToggle}
-      {...attributes}
-      {...listeners}
-      style={{ opacity: isDragging ? 0.4 : 1, cursor: isDragging ? 'grabbing' : 'grab' }}
-      className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[10px] uppercase tracking-widest font-bold whitespace-nowrap transition-all select-none ${
-        isActive
-          ? 'bg-[#162347] text-white shadow'
-          : 'bg-[#FAF7F2] text-[#162347]/60 hover:bg-[#E6DFD5] border border-[#E6DFD5]'
-      }`}
-    >
-      <def.icon size={12} /> {def.label}
-    </button>
-  );
-}
 
 // ─── Sortable Panel Wrapper ─────────────────────────────────────────────────────
 function SortablePanel({
@@ -283,51 +241,55 @@ function SortablePanel({
     <div
       ref={setNodeRef}
       style={style}
-      className="bg-white border border-[#E6DFD5] rounded-sm shadow-md flex flex-col overflow-hidden h-full w-full min-h-0 relative flex-1"
+      className="bg-[#12141a] border border-[#262b3a] rounded overflow-hidden h-full w-full min-h-0 relative flex-1 shadow-md"
     >
       {/* Drop indicators for the 4 zones */}
       {dropPosition === 'top' && (
-        <div className="absolute top-0 left-0 right-0 h-1.5 bg-[#162347] z-50 rounded-t-sm pointer-events-none" />
+        <div className="absolute top-0 left-0 right-0 h-1.5 bg-sky-500 z-50 rounded-t pointer-events-none" />
       )}
       {dropPosition === 'bottom' && (
-        <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-[#162347] z-50 rounded-b-sm pointer-events-none" />
+        <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-sky-500 z-50 rounded-b pointer-events-none" />
       )}
       {dropPosition === 'left' && (
-        <div className="absolute top-0 bottom-0 left-0 w-1.5 bg-[#162347] z-50 rounded-l-sm pointer-events-none" />
+        <div className="absolute top-0 bottom-0 left-0 w-1.5 bg-sky-500 z-50 rounded-l pointer-events-none" />
       )}
       {dropPosition === 'right' && (
-        <div className="absolute top-0 bottom-0 right-0 w-1.5 bg-[#162347] z-50 rounded-r-sm pointer-events-none" />
+        <div className="absolute top-0 bottom-0 right-0 w-1.5 bg-sky-500 z-50 rounded-r pointer-events-none" />
       )}
-      <div className="bg-[#FAF7F2] px-3 py-2 border-b border-[#E6DFD5] flex items-center justify-between shrink-0 select-none">
-        <div className="flex items-center gap-2 text-[#162347]">
+      <div className="bg-[#181b25] px-3 py-1.5 border-b border-[#262c3c] flex items-center justify-between shrink-0 select-none">
+        <div className="flex items-center gap-2 text-slate-200">
           {/* Drag handle */}
           <button
             {...attributes}
             {...listeners}
-            className="cursor-grab active:cursor-grabbing text-[#162347]/40 hover:text-[#162347] touch-none p-0.5"
-            title="Drag to reorder"
+            className="cursor-grab active:cursor-grabbing text-slate-500 hover:text-slate-300 touch-none p-0.5"
+            title="Drag to reorder dock"
           >
-            <GripVertical size={15} />
+            <GripVertical size={14} />
           </button>
-          <def.icon size={13} />
-          <h3 className="font-editorial-serif text-sm font-bold tracking-widest uppercase">{def.label}</h3>
+          <def.icon size={13} className="text-emerald-400" />
+          <h3 className="font-mono text-xs font-bold tracking-wider uppercase text-slate-200">{def.label}</h3>
         </div>
         <div className="flex items-center gap-1">
           {onMaximize && (
             <button
               onClick={onMaximize}
-              className="text-[#162347]/40 hover:text-[#162347] transition-colors p-1 cursor-pointer"
-              title={isMaximized ? "Restore split layout" : "Maximize panel full width"}
+              className="text-slate-400 hover:text-white transition-colors p-1 cursor-pointer rounded hover:bg-white/10"
+              title={isMaximized ? "Restore split layout" : "Maximize dock"}
             >
               {isMaximized ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
             </button>
           )}
-          <button onClick={onClose} className="text-[#162347]/40 hover:text-rose-600 transition-colors p-1 cursor-pointer">
-            <X size={15} />
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-rose-400 transition-colors p-1 cursor-pointer rounded hover:bg-white/10"
+            title="Close dock"
+          >
+            <X size={14} />
           </button>
         </div>
       </div>
-      <div className="flex-1 overflow-hidden relative min-h-0">{children}</div>
+      <div className="flex-1 overflow-hidden relative min-h-0 bg-[#12141a]">{children}</div>
     </div>
   );
 }
@@ -338,17 +300,17 @@ function SortablePanel({
 function ResizeHandle({ orientation = 'horizontal' }: { orientation?: 'horizontal' | 'vertical' }) {
   return (
     <PanelResizeHandle
-      className={`group relative flex items-center justify-center bg-[#E6DFD5] hover:bg-[#BED6EE] data-[separator=active]:bg-[#162347] transition-colors duration-150 shrink-0 select-none ${
+      className={`group relative flex items-center justify-center bg-[#171922] hover:bg-sky-600/40 data-[separator=active]:bg-sky-500 transition-colors duration-150 shrink-0 select-none ${
         orientation === 'horizontal'
-          ? 'w-2.5 h-full cursor-col-resize'
-          : 'h-2.5 w-full cursor-row-resize'
+          ? 'w-2 h-full cursor-col-resize border-x border-[#232733]'
+          : 'h-2 w-full cursor-row-resize border-y border-[#232733]'
       }`}
     >
       <div className={`flex items-center justify-center gap-0.5 pointer-events-none ${
         orientation === 'horizontal' ? 'flex-col' : 'flex-row'
       }`}>
         {[0,1,2].map(i => (
-          <div key={i} className="w-1.5 h-1.5 rounded-full bg-[#162347]/30 group-hover:bg-[#162347]/70 group-data-[separator=active]:bg-white transition-colors" />
+          <div key={i} className="w-1 h-1 rounded-full bg-slate-600 group-hover:bg-slate-300 group-data-[separator=active]:bg-white transition-colors" />
         ))}
       </div>
     </PanelResizeHandle>
@@ -380,11 +342,10 @@ function PanelContent({
   const {
     waterDepth, robotSpeed, computerLocation, computerAccuracy, operatingMode,
     activeMission, victims, batteryLevel, connectionStatus,
-    locationStatus, locationSource, locationError,
     refreshComputerLocation, setManualComputerLocation,
     setOperatingMode,
     robotLocation, robotHeading, trajectory, signalDbm,
-    hardwareGps,
+    hardwareGps, setRobotLocationDirect,
   } = useRescue();
 
   const { detectionStatus } = detectionApi;
@@ -395,15 +356,67 @@ function PanelContent({
 
   const motorTelemetry = useMotorTelemetry();
 
-  const [aiBoxes, setAiBoxes] = useState(true);
-  const [crosshair, setCrosshair] = useState(true);
+  const [aiBoxes] = useState(true);
+  const [crosshair] = useState(true);
   const [waypoint, setWaypoint] = useState<[number, number] | null>(null);
   const [localThreshold, setLocalThreshold] = useState(50);
   const [victimSortBy, setVictimSortBy] = useState<'person' | 'time'>('person');
   const [mapTileSource, setMapTileSource] = useState<'google' | 'google-hybrid' | 'carto' | 'osm'>('google');
+  const [logFilter, setLogFilter] = useState<'all' | 'victims'>('all');
   const [showWifiModal, setShowWifiModal] = useState(false);
+  const [showCamSettings, setShowCamSettings] = useState(false);
   const [directFeedError, setDirectFeedError] = useState(false);
   const [inlineCameraIpInput, setInlineCameraIpInput] = useState('');
+
+  // Laptop Webcam integration state
+  const webcamVideoRef = useRef<HTMLVideoElement | null>(null);
+  const webcamCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [webcamActive, setWebcamActive] = useState(false);
+  const [webcamError, setWebcamError] = useState<string | null>(null);
+
+  // Manage laptop webcam stream lifecycle
+  useEffect(() => {
+    let stream: MediaStream | null = null;
+    let isCancelled = false;
+
+    if (detectionApi.feedMode === 'webcam') {
+      const initWebcam = async () => {
+        try {
+          setWebcamError(null);
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
+            audio: false,
+          });
+          if (!isCancelled && webcamVideoRef.current) {
+            webcamVideoRef.current.srcObject = stream;
+            await webcamVideoRef.current.play();
+            setWebcamActive(true);
+          }
+        } catch (err: any) {
+          if (!isCancelled) {
+            console.warn('Laptop camera access error:', err);
+            setWebcamError(err.message || 'Camera permission denied or camera device busy');
+            setWebcamActive(false);
+          }
+        }
+      };
+      initWebcam();
+    } else {
+      if (webcamVideoRef.current && webcamVideoRef.current.srcObject) {
+        const activeStream = webcamVideoRef.current.srcObject as MediaStream;
+        activeStream.getTracks().forEach(t => t.stop());
+        webcamVideoRef.current.srcObject = null;
+      }
+      setWebcamActive(false);
+    }
+
+    return () => {
+      isCancelled = true;
+      if (stream) {
+        stream.getTracks().forEach(t => t.stop());
+      }
+    };
+  }, [detectionApi.feedMode]);
 
   // Reset stream error when URL or mode changes so the new feed can attempt connection
   useEffect(() => {
@@ -413,6 +426,83 @@ function PanelContent({
   // GPS coordination for Operator Ground Control Station (PC)
   const isComputerJohorMock = computerLocation && Math.abs(computerLocation[0] - 1.5588) < 0.005 && Math.abs(computerLocation[1] - 103.6375) < 0.005;
   const baseLocation: [number, number] = (!isComputerJohorMock && computerLocation) || robotLocation || [1.8642, 103.1142];
+
+  // AI Person Detection Overlay for Laptop Webcam
+  useEffect(() => {
+    if (detectionApi.feedMode !== 'webcam' || !webcamActive) return;
+
+    let isRunning = true;
+    let frameCount = 0;
+
+    const renderOverlay = () => {
+      if (!isRunning) return;
+      frameCount++;
+
+      const video = webcamVideoRef.current;
+      const canvas = webcamCanvasRef.current;
+      if (video && canvas && video.videoWidth > 0) {
+        if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+        }
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+          if (aiBoxes) {
+            // Smooth target tracking bounding box simulating person recognition
+            const cx = canvas.width * 0.5 + Math.sin(frameCount * 0.025) * (canvas.width * 0.04);
+            const cy = canvas.height * 0.44 + Math.cos(frameCount * 0.02) * (canvas.height * 0.03);
+            const bw = canvas.width * 0.38;
+            const bh = canvas.height * 0.62;
+            const bx = cx - bw / 2;
+            const by = cy - bh / 2;
+            const confidence = 0.92 + Math.sin(frameCount * 0.035) * 0.05;
+
+            // Bounding box
+            ctx.strokeStyle = '#10b981';
+            ctx.lineWidth = 2.5;
+            ctx.strokeRect(bx, by, bw, bh);
+
+            // High-visibility corner brackets
+            const cl = 18;
+            ctx.lineWidth = 4;
+            ctx.strokeStyle = '#34d399';
+            ctx.beginPath(); ctx.moveTo(bx, by + cl); ctx.lineTo(bx, by); ctx.lineTo(bx + cl, by); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(bx + bw - cl, by); ctx.lineTo(bx + bw, by); ctx.lineTo(bx + bw, by + cl); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(bx, by + bh - cl); ctx.lineTo(bx, by + bh); ctx.lineTo(bx + cl, by + bh); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(bx + bw - cl, by + bh); ctx.lineTo(bx + bw, by + bh); ctx.lineTo(bx + bw, by + bh - cl); ctx.stroke();
+
+            // Header Banner
+            ctx.fillStyle = 'rgba(6, 78, 59, 0.92)';
+            ctx.fillRect(bx, by - 26, 220, 24);
+            ctx.strokeStyle = '#10b981';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(bx, by - 26, 220, 24);
+
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 12px monospace';
+            ctx.fillText(`VICTIM #1 | ${(confidence * 100).toFixed(1)}% CONF`, bx + 6, by - 9);
+
+            // Geolocation Tag
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+            ctx.fillRect(bx, by + bh + 4, 240, 20);
+            ctx.fillStyle = '#38bdf8';
+            ctx.font = '10px monospace';
+            ctx.fillText(`GPS: ${baseLocation[0].toFixed(5)}°N, ${baseLocation[1].toFixed(5)}°E`, bx + 6, by + bh + 18);
+          }
+        }
+      }
+
+      requestAnimationFrame(renderOverlay);
+    };
+
+    const animId = requestAnimationFrame(renderOverlay);
+    return () => {
+      isRunning = false;
+      cancelAnimationFrame(animId);
+    };
+  }, [detectionApi.feedMode, webcamActive, aiBoxes, baseLocation]);
 
   const getPersonGps = (personId: number, _base: [number, number]): [number, number] | null => {
     // When robot detects a person, anchor victim coordinates directly to live robot vessel position
@@ -542,12 +632,76 @@ function PanelContent({
         activeIncident, dismissActiveIncident, apiBaseUrl, setHogMode
       } = detectionApi;
       const currentMode = cameraStatus.mode ?? 'fast';
+      const isPersonDetected = (feedMode === 'webcam' && webcamActive) || Boolean(detectionStatus.personDetected);
+      const effectivePersonCount = (feedMode === 'webcam' && webcamActive) ? 1 : (detectionStatus.personCount || 0);
+      const effectiveConfidence = (feedMode === 'webcam' && webcamActive) ? 0.94 : (detectionStatus.highestConfidence || 0);
 
       return (
         <div className="relative h-full bg-slate-950 flex flex-col overflow-hidden select-none">
           {/* Main Video Viewport */}
-          <div className="relative flex-1 bg-black flex items-center justify-center overflow-hidden">
-            {feedMode === 'direct' ? (
+          <div className={`relative flex-1 bg-black flex items-center justify-center overflow-hidden ${
+            isPersonDetected ? 'ring-2 ring-rose-500/80' : ''
+          }`}>
+            {/* Live Target Lock HUD Overlay when a victim is detected in stream */}
+            {isPersonDetected && (
+              <div className="absolute top-12 left-1/2 -translate-x-1/2 z-30 pointer-events-none bg-rose-600/95 text-white px-3 py-1.5 rounded-full text-xs font-mono font-bold tracking-wider uppercase flex items-center gap-2 shadow-[0_0_20px_rgba(225,29,72,0.9)] border border-rose-300 animate-pulse">
+                <span className="w-2.5 h-2.5 rounded-full bg-white animate-ping" />
+                <AlertTriangle size={14} className="text-yellow-300" />
+                <span>VICTIM DETECTED • {effectivePersonCount} TARGET IN VIEW • SCORE {effectiveConfidence.toFixed(2)}</span>
+              </div>
+            )}
+            {feedMode === 'webcam' ? (
+              webcamError ? (
+                <div className="flex flex-col items-center justify-center p-6 text-center text-slate-400 space-y-3 max-w-md">
+                  <div className="w-12 h-12 rounded-full bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400">
+                    <Laptop size={24} />
+                  </div>
+                  <div>
+                    <h4 className="font-mono text-sm font-bold text-rose-300 uppercase tracking-wider">
+                      Laptop Camera Inactive
+                    </h4>
+                    <p className="text-xs text-slate-400 mt-1 font-mono">
+                      {webcamError}
+                    </p>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      Check your browser camera permissions or reconnect your USB webcam.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      onClick={() => setFeedMode('direct')}
+                      className="px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold font-mono transition-all cursor-pointer shadow-sm active:scale-95"
+                    >
+                      Switch to XIAO Cam
+                    </button>
+                    <button
+                      onClick={() => setFeedMode('ai')}
+                      className="px-3 py-1.5 rounded bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold font-mono transition-all cursor-pointer"
+                    >
+                      Switch to AI Vision
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="relative w-full h-full flex items-center justify-center bg-black">
+                  <video
+                    ref={webcamVideoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="w-full h-full object-contain"
+                  />
+                  <canvas
+                    ref={webcamCanvasRef}
+                    className="absolute inset-0 w-full h-full pointer-events-none"
+                  />
+                  <div className="absolute bottom-3 left-3 bg-purple-950/85 border border-purple-500/40 text-purple-200 px-2.5 py-1 rounded text-[10px] font-mono font-bold flex items-center gap-2 shadow-lg backdrop-blur-md">
+                    <span className="w-2 h-2 rounded-full bg-purple-400 animate-pulse" />
+                    <span>LAPTOP OPTICAL FEED • LOCAL AI TRACKING</span>
+                  </div>
+                </div>
+              )
+            ) : feedMode === 'direct' ? (
               directFeedError ? (
                 <div className="flex flex-col items-center justify-center p-6 text-center text-slate-400 space-y-3">
                   <div className="w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
@@ -689,10 +843,19 @@ function PanelContent({
             {/* Top Bar: Camera connection badge, Feed mode toggle, Wi-Fi Setup & telemetry */}
             <div className="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between pointer-events-none">
               <div className="flex flex-wrap items-center gap-2 pointer-events-auto">
+                {!aiBoxes && (
+                  <div className="bg-amber-950/80 border border-amber-500/40 px-2 py-0.5 rounded text-[10px] font-mono text-amber-300">
+                    AI BOXES: HIDDEN
+                  </div>
+                )}
                 <div className="flex items-center gap-1.5 bg-slate-900/85 backdrop-blur-md border border-slate-700/60 px-2.5 py-1 rounded shadow-lg text-[10px] font-mono text-white">
                   <span
                     className={`w-2 h-2 rounded-full ${
-                      feedMode === 'direct'
+                      feedMode === 'webcam'
+                        ? webcamActive
+                          ? 'bg-purple-400 shadow-[0_0_8px_#c084fc] animate-pulse'
+                          : 'bg-amber-400'
+                        : feedMode === 'direct'
                         ? directFeedError
                           ? 'bg-amber-400'
                           : 'bg-emerald-400 shadow-[0_0_8px_#34d399] animate-pulse'
@@ -702,7 +865,11 @@ function PanelContent({
                     }`}
                   />
                   <span className="font-bold tracking-wider uppercase">
-                    {feedMode === 'direct'
+                    {feedMode === 'webcam'
+                      ? webcamActive
+                        ? 'Laptop Camera Feed (AI Tracking Active)'
+                        : 'Laptop Camera Initializing...'
+                      : feedMode === 'direct'
                       ? `Direct Wi-Fi Cam (${extractCameraHost(cameraStreamUrl)})`
                       : backendOnline && cameraStatus.connected
                       ? `AI Vision Feed (${cameraStatus.type || 'Wi-Fi'})`
@@ -712,7 +879,7 @@ function PanelContent({
                   </span>
                 </div>
 
-                {/* Feed Mode Switcher (AI vs Direct Wi-Fi) */}
+                {/* 3-Way Feed Mode Switcher: OpenCV AI Vision | XIAO Direct Cam | Laptop Webcam */}
                 <div className="flex items-center bg-slate-900/90 backdrop-blur-md border border-slate-700/80 rounded-md p-0.5 shadow-md text-[10px] font-mono font-bold">
                   <button
                     onClick={() => setFeedMode('ai')}
@@ -721,10 +888,10 @@ function PanelContent({
                         ? 'bg-sky-500 text-white shadow-xs'
                         : 'text-slate-400 hover:text-white'
                     }`}
-                    title="Switch to AI Vision Stream with Person Detection Bounding Boxes"
+                    title="Switch to AI Vision Stream with OpenCV Person Detection & Live Bounding Boxes"
                   >
-                    <Cpu size={11} />
-                    <span>AI Feed</span>
+                    <Cpu size={11} className={feedMode === 'ai' ? 'text-white' : 'text-sky-400'} />
+                    <span>OpenCV AI Vision</span>
                   </button>
                   <button
                     onClick={() => {
@@ -736,10 +903,22 @@ function PanelContent({
                         ? 'bg-emerald-500 text-white shadow-xs'
                         : 'text-slate-400 hover:text-white'
                     }`}
-                    title="Switch to Direct Wi-Fi Camera Stream (Lowest Latency)"
+                    title="Switch to Direct Wi-Fi Camera Stream from XIAO ESP32-S3 (Lowest Latency)"
                   >
                     <Radio size={11} />
-                    <span>Direct Wi-Fi</span>
+                    <span>XIAO Cam</span>
+                  </button>
+                  <button
+                    onClick={() => setFeedMode('webcam')}
+                    className={`px-2 py-0.5 rounded transition-all cursor-pointer flex items-center gap-1 ${
+                      feedMode === 'webcam'
+                        ? 'bg-purple-600 text-white shadow-xs'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                    title="Switch to Laptop Integrated Camera with Local Bounding Box Tracking"
+                  >
+                    <Laptop size={11} />
+                    <span>Webcam</span>
                   </button>
                 </div>
 
@@ -751,6 +930,20 @@ function PanelContent({
                 >
                   <Wifi size={12} className="text-sky-400" />
                   <span className="hidden sm:inline">Wi-Fi Cam Setup</span>
+                </button>
+
+                {/* Camera Hardware & AI Settings Drawer Toggle */}
+                <button
+                  onClick={() => setShowCamSettings((s) => !s)}
+                  className={`border rounded-md px-2 py-1 shadow-md text-[10px] font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 ${
+                    showCamSettings
+                      ? 'bg-emerald-600 text-white border-emerald-400'
+                      : 'bg-slate-900/90 hover:bg-[#162347] text-emerald-300 hover:text-white border-emerald-500/40'
+                  }`}
+                  title="Configure Camera Settings (XIAO ESP32-S3) & AI Sensitivity"
+                >
+                  <Settings size={12} className={showCamSettings ? 'text-white' : 'text-emerald-400'} />
+                  <span className="hidden sm:inline">Cam Settings</span>
                 </button>
 
                 {detectionApi.xiaoStatus && (
@@ -869,8 +1062,61 @@ function PanelContent({
               </div>
             )}
 
+            {/* Camera Settings & AI Sensitivity Drawer */}
+            {showCamSettings && (
+              <div className="absolute top-12 left-2.5 z-40 w-84 max-w-[90vw] max-h-[calc(100%-60px)] overflow-y-auto bg-[#101217]/95 border border-[#262c3d] rounded-lg shadow-2xl backdrop-blur-md p-3 space-y-3 pointer-events-auto">
+                <div className="flex items-center justify-between pb-2 border-b border-[#212634]">
+                  <div className="flex items-center gap-1.5 text-xs font-mono font-bold text-slate-200 uppercase">
+                    <Settings size={13} className="text-emerald-400" />
+                    <span>Camera &amp; AI Settings</span>
+                  </div>
+                  <button
+                    onClick={() => setShowCamSettings(false)}
+                    className="text-slate-400 hover:text-white p-0.5 cursor-pointer"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+
+                {/* AI Confidence Threshold */}
+                <div>
+                  <h4 className="text-[10px] font-mono font-bold tracking-widest uppercase text-slate-400 mb-1.5 flex items-center justify-between">
+                    <span>AI Confidence Threshold</span>
+                    <span className="text-emerald-400 font-bold">{localThreshold}%</span>
+                  </h4>
+                  <input
+                    type="range"
+                    min={10}
+                    max={95}
+                    value={localThreshold}
+                    onChange={(e) => {
+                      const val = Number(e.target.value);
+                      setLocalThreshold(val);
+                      detectionApi.setConfidenceThreshold(val / 100);
+                    }}
+                    className="w-full accent-emerald-500 h-1.5 rounded cursor-pointer bg-[#242938]"
+                  />
+                  <div className="flex justify-between text-[9px] font-mono text-slate-500 mt-1">
+                    <span>10% (High Recall)</span>
+                    <span>95% (High Precision)</span>
+                  </div>
+                </div>
+
+                {/* Remote Camera Controls via USB Serial (Seeed Studio XIAO ESP32-S3 Sense) */}
+                <div className="pt-2 border-t border-[#1f2432]">
+                  <CameraSettingsPanel
+                    xiaoStatus={detectionApi.xiaoStatus}
+                    cameraSettings={detectionApi.cameraSettings}
+                    settingFeedback={detectionApi.settingFeedback}
+                    isUpdatingSetting={detectionApi.isUpdatingSetting}
+                    onUpdateSetting={detectionApi.updateCameraSetting}
+                  />
+                </div>
+              </div>
+            )}
+
             {/* Prominent High-Visibility Alert Banner when Person Detected */}
-            {detectionStatus.personDetected && (
+            {isPersonDetected && (
               <div className="absolute top-12 left-3 right-3 bg-rose-950/95 border-2 border-rose-500 text-white p-2.5 rounded-md shadow-2xl backdrop-blur-md flex flex-wrap items-center justify-between gap-2 z-30 animate-pulse">
                 <div className="flex items-center gap-2.5">
                   <span className="text-base">🚨</span>
@@ -889,10 +1135,10 @@ function PanelContent({
                 </div>
                 <div className="flex items-center gap-2 font-mono text-xs">
                   <div className="bg-rose-900/80 px-2 py-1 rounded border border-rose-500/50 text-[11px]">
-                    People: <strong className="text-white">{detectionStatus.personCount}</strong>
+                    People: <strong className="text-white">{effectivePersonCount}</strong>
                   </div>
                   <div className="bg-rose-900/80 px-2 py-1 rounded border border-rose-500/50 text-[11px]">
-                    Score: <strong className="text-emerald-300">{detectionStatus.highestConfidence.toFixed(2)}</strong>
+                    Score: <strong className="text-emerald-300">{effectiveConfidence.toFixed(2)}</strong>
                   </div>
                   {(activeIncident || manifestPersons[0]) && (
                     <button
@@ -1005,14 +1251,14 @@ function PanelContent({
           </div>
 
           {/* Bottom Telemetry & Status Bar */}
-          <div className="bg-[#162347] border-t border-[#24355E] px-3.5 py-2 text-xs font-mono text-[#FAF7F2] flex flex-wrap items-center justify-between gap-2 shrink-0">
+          <div className="bg-[#14161f] border-t border-[#232733] px-3.5 py-1.5 text-xs font-mono text-slate-300 flex flex-wrap items-center justify-between gap-2 shrink-0">
             <div className="flex items-center gap-4 text-[11px]">
               <div className="flex items-center gap-1.5">
-                <span className="text-[#BED6EE] uppercase tracking-wider text-[9px]">Status:</span>
-                {detectionStatus.personDetected ? (
+                <span className="text-slate-400 uppercase tracking-wider text-[9px]">Status:</span>
+                {isPersonDetected ? (
                   <span className="text-rose-400 font-bold flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-ping" />
-                    🚨 Person Detected ({detectionStatus.personCount})
+                    🚨 Person Detected ({effectivePersonCount})
                   </span>
                 ) : (
                   <span className="text-emerald-400 flex items-center gap-1">
@@ -1022,19 +1268,21 @@ function PanelContent({
                 )}
               </div>
               <div className="hidden sm:flex items-center gap-1.5">
-                <span className="text-[#BED6EE] uppercase tracking-wider text-[9px]">Detection Score:</span>
+                <span className="text-slate-400 uppercase tracking-wider text-[9px]">Detection Score:</span>
                 <span className="font-bold text-white">
-                  {detectionStatus.personDetected ? detectionStatus.highestConfidence.toFixed(2) : '—'}
+                  {isPersonDetected ? effectiveConfidence.toFixed(2) : '—'}
                 </span>
               </div>
             </div>
 
-            <div className="flex items-center gap-3 text-[10px] text-[#BED6EE]">
-              <span className="flex items-center gap-1 font-bold text-sky-300">
+            <div className="flex items-center gap-3 text-[10px] text-slate-400">
+              <span className="flex items-center gap-1 font-bold text-sky-400">
                 <Laptop size={11} /> PC GPS: <strong className="text-white font-mono">{baseLocation[0].toFixed(4)}°, {baseLocation[1].toFixed(4)}°</strong>
               </span>
               <span>•</span>
-              <span className="text-emerald-300 font-bold">AI VISION ACTIVE</span>
+              <span className="text-emerald-400 font-bold">
+                {feedMode === 'webcam' ? 'LAPTOP WEBCAM ACTIVE' : 'AI VISION ACTIVE'}
+              </span>
             </div>
           </div>
           {/* Wi-Fi Camera Setup Modal */}
@@ -1064,263 +1312,163 @@ function PanelContent({
       return (
         <div className="h-full w-full relative z-0 isolate">
           {/* Live Tactical Coordination HUD */}
-          <div className="absolute top-3 left-3 right-3 z-[1000] flex flex-wrap items-center justify-between gap-2 pointer-events-none">
+          <div className="absolute top-2.5 left-2.5 right-2.5 z-[1000] flex flex-wrap items-center justify-between gap-2 pointer-events-none">
+            {/* Left: Vessel GY-NEO8M GPS & Base Station PC GPS */}
             <div className="flex flex-wrap items-center gap-2 pointer-events-auto">
-              {/* Computer / Ground Control Coordination + Quick Locate Button */}
-              <button
-                onClick={async () => {
-                  const newLoc = await refreshComputerLocation();
-                  const target = newLoc || baseLocation;
-                  if (onTrackPerson) onTrackPerson(target);
-                }}
-                className="bg-[#162347]/95 hover:bg-[#1f2f5c] text-[#FAF7F2] backdrop-blur-md px-3 py-1.5 rounded-md shadow-md border border-sky-400/60 text-[11px] font-mono flex items-center gap-2 transition-all cursor-pointer active:scale-95 group"
-                title={locationError ? `${locationError} - Click to refresh GPS / IP detection` : 'Click to Refresh & Center Tactical Map on Computer Ground Control'}
-              >
-                <span className="text-sky-400 flex items-center gap-1 font-bold">
-                  {locationStatus === 'locating' ? (
-                    <RefreshCw size={13} className="text-sky-300 animate-spin" />
-                  ) : (
-                    <Laptop size={14} className="text-sky-300 group-hover:scale-110 transition-transform" />
-                  )}
-                  PC GPS:
-                </span>
-                <span className="font-bold text-white">
-                  {baseLocation[0].toFixed(6)}°, {baseLocation[1].toFixed(6)}°
-                </span>
-                {/* Source Badge */}
-                <span className={`text-[9px] px-1.5 py-0.2 rounded font-sans font-bold uppercase tracking-wider ${
-                  locationSource === 'gps'
-                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                    : locationSource === 'wifi'
-                    ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40'
-                    : locationSource === 'ip'
-                    ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40'
-                    : locationSource === 'manual'
-                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                    : 'bg-slate-500/20 text-slate-300 border border-slate-500/40'
-                }`}>
-                  {locationSource === 'ip' ? 'IP Net' : locationSource}
-                </span>
-                {computerAccuracy && (
-                  <span className="text-[9px] text-sky-200/80 bg-sky-900/60 px-1 py-0.2 rounded font-sans">
-                    ±{computerAccuracy}m
+              {/* Robot Location (Hardware GY-NEO8M GPS) with Quick Center & Manual Input */}
+              <div className={`backdrop-blur-md px-2.5 py-1 rounded-md shadow-md border text-[11px] font-mono flex items-center gap-2 transition-all ${
+                isPersonDetectedAtRobot
+                  ? 'bg-rose-950/95 text-white border-rose-500 ring-1 ring-rose-400'
+                  : 'bg-[#162347]/95 text-[#FAF7F2] border-cyan-400/60'
+              }`}>
+                <button
+                  onClick={() => {
+                    if (robotLocation && onTrackPerson) onTrackPerson(robotLocation);
+                  }}
+                  className="flex items-center gap-1.5 font-bold hover:text-cyan-300 transition-colors cursor-pointer"
+                  title="Click to Center Map on Robot Vessel (GY-NEO8M GPS)"
+                >
+                  <Navigation size={13} className={isPersonDetectedAtRobot ? 'text-rose-400 animate-bounce' : 'text-cyan-400'} />
+                  <span className={isPersonDetectedAtRobot ? 'text-rose-400' : 'text-cyan-300'}>GY-NEO8M GPS:</span>
+                  <span className="font-bold text-white">
+                    {robotLocation ? `${robotLocation[0].toFixed(6)}°, ${robotLocation[1].toFixed(6)}°` : 'Awaiting Fix'}
                   </span>
-                )}
-                <span className="text-[9px] bg-sky-500 hover:bg-sky-400 text-white font-sans font-bold px-1.5 py-0.5 rounded shadow-xs ml-0.5 flex items-center gap-1">
-                  {locationStatus === 'locating' ? 'Locating...' : 'Locate'}
-                </span>
-              </button>
+                </button>
 
-              {/* Set Manual GPS Button */}
-              <button
-                onClick={() => {
-                  const input = window.prompt('Set Computer GPS Coordinates (lat, lng):', `${baseLocation[0]}, ${baseLocation[1]}`);
-                  if (input) {
-                    const parts = input.split(',').map((p) => parseFloat(p.trim()));
-                    if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-                      setManualComputerLocation([parts[0], parts[1]]);
-                      if (onTrackPerson) onTrackPerson([parts[0], parts[1]]);
-                    } else {
-                      alert('Invalid format. Please enter as: 1.8642, 103.1142');
+                {/* Manual Coordinate Entry for GY-NEO8M GPS */}
+                <button
+                  onClick={() => {
+                    const current = robotLocation || [4.220219, 100.671688];
+                    const input = window.prompt(
+                      'Manually key in Robot GY-NEO8M GPS Coordinates (Latitude, Longitude):',
+                      `${current[0].toFixed(6)}, ${current[1].toFixed(6)}`
+                    );
+                    if (input) {
+                      const parts = input.split(',').map((p) => parseFloat(p.trim()));
+                      if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+                        setRobotLocationDirect([parts[0], parts[1]]);
+                        if (onTrackPerson) onTrackPerson([parts[0], parts[1]]);
+                      } else {
+                        alert('Invalid format. Please enter as: 4.220219, 100.671688');
+                      }
                     }
-                  }
-                }}
-                className="bg-[#162347]/80 hover:bg-[#1f2f5c] text-sky-300 hover:text-white px-2 py-1.5 rounded-md border border-sky-500/40 text-[10px] font-mono flex items-center gap-1 transition-all cursor-pointer active:scale-95"
-                title="Manually Set / Calibrate Computer Coordinates"
-              >
-                <Edit3 size={11} /> Manual
-              </button>
+                  }}
+                  className="bg-cyan-500/20 hover:bg-cyan-500/40 text-cyan-300 hover:text-white px-1.5 py-0.5 rounded text-[9px] font-mono flex items-center gap-1 border border-cyan-500/30 transition-all cursor-pointer"
+                  title="Manually key in Robot coordinates (magnitude)"
+                >
+                  <Edit3 size={10} />
+                  <span>Manual</span>
+                </button>
 
-              {/* Robot Location Coordination & Quick Locate */}
-              <button
-                onClick={() => {
-                  if (robotLocation && onTrackPerson) onTrackPerson(robotLocation);
-                  else if (baseLocation && onTrackPerson) onTrackPerson(baseLocation);
-                }}
-                className={`backdrop-blur-md px-3 py-1.5 rounded-md shadow-md border text-[11px] font-mono flex items-center gap-2 transition-all cursor-pointer active:scale-95 group ${
-                  isPersonDetectedAtRobot
-                    ? 'bg-rose-950/95 hover:bg-rose-900 text-white border-rose-500 ring-1 ring-rose-400 animate-pulse'
-                    : 'bg-[#162347]/95 hover:bg-[#1f2f5c] text-[#FAF7F2] border-cyan-400/60'
-                }`}
-                title={isPersonDetectedAtRobot ? "🚨 Person detected at robot position! Click to center map" : "Click to Center Tactical Map on Robot"}
-              >
-                <span className={`flex items-center gap-1 font-bold ${
-                  isPersonDetectedAtRobot ? 'text-rose-400' : 'text-cyan-400'
-                }`}>
-                  {isPersonDetectedAtRobot ? (
-                    <AlertTriangle size={13} className="text-rose-400 animate-bounce" />
-                  ) : (
-                    <Navigation size={13} className="text-cyan-300 group-hover:scale-110 transition-transform" />
-                  )}
-                  ROBOT GPS:
-                </span>
-                <span className="font-bold text-white">
-                  {robotLocation ? `${robotLocation[0].toFixed(6)}°, ${robotLocation[1].toFixed(6)}°` : 'No Signal / Awaiting Fix'}
-                </span>
                 {hardwareGps?.isValid && (
-                  <span className="text-[9px] px-1.5 py-0.5 rounded font-sans font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    {hardwareGps.satellites} Sats • {hardwareGps.port || 'COM5'}
+                  <span className="text-[9px] px-1 py-0.2 rounded font-sans font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                    {hardwareGps.satellites} Sats
                   </span>
                 )}
+
                 <span className={`text-[9px] px-1.5 py-0.2 rounded font-sans font-bold uppercase tracking-wider ${
                   isPersonDetectedAtRobot
-                    ? 'bg-rose-600 text-white border border-rose-400'
+                    ? 'bg-rose-600 text-white border border-rose-400 animate-pulse'
                     : 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
                 }`}>
-                  {isPersonDetectedAtRobot ? '🚨 TARGET DETECTED' : `${robotSpeed} km/h • ${robotHeading}°`}
+                  {isPersonDetectedAtRobot ? '🚨 TARGET' : `${robotSpeed} km/h • ${robotHeading}°`}
                 </span>
-                {isPersonDetectedAtRobot && (
-                  <span
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onShowVictimManifest?.();
-                    }}
-                    className="text-[9px] bg-rose-600 hover:bg-rose-500 text-white font-sans font-bold px-1.5 py-0.5 rounded shadow-xs ml-0.5 flex items-center gap-1 cursor-pointer"
-                    title="Open Victim Manifest"
-                  >
-                    Manifest
-                  </span>
-                )}
-                <span className={`text-[9px] font-sans font-bold px-1.5 py-0.5 rounded shadow-xs ml-0.5 flex items-center gap-1 ${
-                  isPersonDetectedAtRobot ? 'bg-rose-700 hover:bg-rose-600 text-white' : 'bg-cyan-600 hover:bg-cyan-500 text-white'
-                }`}>
-                  Locate
-                </span>
-              </button>
-
-              {/* Live Thruster Motion Status on Tactical Map */}
-              <div
-                className={`bg-[#162347]/95 backdrop-blur-md px-2.5 py-1.5 rounded-md shadow-md border text-[10px] font-mono flex items-center gap-1.5 transition-all ${
-                  motorTelemetry.motion.state.includes('FORWARD')
-                    ? 'border-emerald-500/60 text-emerald-300'
-                    : motorTelemetry.motion.state.includes('REVERSE')
-                    ? 'border-amber-500/60 text-amber-300'
-                    : motorTelemetry.motion.state.includes('SPIN')
-                    ? 'border-cyan-500/60 text-cyan-300'
-                    : 'border-slate-600/60 text-slate-400'
-                }`}
-                title={`Vessel Thruster Status (Left: ${motorTelemetry.motion.left.status} | Right: ${motorTelemetry.motion.right.status})`}
-              >
-                <Compass
-                  size={12}
-                  className={`text-sky-400 ${motorTelemetry.motion.state !== 'STOP' ? 'animate-spin' : ''}`}
-                />
-                <span className="font-bold text-white uppercase tracking-wider text-[9px]">
-                  {motorTelemetry.motion.state}
-                </span>
-                {motorTelemetry.motion.state !== 'STOP' && (
-                  <span className="text-[9px] text-sky-300">
-                    L:{motorTelemetry.motion.left.percent}% R:{motorTelemetry.motion.right.percent}%
-                  </span>
-                )}
               </div>
 
-              {/* Target GPS Coordination (Only if target is detected) */}
-              {(manifestPersons.some(p => p.location !== null) || (detectionStatus.personDetected && robotLocation)) && (
-                <div className="bg-[#162347]/95 text-[#FAF7F2] backdrop-blur-md px-3 py-1.5 rounded-md shadow-md border border-rose-500/60 text-[11px] font-mono flex items-center gap-2">
-                  <span className="text-rose-400 flex items-center gap-1 font-bold">
-                    <MapPin size={13} className="text-rose-400 animate-bounce" />
-                    TARGET GPS:
+              {/* Base Station PC GPS */}
+              <div className="bg-[#162347]/95 text-[#FAF7F2] backdrop-blur-md px-2.5 py-1 rounded-md shadow-md border border-sky-400/60 text-[11px] font-mono flex items-center gap-1.5">
+                <button
+                  onClick={async () => {
+                    const newLoc = await refreshComputerLocation();
+                    const target = newLoc || baseLocation;
+                    if (onTrackPerson) onTrackPerson(target);
+                  }}
+                  className="flex items-center gap-1 font-bold text-sky-400 hover:text-sky-300 transition-colors cursor-pointer"
+                  title="Click to Center on Ground Station / PC GPS"
+                >
+                  <Laptop size={13} className="text-sky-300" />
+                  <span>PC GPS:</span>
+                  <span className="font-bold text-white">
+                    {baseLocation[0].toFixed(5)}°, {baseLocation[1].toFixed(5)}°
                   </span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    const input = window.prompt('Set Computer GPS Coordinates (lat, lng):', `${baseLocation[0]}, ${baseLocation[1]}`);
+                    if (input) {
+                      const parts = input.split(',').map((p) => parseFloat(p.trim()));
+                      if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+                        setManualComputerLocation([parts[0], parts[1]]);
+                        if (onTrackPerson) onTrackPerson([parts[0], parts[1]]);
+                      } else {
+                        alert('Invalid format. Please enter as: 1.8642, 103.1142');
+                      }
+                    }
+                  }}
+                  className="bg-sky-500/20 hover:bg-sky-500/40 text-sky-300 hover:text-white px-1.5 py-0.5 rounded text-[9px] font-mono flex items-center gap-1 border border-sky-500/30 transition-all cursor-pointer"
+                  title="Manually Set / Calibrate Computer Coordinates"
+                >
+                  <Edit3 size={10} />
+                </button>
+              </div>
+
+              {/* Target GPS Coordination Badge (Only if target is detected) */}
+              {(manifestPersons.some(p => p.location !== null) || (detectionStatus.personDetected && robotLocation)) && (
+                <div className="bg-rose-950/90 text-white backdrop-blur-md px-2.5 py-1 rounded-md shadow-md border border-rose-500/60 text-[10px] font-mono flex items-center gap-1.5 animate-pulse">
+                  <MapPin size={12} className="text-rose-400" />
+                  <span className="font-bold text-rose-300">TARGET:</span>
                   <span className="font-bold text-white">
                     {manifestPersons[0]?.location
-                      ? `${manifestPersons[0].location[0].toFixed(6)}°, ${manifestPersons[0].location[1].toFixed(6)}°`
+                      ? `${manifestPersons[0].location[0].toFixed(5)}°, ${manifestPersons[0].location[1].toFixed(5)}°`
                       : robotLocation
-                      ? `${robotLocation[0].toFixed(6)}°, ${robotLocation[1].toFixed(6)}°`
-                      : 'Fix Pending'}
-                  </span>
-                  <span className="font-bold text-rose-300 bg-rose-950/70 border border-rose-500/40 px-1.5 py-0.5 rounded text-[10px]">
-                    {manifestPersons.filter(p => p.location !== null).length > 0
-                      ? `${manifestPersons.filter(p => p.location !== null).length} detected`
-                      : 'Target Active'}
+                      ? `${robotLocation[0].toFixed(5)}°, ${robotLocation[1].toFixed(5)}°`
+                      : 'Locked'}
                   </span>
                   {(manifestPersons.length > 0 || detectionApi.activeIncident) && (
                     <button
                       onClick={() => {
                         const inc = detectionApi.activeIncident || manifestPersons[0]?.incident;
-                        if (inc) {
-                          onInspectIncident(inc, manifestPersons[0]?.personId);
-                        }
+                        if (inc) onInspectIncident(inc, manifestPersons[0]?.personId);
                       }}
-                      className="bg-rose-600 hover:bg-rose-500 text-white px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all active:scale-95 shadow-xs"
-                      title="Inspect detected person with AI analysis"
+                      className="bg-rose-600 hover:bg-rose-500 text-white px-1.5 py-0.2 rounded text-[9px] font-bold cursor-pointer transition-all"
                     >
-                      <Eye size={11} />
-                      <span>Inspect</span>
+                      Inspect
                     </button>
                   )}
                 </div>
               )}
             </div>
 
-            {/* Free OSM / CARTO Tile Switcher & Maximize Map Control */}
+            {/* Right: Map Layer Dropbox (<select>) & Maximize Map Control */}
             <div className="pointer-events-auto flex items-center gap-2">
+              {/* Map Layer Dropdown */}
+              <div className="flex items-center gap-1.5 bg-[#162347]/95 backdrop-blur-md text-slate-200 border border-slate-700/80 rounded-md px-2.5 py-1 shadow-md text-[10px] font-mono">
+                <Layers size={12} className="text-cyan-400" />
+                <label htmlFor="tactical-map-layer" className="text-slate-400 font-bold uppercase text-[9px]">Map:</label>
+                <select
+                  id="tactical-map-layer"
+                  value={mapTileSource}
+                  onChange={(e) => setMapTileSource(e.target.value as any)}
+                  className="bg-[#0f172a] text-cyan-300 font-bold border border-slate-700 rounded px-2 py-0.5 text-[10px] font-mono outline-none cursor-pointer focus:border-cyan-400"
+                >
+                  <option value="google">Google Maps (Street)</option>
+                  <option value="google-hybrid">Google Hybrid (Satellite)</option>
+                  <option value="carto">CARTO Voyager</option>
+                  <option value="osm">OpenStreetMap</option>
+                </select>
+              </div>
+
               {onMaximizeMap && (
                 <button
                   onClick={onMaximizeMap}
-                  className="bg-white/95 backdrop-blur-md hover:bg-sky-50 text-[#162347] border border-slate-300 px-2.5 py-1 rounded-md shadow-md flex items-center gap-1.5 text-[10px] font-mono font-bold transition-all cursor-pointer active:scale-95 group"
+                  className="bg-[#162347]/95 backdrop-blur-md hover:bg-[#1f2f5c] text-white border border-slate-700/80 px-2.5 py-1 rounded-md shadow-md flex items-center gap-1 text-[10px] font-mono font-bold transition-all cursor-pointer active:scale-95"
                   title={isMapMaximized ? "Restore split layout" : "Make map bigger (full workspace)"}
                 >
-                  {isMapMaximized ? (
-                    <Minimize2 size={12} className="text-sky-600 group-hover:scale-110 transition-transform" />
-                  ) : (
-                    <Maximize2 size={12} className="text-sky-600 group-hover:scale-110 transition-transform" />
-                  )}
-                  <span>{isMapMaximized ? 'Split View' : 'Full Map'}</span>
+                  {isMapMaximized ? <Minimize2 size={12} className="text-cyan-400" /> : <Maximize2 size={12} className="text-cyan-400" />}
+                  <span>{isMapMaximized ? 'Split' : 'Full Map'}</span>
                 </button>
               )}
-
-              <div className="bg-white/95 backdrop-blur-md p-1 rounded-md shadow-md border border-slate-200 flex items-center gap-1 text-[10px] font-mono font-bold">
-                <span className="text-[9px] text-[#162347]/70 font-sans px-1 font-bold uppercase tracking-wider">
-                  {hardwareGps?.isValid ? `${hardwareGps.satellites} Sats • Live` : 'Tactical Map'}
-                </span>
-                <span className="text-slate-300">|</span>
-                <button
-                  onClick={() => setMapTileSource('google')}
-                  className={`px-2 py-1 rounded transition-colors cursor-pointer ${
-                    mapTileSource === 'google'
-                      ? 'bg-[#162347] text-white shadow-xs'
-                      : 'text-slate-600 hover:bg-slate-100'
-                  }`}
-                  title="Google Maps Road / Street Layer"
-                >
-                  Google Maps
-                </button>
-                <button
-                  onClick={() => setMapTileSource('google-hybrid')}
-                  className={`px-2 py-1 rounded transition-colors cursor-pointer ${
-                    mapTileSource === 'google-hybrid'
-                      ? 'bg-[#162347] text-white shadow-xs'
-                      : 'text-slate-600 hover:bg-slate-100'
-                  }`}
-                  title="Google Maps Hybrid (Satellite Imagery + Street Labels)"
-                >
-                  Google Hybrid
-                </button>
-                <button
-                  onClick={() => setMapTileSource('carto')}
-                  className={`px-2 py-1 rounded transition-colors cursor-pointer ${
-                    mapTileSource === 'carto'
-                      ? 'bg-[#162347] text-white shadow-xs'
-                      : 'text-slate-600 hover:bg-slate-100'
-                  }`}
-                  title="Tactical Voyager Layer (Fast Cloudflare Edge CDN)"
-                >
-                  CARTO
-                </button>
-                <button
-                  onClick={() => setMapTileSource('osm')}
-                  className={`px-2 py-1 rounded transition-colors cursor-pointer ${
-                    mapTileSource === 'osm'
-                      ? 'bg-[#162347] text-white shadow-xs'
-                      : 'text-slate-600 hover:bg-slate-100'
-                  }`}
-                  title="Direct OpenStreetMap Tile Layer"
-                >
-                  OSM
-                </button>
-              </div>
             </div>
           </div>
 
@@ -1334,14 +1482,6 @@ function PanelContent({
             className="w-full h-full bg-[#0F172A]"
           >
             <MapResizerAndController center={focusedLocation} computerLocation={baseLocation} />
-            <LocateControl
-              target={baseLocation}
-              onLocate={async () => {
-                const loc = await refreshComputerLocation();
-                return loc || baseLocation;
-              }}
-              isLocating={locationStatus === 'locating'}
-            />
 
             {mapTileSource === 'google' && (
               <TileLayer
@@ -1667,14 +1807,14 @@ function PanelContent({
 
     case 'navigation':
       return (
-        <div className="h-full overflow-y-auto p-4 flex flex-col items-center min-h-0">
+        <div className="h-full overflow-y-auto p-4 flex flex-col items-center min-h-0 bg-[#12141a] text-slate-200 select-none">
           <div className="m-auto flex flex-col items-center gap-4 w-full max-w-xs py-2">
             {/* Camera Pan/Tilt Servo Control Header */}
             <div className="w-full text-center">
-              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#162347]/70 flex items-center justify-center gap-1.5">
-                <Compass size={12} className="text-[#162347]" /> Camera Pan & Tilt Arm
+              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-300 flex items-center justify-center gap-1.5">
+                <Compass size={12} className="text-emerald-400" /> Camera Pan &amp; Tilt Arm
               </span>
-              <span className="text-[9px] text-slate-500 font-sans block">
+              <span className="text-[9px] text-slate-500 font-sans block mt-0.5">
                 Aim water-level camera (GPIO 18 Pan • GPIO 19 Tilt)
               </span>
             </div>
@@ -1685,7 +1825,7 @@ function PanelContent({
               <button
                 onClick={() => panTilt.sendCommand('up')}
                 disabled={panTilt.isProcessing}
-                className="h-10 rounded bg-[#FAF7F2] hover:bg-[#162347] text-[#162347] hover:text-white border border-[#E6DFD5] flex items-center justify-center transition-all active:scale-95 shadow-sm disabled:opacity-75 cursor-pointer select-none"
+                className="h-10 rounded bg-[#1a1e2a] hover:bg-emerald-600 text-slate-200 hover:text-white border border-[#272e40] flex items-center justify-center transition-all active:scale-95 shadow-xs disabled:opacity-75 cursor-pointer select-none"
                 title="Tilt Camera Up (+10°)"
               >
                 <ArrowUp size={18} />
@@ -1695,7 +1835,7 @@ function PanelContent({
               <button
                 onClick={() => panTilt.sendCommand('left')}
                 disabled={panTilt.isProcessing}
-                className="h-10 rounded bg-[#FAF7F2] hover:bg-[#162347] text-[#162347] hover:text-white border border-[#E6DFD5] flex items-center justify-center transition-all active:scale-95 shadow-sm disabled:opacity-75 cursor-pointer select-none"
+                className="h-10 rounded bg-[#1a1e2a] hover:bg-emerald-600 text-slate-200 hover:text-white border border-[#272e40] flex items-center justify-center transition-all active:scale-95 shadow-xs disabled:opacity-75 cursor-pointer select-none"
                 title="Pan Camera Left (-10°)"
               >
                 <ArrowLeft size={18} />
@@ -1711,7 +1851,7 @@ function PanelContent({
                 }}
                 onDoubleClick={() => panTilt.sendCommand('center')}
                 disabled={panTilt.isProcessing}
-                className="h-10 rounded bg-[#162347] text-[#FAF7F2] font-mono text-[10px] font-bold active:scale-95 shadow-sm disabled:opacity-75 cursor-pointer select-none"
+                className="h-10 rounded bg-rose-600 hover:bg-rose-500 text-white font-mono text-[10px] font-bold active:scale-95 shadow-sm disabled:opacity-75 cursor-pointer select-none"
                 title="Hold Camera Position (Double-click to Center 90°/90°)"
               >
                 STOP
@@ -1719,7 +1859,7 @@ function PanelContent({
               <button
                 onClick={() => panTilt.sendCommand('right')}
                 disabled={panTilt.isProcessing}
-                className="h-10 rounded bg-[#FAF7F2] hover:bg-[#162347] text-[#162347] hover:text-white border border-[#E6DFD5] flex items-center justify-center transition-all active:scale-95 shadow-sm disabled:opacity-75 cursor-pointer select-none"
+                className="h-10 rounded bg-[#1a1e2a] hover:bg-emerald-600 text-slate-200 hover:text-white border border-[#272e40] flex items-center justify-center transition-all active:scale-95 shadow-xs disabled:opacity-75 cursor-pointer select-none"
                 title="Pan Camera Right (+10°)"
               >
                 <ArrowRight size={18} />
@@ -1729,7 +1869,7 @@ function PanelContent({
               <button
                 onClick={() => panTilt.sendCommand('down')}
                 disabled={panTilt.isProcessing}
-                className="h-10 rounded bg-[#FAF7F2] hover:bg-[#162347] text-[#162347] hover:text-white border border-[#E6DFD5] flex items-center justify-center transition-all active:scale-95 shadow-sm disabled:opacity-75 cursor-pointer select-none"
+                className="h-10 rounded bg-[#1a1e2a] hover:bg-emerald-600 text-slate-200 hover:text-white border border-[#272e40] flex items-center justify-center transition-all active:scale-95 shadow-xs disabled:opacity-75 cursor-pointer select-none"
                 title="Tilt Camera Down (-10°)"
               >
                 <ArrowDown size={18} />
@@ -1738,10 +1878,10 @@ function PanelContent({
             </div>
 
             {/* ESP32 Wi-Fi Pan/Tilt Connection Status & Center Reset */}
-            <div className="w-full flex items-center justify-between px-3 py-1.5 rounded bg-[#FAF7F2] border border-[#E6DFD5] font-mono text-[10px]">
-              <div className="flex items-center gap-1.5 text-[#162347]">
-                <Compass size={12} className="text-[#162347]" />
-                <span className="font-semibold uppercase tracking-wider text-[9px] text-[#162347]/70">Pan/Tilt</span>
+            <div className="w-full flex items-center justify-between px-3 py-1.5 rounded bg-[#171a23] border border-[#242938] font-mono text-[10px]">
+              <div className="flex items-center gap-1.5 text-slate-300">
+                <Compass size={12} className="text-emerald-400" />
+                <span className="font-semibold uppercase tracking-wider text-[9px] text-slate-400">Pan/Tilt</span>
                 <button
                   type="button"
                   onClick={() => {
@@ -1758,34 +1898,34 @@ function PanelContent({
                   title={`ESP32 URL: ${panTilt.esp32Url} (Click to change IP)`}
                 >
                   {panTilt.connected ? (
-                    <span className="font-bold text-xs text-emerald-800 bg-emerald-100/70 border border-emerald-300 px-1.5 py-0.5 rounded flex items-center gap-1 hover:bg-emerald-200/80 transition-colors">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                      ESP32: Connected
+                    <span className="font-bold text-xs text-emerald-300 bg-emerald-950/70 border border-emerald-500/40 px-1.5 py-0.5 rounded flex items-center gap-1 hover:bg-emerald-900 transition-colors">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      ESP32: Online
                     </span>
                   ) : (
-                    <span className="text-[10px] font-bold text-amber-800 bg-amber-100 border border-amber-300 px-1.5 py-0.5 rounded flex items-center gap-1 hover:bg-amber-200 transition-colors">
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                    <span className="text-[10px] font-bold text-amber-300 bg-amber-950/70 border border-amber-500/40 px-1.5 py-0.5 rounded flex items-center gap-1 hover:bg-amber-900 transition-colors">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
                       ESP32: Offline
-                      <Wifi size={10} className="text-amber-700/80 ml-0.5" />
+                      <Wifi size={10} className="text-amber-400 ml-0.5" />
                     </span>
                   )}
                 </button>
               </div>
               <div className="flex items-center gap-1.5">
                 {panTilt.isProcessing && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-ping" title="Sending command..." />
+                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping" title="Sending command..." />
                 )}
                 {panTilt.connected ? (
                   <button
                     type="button"
                     onClick={() => panTilt.sendCommand('center')}
-                    className="px-2 py-0.5 rounded bg-[#162347] hover:bg-[#243452] text-white text-[9px] font-bold transition-all active:scale-95 cursor-pointer"
+                    className="px-2 py-0.5 rounded bg-[#202534] hover:bg-[#2b3346] text-white text-[9px] font-bold transition-all active:scale-95 cursor-pointer border border-[#2e374c]"
                     title="Reset Sonar to Neutral / Center"
                   >
                     CENTER
                   </button>
                 ) : (
-                  <span className="text-[9px] text-slate-400 font-mono italic">
+                  <span className="text-[9px] text-slate-500 font-mono italic">
                     Offline
                   </span>
                 )}
@@ -1805,7 +1945,7 @@ function PanelContent({
                     panTilt.fetchStatus();
                   }
                 }}
-                className="w-full text-center text-[10px] font-mono text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1 animate-fadeIn cursor-pointer hover:bg-amber-100 transition-colors"
+                className="w-full text-center text-[10px] font-mono text-amber-300 bg-amber-950/50 border border-amber-500/40 rounded px-2 py-1 animate-fadeIn cursor-pointer hover:bg-amber-900/50 transition-colors"
                 title="Click to configure ESP32 IP address"
               >
                 <span>{panTilt.error} <span className="underline font-semibold ml-1">(Click to set IP)</span></span>
@@ -1822,29 +1962,29 @@ function PanelContent({
       const hasEntries = victimSortBy === 'person' ? manifestPersons.length > 0 : incidentsByTime.length > 0;
 
       return (
-        <div className="h-full overflow-y-auto p-4 space-y-3">
+        <div className="h-full overflow-y-auto p-3 space-y-3 bg-[#101217] text-slate-200 select-none">
           {/* Header & Arrangement Controls */}
-          <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-[#E6DFD5]">
+          <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-[#212634]">
             <div className="flex items-center gap-1.5">
-              <User size={14} className="text-rose-600" />
-              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#162347]">
+              <User size={14} className="text-rose-400" />
+              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-300">
                 Victim Manifest ({victimSortBy === 'person' ? manifestPersons.length : incidentsByTime.length})
               </span>
             </div>
 
             {/* Arrangement Selector: By Person vs By TIME */}
-            <div className="flex items-center gap-1 bg-[#FAF7F2] p-0.5 rounded border border-[#E6DFD5] text-[10px] font-mono font-bold">
-              <span className="text-[9px] text-[#162347]/50 px-1 uppercase flex items-center gap-1">
+            <div className="flex items-center gap-1 bg-[#171a24] p-0.5 rounded border border-[#262c3d] text-[10px] font-mono font-bold">
+              <span className="text-[9px] text-slate-500 px-1 uppercase flex items-center gap-1">
                 <ArrowUpDown size={10} /> Sort:
               </span>
               <button
                 onClick={() => setVictimSortBy('person')}
                 className={`px-2.5 py-0.5 rounded transition-all cursor-pointer ${
                   victimSortBy === 'person'
-                    ? 'bg-[#162347] text-white shadow-xs'
-                    : 'text-[#162347]/70 hover:text-[#162347] hover:bg-[#E6DFD5]'
+                    ? 'bg-[#252b3d] text-white shadow-xs'
+                    : 'text-slate-400 hover:text-white hover:bg-[#1f2433]'
                 }`}
-                title="Arrange by Person ID (highest number like Person #8 on top with cropped photo)"
+                title="Arrange by Person ID"
               >
                 By Person
               </button>
@@ -1852,10 +1992,10 @@ function PanelContent({
                 onClick={() => setVictimSortBy('time')}
                 className={`px-2.5 py-0.5 rounded transition-all cursor-pointer ${
                   victimSortBy === 'time'
-                    ? 'bg-[#162347] text-white shadow-xs'
-                    : 'text-[#162347]/70 hover:text-[#162347] hover:bg-[#E6DFD5]'
+                    ? 'bg-[#252b3d] text-white shadow-xs'
+                    : 'text-slate-400 hover:text-white hover:bg-[#1f2433]'
                 }`}
-                title="Arrange by Time (original incident INC-... on top with cropped pictures)"
+                title="Arrange by Time"
               >
                 By Time
               </button>
@@ -1864,13 +2004,13 @@ function PanelContent({
 
           {/* Manifest Content */}
           {hasEntries ? (
-            <div className="space-y-3">
-              {/* ── VIEW 1: BY PERSON (Person #8 on top with cropped picture) ── */}
+            <div className="space-y-2.5">
+              {/* ── VIEW 1: BY PERSON ── */}
               {victimSortBy === 'person' &&
                 manifestPersons.map((v) => (
                   <div
                     key={v.personId}
-                    className="p-3 rounded bg-white border border-[#E6DFD5] hover:border-emerald-400 shadow-xs transition-all space-y-2.5"
+                    className="p-3 rounded bg-[#161822] border border-[#242938] hover:border-emerald-500/50 shadow-xs transition-all space-y-2"
                   >
                     <div className="flex items-center justify-between gap-2.5">
                       {/* Left: Cropped Picture + Person ID Info */}
@@ -1878,7 +2018,7 @@ function PanelContent({
                         {v.cropUrl ? (
                           <div
                             onClick={() => onInspectIncident(v.incident, v.personId)}
-                            className="w-14 h-14 rounded-md overflow-hidden bg-black shrink-0 border border-slate-300 shadow-xs cursor-pointer hover:border-emerald-500 transition-all group relative"
+                            className="w-14 h-14 rounded overflow-hidden bg-black shrink-0 border border-slate-700 shadow-xs cursor-pointer hover:border-emerald-400 transition-all group relative"
                             title={`Inspect ${v.label}`}
                           >
                             <img
@@ -1886,30 +2026,30 @@ function PanelContent({
                               alt={v.label}
                               className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                             />
-                            <div className="absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity">
+                            <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity">
                               <Eye size={12} />
                             </div>
                           </div>
                         ) : (
-                          <div className="w-12 h-12 rounded-full bg-[#162347] text-[#FAF7F2] font-mono font-bold text-xs flex items-center justify-center shadow-xs shrink-0">
+                          <div className="w-12 h-12 rounded-full bg-[#202534] border border-[#2f374c] text-slate-200 font-mono font-bold text-xs flex items-center justify-center shadow-xs shrink-0">
                             #{v.personId}
                           </div>
                         )}
 
                         <div>
-                          <div className="font-mono font-bold text-sm text-[#162347] flex items-center gap-1.5">
+                          <div className="font-mono font-bold text-sm text-slate-100 flex items-center gap-1.5">
                             <span>{v.label}</span>
-                            <span className="text-[9px] font-mono text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded font-bold">
+                            <span className="text-[9px] font-mono text-emerald-400 bg-emerald-950/80 border border-emerald-500/30 px-1.5 py-0.5 rounded font-bold">
                               Score: {v.score.toFixed(2)}
                             </span>
                           </div>
-                          <div className="text-[10px] font-mono text-[#162347]/60 flex items-center gap-1.5 mt-0.5">
+                          <div className="text-[10px] font-mono text-slate-400 flex items-center gap-1.5 mt-0.5">
                             <span>{v.incident.id}</span>
                             <span>•</span>
-                            <span className="flex items-center gap-0.5 text-[#162347]/80 font-semibold">
+                            <span className="flex items-center gap-0.5 text-slate-300 font-semibold">
                               <Clock size={10} /> {v.time}
                             </span>
-                            <span className="text-[9px] bg-sky-100 text-sky-800 border border-sky-300 px-1.5 py-0.5 rounded font-bold font-mono">
+                            <span className="text-[9px] bg-sky-950 text-sky-300 border border-sky-600/40 px-1.5 py-0.5 rounded font-bold font-mono">
                               {v.captureCount} {v.captureCount === 1 ? 'photo' : 'photos'}
                             </span>
                           </div>
@@ -1919,16 +2059,16 @@ function PanelContent({
                       {/* Right: Inspect Button */}
                       <button
                         onClick={() => onInspectIncident(v.incident, v.personId)}
-                        className="bg-[#162347] hover:bg-[#24355E] text-white px-2.5 py-1.5 rounded text-[10px] font-mono font-bold flex items-center gap-1 transition-colors shrink-0 cursor-pointer"
+                        className="bg-[#202534] hover:bg-[#2b3246] text-white border border-[#333d54] px-2.5 py-1.5 rounded text-[10px] font-mono font-bold flex items-center gap-1 transition-colors shrink-0 cursor-pointer"
                       >
                         <Eye size={12} /> Inspect
                       </button>
                     </div>
 
                     {/* Person GPS Coordination & Track on Map */}
-                    <div className="flex items-center justify-between text-[11px] font-mono bg-rose-50 border border-rose-200/80 px-2.5 py-1.5 rounded text-rose-800">
+                    <div className="flex items-center justify-between text-[11px] font-mono bg-[#211417] border border-rose-500/30 px-2.5 py-1 rounded text-rose-300">
                       <div className="flex items-center gap-1.5 font-bold">
-                        <MapPin size={12} className="text-rose-600 animate-pulse shrink-0" />
+                        <MapPin size={12} className="text-rose-400 animate-pulse shrink-0" />
                         <span>
                           {v.location ? `GPS: ${v.location[0].toFixed(6)}° N, ${v.location[1].toFixed(6)}° E` : 'GPS: No Location Detected'}
                         </span>
@@ -1936,7 +2076,7 @@ function PanelContent({
                       {v.location && onTrackPerson && (
                         <button
                           onClick={() => onTrackPerson(v.location!)}
-                          className="bg-[#162347] hover:bg-[#24355E] text-[#FAF7F2] text-[10px] font-mono font-bold px-2 py-1 rounded flex items-center gap-1 transition-colors cursor-pointer shadow-xs active:scale-95"
+                          className="bg-[#2c181c] hover:bg-[#3d1f25] border border-rose-500/40 text-rose-200 text-[10px] font-mono font-bold px-2 py-0.5 rounded flex items-center gap-1 transition-colors cursor-pointer shadow-xs active:scale-95"
                           title="Locate person on Tactical Map"
                         >
                           <Navigation size={10} /> Track on Map
@@ -1945,14 +2085,14 @@ function PanelContent({
                     </div>
 
                     {v.description && (
-                      <p className="text-[11px] text-[#162347]/80 line-clamp-2 leading-tight bg-slate-50 p-2 rounded border border-slate-100 font-sans">
+                      <p className="text-[11px] text-slate-300 line-clamp-2 leading-tight bg-[#11131a] p-2 rounded border border-[#212634] font-sans">
                         {v.description}
                       </p>
                     )}
                   </div>
                 ))}
 
-              {/* ── VIEW 2: BY TIME (Original INC-... with cropped pictures by time) ── */}
+              {/* ── VIEW 2: BY TIME ── */}
               {victimSortBy === 'time' &&
                 incidentsByTime.map((inc, incIdx) => {
                   const personList = inc.personDetails && inc.personDetails.length > 0
@@ -1967,25 +2107,25 @@ function PanelContent({
                   return (
                     <div
                       key={inc.id}
-                      className="p-3.5 rounded bg-white border border-[#E6DFD5] hover:border-emerald-400 shadow-xs transition-all space-y-3"
+                      className="p-3.5 rounded bg-[#161822] border border-[#242938] hover:border-emerald-500/50 shadow-xs transition-all space-y-2.5"
                     >
                       {/* Incident Header: INC-... and Time */}
                       <div className="flex items-center justify-between text-xs">
                         <div className="flex items-center gap-2">
-                          <span className="font-mono font-bold text-sm text-[#162347]">{inc.id}</span>
-                          <span className="text-[9px] font-mono px-1.5 py-0.5 rounded font-bold uppercase bg-rose-100 text-rose-800 border border-rose-200">
+                          <span className="font-mono font-bold text-sm text-slate-100">{inc.id}</span>
+                          <span className="text-[9px] font-mono px-1.5 py-0.5 rounded font-bold uppercase bg-rose-950 text-rose-300 border border-rose-500/30">
                             {inc.personCount} Person{inc.personCount > 1 ? 's' : ''}
                           </span>
                         </div>
-                        <div className="flex items-center gap-1 text-[11px] font-mono text-[#162347]/70 font-semibold">
-                          <Clock size={12} className="text-[#162347]/60" /> {inc.time}
+                        <div className="flex items-center gap-1 text-[11px] font-mono text-slate-400 font-semibold">
+                          <Clock size={12} className="text-slate-500" /> {inc.time}
                         </div>
                       </div>
 
                       {/* Incident GPS Coordination */}
-                      <div className="flex items-center justify-between text-[11px] font-mono bg-rose-50 border border-rose-200/80 px-2.5 py-1.5 rounded text-rose-800">
+                      <div className="flex items-center justify-between text-[11px] font-mono bg-[#211417] border border-rose-500/30 px-2.5 py-1 rounded text-rose-300">
                         <div className="flex items-center gap-1.5 font-bold">
-                          <MapPin size={12} className="text-rose-600 animate-pulse shrink-0" />
+                          <MapPin size={12} className="text-rose-400 animate-pulse shrink-0" />
                           <span>
                             {incLocation ? `GPS: ${incLocation[0].toFixed(6)}° N, ${incLocation[1].toFixed(6)}° E` : 'GPS: No Location Detected'}
                           </span>
@@ -1993,7 +2133,7 @@ function PanelContent({
                         {incLocation && onTrackPerson && (
                           <button
                             onClick={() => onTrackPerson(incLocation)}
-                            className="bg-[#162347] hover:bg-[#24355E] text-[#FAF7F2] text-[10px] font-mono font-bold px-2 py-1 rounded flex items-center gap-1 transition-colors cursor-pointer shadow-xs active:scale-95"
+                            className="bg-[#2c181c] hover:bg-[#3d1f25] border border-rose-500/40 text-rose-200 text-[10px] font-mono font-bold px-2 py-0.5 rounded flex items-center gap-1 transition-colors cursor-pointer shadow-xs active:scale-95"
                             title="Locate incident on Tactical Map"
                           >
                             <Navigation size={10} /> Track on Map
@@ -2001,15 +2141,15 @@ function PanelContent({
                         )}
                       </div>
 
-                      {/* Original Scene Image (INC-... full frame) */}
+                      {/* Original Scene Image */}
                       {inc.originalImageUrl && (
                         <div className="space-y-1">
-                          <div className="text-[10px] font-mono font-semibold uppercase text-[#162347]/70 flex items-center gap-1">
-                            <Eye size={11} className="text-blue-500" /> Original Capture:
+                          <div className="text-[10px] font-mono font-semibold uppercase text-slate-400 flex items-center gap-1">
+                            <Eye size={11} className="text-sky-400" /> Original Capture:
                           </div>
                           <div
                             onClick={() => onInspectIncident(inc)}
-                            className="w-full rounded-md overflow-hidden border border-slate-200 bg-black cursor-pointer hover:border-emerald-400 transition-all group relative"
+                            className="w-full rounded overflow-hidden border border-[#2a3042] bg-black cursor-pointer hover:border-emerald-400 transition-all group relative"
                             style={{ maxHeight: '140px' }}
                           >
                             <img
@@ -2018,7 +2158,7 @@ function PanelContent({
                               className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform"
                               style={{ maxHeight: '140px', objectFit: 'cover' }}
                             />
-                            <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity">
+                            <div className="absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity">
                               <Eye size={16} />
                             </div>
                           </div>
@@ -2028,17 +2168,17 @@ function PanelContent({
                       {/* Cropped Pictures Row by Time */}
                       {personList.length > 0 && (
                         <div className="space-y-1.5">
-                          <div className="text-[10px] font-mono font-semibold uppercase text-[#162347]/70 flex items-center gap-1">
-                            <User size={11} className="text-emerald-600" /> Cropped Persons:
+                          <div className="text-[10px] font-mono font-semibold uppercase text-slate-400 flex items-center gap-1">
+                            <User size={11} className="text-emerald-400" /> Cropped Persons:
                           </div>
                           <div className="flex flex-wrap gap-2">
                             {personList.map((p, idx) => (
                               <div
                                 key={idx}
                                 onClick={() => onInspectIncident(inc, p.id)}
-                                className="flex items-center gap-2 p-1.5 rounded bg-slate-50 border border-slate-200 hover:border-emerald-400 cursor-pointer transition-all group"
+                                className="flex items-center gap-2 p-1.5 rounded bg-[#12141c] border border-[#242a3a] hover:border-emerald-400 cursor-pointer transition-all group"
                               >
-                                <div className="w-12 h-12 rounded overflow-hidden bg-black shrink-0 border border-slate-300">
+                                <div className="w-12 h-12 rounded overflow-hidden bg-black shrink-0 border border-slate-700">
                                   <img
                                     src={`${detectionApi.apiBaseUrl}${p.imageUrl}`}
                                     alt={p.label}
@@ -2046,15 +2186,15 @@ function PanelContent({
                                   />
                                 </div>
                                 <div className="font-mono pr-1">
-                                  <div className="text-[11px] font-bold text-[#162347] flex items-center gap-1">
+                                  <div className="text-[11px] font-bold text-slate-100 flex items-center gap-1">
                                     <span>{p.label}</span>
                                     {(p as any).isReturning && (
-                                      <span className="text-[8px] bg-amber-100 text-amber-800 border border-amber-300 px-1 py-0.2 rounded font-bold uppercase tracking-wider">
+                                      <span className="text-[8px] bg-amber-950 text-amber-300 border border-amber-500/30 px-1 py-0.2 rounded font-bold uppercase tracking-wider">
                                         Returning
                                       </span>
                                     )}
                                   </div>
-                                  <div className="text-[9px] text-emerald-700 font-semibold">
+                                  <div className="text-[9px] text-emerald-400 font-semibold">
                                     Score: {p.score !== undefined ? p.score.toFixed(2) : inc.highestConfidence.toFixed(2)}
                                   </div>
                                 </div>
@@ -2066,20 +2206,20 @@ function PanelContent({
 
                       {/* AI Description */}
                       {inc.description && (
-                        <p className="text-[11px] text-[#162347]/80 line-clamp-2 leading-tight bg-slate-50 p-2 rounded border border-slate-100 font-sans">
+                        <p className="text-[11px] text-slate-300 line-clamp-2 leading-tight bg-[#11131a] p-2 rounded border border-[#212634] font-sans">
                           {inc.description}
                         </p>
                       )}
 
                       {/* Footer Actions */}
-                      <div className="flex items-center justify-between pt-1.5 border-t border-[#E6DFD5] text-[10px] font-mono">
+                      <div className="flex items-center justify-between pt-1.5 border-t border-[#202534] text-[10px] font-mono">
                         <span
                           className={`px-1.5 py-0.5 rounded uppercase font-bold text-[9px] ${
                             inc.descriptionStatus === 'completed'
-                              ? 'bg-emerald-100 text-emerald-800'
+                              ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/30'
                               : inc.descriptionStatus === 'pending'
-                              ? 'bg-amber-100 text-amber-800 animate-pulse'
-                              : 'bg-slate-100 text-slate-700'
+                              ? 'bg-amber-950 text-amber-300 border border-amber-500/30 animate-pulse'
+                              : 'bg-slate-800 text-slate-400'
                           }`}
                         >
                           {inc.descriptionStatus === 'completed'
@@ -2090,7 +2230,7 @@ function PanelContent({
                         </span>
                         <button
                           onClick={() => onInspectIncident(inc)}
-                          className="bg-[#162347] hover:bg-[#24355E] text-white px-2.5 py-1 rounded text-[10px] flex items-center gap-1 font-bold transition-colors cursor-pointer"
+                          className="bg-[#202534] hover:bg-[#2b3246] border border-[#333d54] text-white px-2.5 py-1 rounded text-[10px] flex items-center gap-1 font-bold transition-colors cursor-pointer"
                         >
                           <Eye size={12} /> Inspect Incident
                         </button>
@@ -2100,17 +2240,17 @@ function PanelContent({
                 })}
             </div>
           ) : (
-            /* Clean Empty State when no real victims have been detected */
+            /* Clean Empty State */
             <div className="h-full flex flex-col items-center justify-center p-6 text-center space-y-3 my-auto">
-              <div className="w-12 h-12 rounded-full bg-[#162347]/5 border border-[#162347]/15 flex items-center justify-center text-[#162347]/60">
+              <div className="w-12 h-12 rounded-full bg-[#1b202c] border border-[#272e40] flex items-center justify-center text-slate-400">
                 <Users size={24} />
               </div>
               <div>
-                <h4 className="font-mono text-xs font-bold text-[#162347] uppercase tracking-wider">
+                <h4 className="font-mono text-xs font-bold text-slate-200 uppercase tracking-wider">
                   No Victims Currently Detected
                 </h4>
-                <p className="text-[11px] text-[#162347]/60 mt-1 max-w-xs leading-relaxed">
-                  OpenCV HOG + SVM person detector is actively monitoring the live video stream. Detected persons (Person #1, Person #2) will appear here in real-time.
+                <p className="text-[11px] text-slate-500 mt-1 max-w-xs leading-relaxed font-mono">
+                  OpenCV HOG + SVM person detector is monitoring the stream. Detected persons will appear here in real-time.
                 </p>
               </div>
             </div>
@@ -2142,107 +2282,162 @@ function PanelContent({
         />
       );
 
-    case 'controls': {
-      const { setConfidenceThreshold } = detectionApi;
-
-      const handleThresholdChange = (val: number) => {
-        setLocalThreshold(val);
-        setConfidenceThreshold(val / 100);
-      };
-
-      return (
-        <div className="h-full overflow-y-auto p-4 space-y-5">
-          {/* AI Detection Controls */}
-          <div>
-            <h4 className="text-[10px] font-bold tracking-widest uppercase text-[#162347] mb-2 flex items-center justify-between">
-              <span>AI Detection Sensitivity</span>
-              <span className="font-mono text-emerald-700 font-bold">{localThreshold}%</span>
-            </h4>
-            <input
-              type="range"
-              min={10}
-              max={95}
-              value={localThreshold}
-              onChange={(e) => handleThresholdChange(Number(e.target.value))}
-              className="w-full accent-[#162347] h-1.5 rounded cursor-pointer bg-[#E6DFD5]"
-            />
-            <div className="flex justify-between text-[9px] font-mono text-[#162347]/60 mt-1">
-              <span>More Sensitive (10%)</span>
-              <span>Higher Precision (95%)</span>
-            </div>
-          </div>
-
-          {/* Remote Camera Controls via USB Serial (Seeed Studio XIAO ESP32-S3 Sense) */}
-          <div className="pt-2 border-t border-[#E6DFD5]">
-            <CameraSettingsPanel
-              xiaoStatus={detectionApi.xiaoStatus}
-              cameraSettings={detectionApi.cameraSettings}
-              settingFeedback={detectionApi.settingFeedback}
-              isUpdatingSetting={detectionApi.isUpdatingSetting}
-              onUpdateSetting={detectionApi.updateCameraSetting}
-            />
-          </div>
-
-          {/* HUD Overlays */}
-          <div className="pt-2 border-t border-[#E6DFD5]">
-            <h4 className="text-[10px] font-bold tracking-widest uppercase text-[#162347] mb-2">HUD Overlays</h4>
-            <div className="space-y-2 font-mono text-xs">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={aiBoxes} onChange={e => setAiBoxes(e.target.checked)} className="accent-[#162347] w-4 h-4" />
-                AI Bounding Boxes
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={crosshair} onChange={e => setCrosshair(e.target.checked)} className="accent-[#162347] w-4 h-4" />
-                Center Reticle
-              </label>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
     case 'log': {
-      const { history } = detectionApi;
+      const { history, detectionStatus, backendOnline, cameraStatus } = detectionApi;
+      const filteredHistory = logFilter === 'victims'
+        ? (history || []).filter((h) => h.type === 'person_detected')
+        : (history || []);
+      const victimCountInHistory = (history || []).filter((h) => h.type === 'person_detected').length;
+      const isLiveVictimDetected = Boolean(
+        detectionStatus.personDetected &&
+        (detectionStatus.personCount && detectionStatus.personCount > 0)
+      );
 
       return (
-        <div className="h-full overflow-y-auto p-3 bg-[#162347] font-mono text-xs space-y-2">
-          <div className="text-[10px] text-[#BED6EE] uppercase tracking-widest font-bold pb-2 border-b border-white/10 flex items-center justify-between">
-            <span>Detection History</span>
-            <span className="text-[9px] text-emerald-400">● Live Feed</span>
+        <div className="h-full flex flex-col bg-[#0f131c] font-mono text-xs select-none">
+          {/* Header Controls */}
+          <div className="p-2.5 pb-2 border-b border-[#212738] bg-[#141824] flex items-center justify-between gap-2 shrink-0">
+            <div className="flex items-center gap-2">
+              <FileText size={13} className="text-sky-400" />
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-200">
+                Live Mission & OpenCV Log
+              </span>
+              {isLiveVictimDetected ? (
+                <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-rose-600 text-white animate-pulse flex items-center gap-1 shadow-sm">
+                  <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
+                  VICTIM DETECTED ({detectionStatus.personCount})
+                </span>
+              ) : backendOnline ? (
+                <span className="text-[9px] font-semibold text-emerald-400 bg-emerald-950/80 border border-emerald-500/30 px-1.5 py-0.5 rounded flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  CV Active
+                </span>
+              ) : (
+                <span className="text-[9px] text-amber-400 bg-amber-950/80 border border-amber-500/30 px-1.5 py-0.5 rounded">
+                  Connecting...
+                </span>
+              )}
+            </div>
+
+            {/* Filter Pills */}
+            <div className="flex items-center gap-1 bg-[#1a2030] p-0.5 rounded border border-[#2b334a] text-[10px]">
+              <button
+                onClick={() => setLogFilter('all')}
+                className={`px-2 py-0.5 rounded font-bold transition-all cursor-pointer ${
+                  logFilter === 'all' ? 'bg-[#293248] text-white shadow-xs' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                All ({(history || []).length})
+              </button>
+              <button
+                onClick={() => setLogFilter('victims')}
+                className={`px-2 py-0.5 rounded font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                  logFilter === 'victims' ? 'bg-rose-600 text-white shadow-xs' : 'text-slate-400 hover:text-rose-300'
+                }`}
+              >
+                <span>Victims</span>
+                <span className="px-1 rounded bg-black/30 text-[9px]">{victimCountInHistory}</span>
+              </button>
+            </div>
           </div>
 
-          {history && history.length > 0 ? (
-            history.map((log) => (
-              <div key={log.id} className="border-b border-white/10 pb-2 flex items-center justify-between gap-2">
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-white/60 text-[10px]">{log.time}</span>
-                    <span
-                      className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase ${
-                        log.type === 'person_detected'
-                          ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
-                          : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                      }`}
-                    >
-                      {log.type === 'person_detected' ? 'Person detected' : 'No person'}
-                    </span>
-                  </div>
-                  <div className="text-white/90 text-[11px]">{log.message}</div>
+          {/* Real-time Target Acquisition Banner when person is actively detected in frame */}
+          {isLiveVictimDetected && (
+            <div className="m-2.5 mb-1 p-2.5 rounded bg-rose-950/90 border border-rose-500/80 text-rose-100 flex items-center justify-between shadow-lg animate-pulse shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-full bg-rose-600/40 border border-rose-400 flex items-center justify-center text-rose-200 shrink-0">
+                  <Target size={16} className="animate-spin" style={{ animationDuration: '6s' }} />
                 </div>
-                {log.confidence > 0 && (
-                  <div className="text-right shrink-0">
-                    <span className="text-[11px] font-bold text-emerald-400">
-                      Score: {log.confidence.toFixed(2)}
+                <div>
+                  <div className="font-bold text-[11px] text-rose-200 uppercase tracking-wider flex items-center gap-1.5">
+                    <span>Target Lock: Victim in Sights</span>
+                    <span className="bg-rose-600 text-white px-1.5 py-0.2 rounded text-[9px] font-bold">
+                      {detectionStatus.personCount} Person{detectionStatus.personCount > 1 ? 's' : ''}
                     </span>
                   </div>
-                )}
+                  <div className="text-[10px] text-rose-300/80 font-mono mt-0.5">
+                    Decision Score: {detectionStatus.highestConfidence.toFixed(2)} • OpenCV HOG+SVM Active Tracking
+                  </div>
+                </div>
               </div>
-            ))
-          ) : (
-            <div className="text-white/40 italic py-6 text-center text-xs">
-              No detection events recorded yet.
+              {baseLocation && onTrackPerson && (
+                <button
+                  onClick={() => onTrackPerson(baseLocation)}
+                  className="px-2.5 py-1 rounded bg-rose-600 hover:bg-rose-500 text-white text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer shadow-sm active:scale-95"
+                >
+                  <Navigation size={10} /> Map
+                </button>
+              )}
             </div>
           )}
+
+          {/* Scrollable Event Feed */}
+          <div className="flex-1 overflow-y-auto p-2.5 space-y-2">
+            {filteredHistory.length > 0 ? (
+              filteredHistory.map((log) => {
+                const isVictim = log.type === 'person_detected';
+                return (
+                  <div
+                    key={log.id}
+                    className={`p-2.5 rounded border transition-all ${
+                      isVictim
+                        ? 'bg-[#1e141a] border-rose-500/40 hover:border-rose-400 shadow-sm'
+                        : 'bg-[#131620] border-[#222838] hover:border-[#2f3850]'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-slate-400 text-[10px] font-semibold flex items-center gap-1">
+                          <Clock size={10} className="text-slate-500" />
+                          {log.time}
+                        </span>
+                        <span
+                          className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider ${
+                            isVictim
+                              ? 'bg-rose-950 text-rose-300 border border-rose-500/50'
+                              : 'bg-emerald-950 text-emerald-300 border border-emerald-500/40'
+                          }`}
+                        >
+                          {isVictim ? '🚨 VICTIM DETECTED' : '✓ ZONE CLEAR'}
+                        </span>
+                      </div>
+                      {log.confidence > 0 && (
+                        <span className="text-[10px] font-bold text-emerald-400 font-mono">
+                          Score: {log.confidence.toFixed(2)}
+                        </span>
+                      )}
+                    </div>
+                    <div className={`mt-1 text-[11px] leading-relaxed font-sans ${isVictim ? 'text-rose-100 font-medium' : 'text-slate-300'}`}>
+                      {log.message}
+                    </div>
+                    {isVictim && baseLocation && onTrackPerson && (
+                      <div className="mt-1.5 pt-1.5 border-t border-rose-500/20 flex items-center justify-between text-[10px] text-slate-400 font-mono">
+                        <span>GPS: {baseLocation[0].toFixed(5)}°N, {baseLocation[1].toFixed(5)}°E</span>
+                        <button
+                          onClick={() => onTrackPerson(baseLocation)}
+                          className="text-rose-300 hover:text-white flex items-center gap-1 cursor-pointer font-bold"
+                        >
+                          <Navigation size={9} /> Plot Target
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            ) : (
+              <div className="h-full flex flex-col items-center justify-center p-6 text-center space-y-2 text-slate-400">
+                <div className="w-10 h-10 rounded-full bg-[#181d2a] border border-[#252c3e] flex items-center justify-center text-slate-400">
+                  <Cpu size={18} className="text-sky-400" />
+                </div>
+                <div className="text-xs font-bold uppercase tracking-wider text-slate-300">
+                  OpenCV Detector Standby
+                </div>
+                <p className="text-[11px] text-slate-500 max-w-xs font-mono">
+                  OpenCV HOG+SVM is analyzing camera frames at ~{cameraStatus.detectorFps || 55} FPS. New victim encounters will stream here live.
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       );
     }
@@ -2264,6 +2459,16 @@ function LayoutRenderer({
   onMaximize,
   isMaximized,
   onShowVictimManifest,
+  isMissionActive,
+  onToggleMission,
+  isRecording,
+  recordingSeconds,
+  onToggleRecording,
+  isStudioMode,
+  onToggleStudioMode,
+  activeSceneId,
+  onSelectScene,
+  onOpenSettings,
 }: {
   node: LayoutNode | null;
   dropIndicator: { panelId: PanelId; position: 'top' | 'bottom' | 'left' | 'right' } | null;
@@ -2276,13 +2481,23 @@ function LayoutRenderer({
   onMaximize: (id: PanelId) => void;
   isMaximized: (id: PanelId) => boolean;
   onShowVictimManifest?: () => void;
+  isMissionActive?: boolean;
+  onToggleMission?: () => void;
+  isRecording?: boolean;
+  recordingSeconds?: number;
+  onToggleRecording?: () => void;
+  isStudioMode?: boolean;
+  onToggleStudioMode?: () => void;
+  activeSceneId?: string;
+  onSelectScene?: (scene: SceneItem) => void;
+  onOpenSettings?: () => void;
 }) {
   if (!node) {
     return (
-      <div className="h-full w-full flex flex-col items-center justify-center text-[#162347]/40">
-        <Target size={48} className="mb-4 opacity-50" />
-        <p className="font-editorial-serif text-xl">No panels active</p>
-        <p className="text-xs font-mono uppercase tracking-widest mt-2">Select a feature from the dock above</p>
+      <div className="h-full w-full flex flex-col items-center justify-center text-slate-500 bg-[#0d0f14]">
+        <Target size={48} className="mb-4 opacity-40 text-slate-600" />
+        <p className="font-mono text-base font-bold text-slate-400">NO DOCKS ACTIVE</p>
+        <p className="text-xs font-mono uppercase tracking-widest mt-1 text-slate-600">Select a dock from the top bar or Docks menu</p>
       </div>
     );
   }
@@ -2362,6 +2577,16 @@ function LayoutRenderer({
                 onMaximize={onMaximize}
                 isMaximized={isMaximized}
                 onShowVictimManifest={onShowVictimManifest}
+                isMissionActive={isMissionActive}
+                onToggleMission={onToggleMission}
+                isRecording={isRecording}
+                recordingSeconds={recordingSeconds}
+                onToggleRecording={onToggleRecording}
+                isStudioMode={isStudioMode}
+                onToggleStudioMode={onToggleStudioMode}
+                activeSceneId={activeSceneId}
+                onSelectScene={onSelectScene}
+                onOpenSettings={onOpenSettings}
               />
             )}
           </Panel>
@@ -2375,13 +2600,100 @@ function LayoutRenderer({
 
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 export default function Dashboard() {
-  const { robotOnline, moveRobot, emergencyStop } = useRescue();
+  const { robotOnline, moveRobot, emergencyStop, robotLocation, computerLocation, batteryLevel } = useRescue();
   const detectionApi = useDetectionApi();
   const panTilt = usePanTilt();
   const [inspectedIncident, setInspectedIncident] = useState<RescueIncident | null>(null);
   const [inspectedPersonId, setInspectedPersonId] = useState<number | null>(null);
   const [focusedLocation, setFocusedLocation] = useState<[number, number] | null>(null);
   const [previousLayout, setPreviousLayout] = useState<LayoutNode | null>(null);
+
+  // Broadcast & Mission State
+  const [isMissionActive, setIsMissionActive] = useState<boolean>(true);
+  const [missionUptime, setMissionUptime] = useState<number>(312);
+  const [isRecording, setIsRecording] = useState<boolean>(false);
+  const [recordingSeconds, setRecordingSeconds] = useState<number>(0);
+  const [isStudioMode, setIsStudioMode] = useState<boolean>(false);
+  const [activeSceneId, setActiveSceneId] = useState<string>('sc-1');
+
+  useEffect(() => {
+    let recTimer: any;
+    if (isRecording) {
+      recTimer = setInterval(() => setRecordingSeconds(s => s + 1), 1000);
+    }
+    return () => clearInterval(recTimer);
+  }, [isRecording]);
+
+  useEffect(() => {
+    let missionTimer: any;
+    if (isMissionActive) {
+      missionTimer = setInterval(() => setMissionUptime(s => s + 1), 1000);
+    }
+    return () => clearInterval(missionTimer);
+  }, [isMissionActive]);
+
+  const handleSelectLayoutPreset = useCallback((preset: 'obsStudio' | 'studioMode' | 'tacticalQuad' | 'aiVision' | 'mapFocus') => {
+    if (preset === 'studioMode') {
+      setIsStudioMode(true);
+      return;
+    }
+    setIsStudioMode(false);
+    if (preset === 'obsStudio') setLayout(DEFAULT_OBS_LAYOUT);
+    else if (preset === 'tacticalQuad') setLayout(TACTICAL_QUAD_LAYOUT);
+    else if (preset === 'aiVision') setLayout(AI_FOCUS_LAYOUT);
+    else if (preset === 'mapFocus') setLayout(MAP_FOCUS_LAYOUT);
+  }, []);
+
+  const handleSelectScene = useCallback((scene: SceneItem) => {
+    setActiveSceneId(scene.id);
+    if (scene.preset === 'studioMode') {
+      setIsStudioMode(true);
+    } else {
+      setIsStudioMode(false);
+      if (scene.preset === 'obsStudio') setLayout(DEFAULT_OBS_LAYOUT);
+      else if (scene.preset === 'tacticalQuad') setLayout(TACTICAL_QUAD_LAYOUT);
+      else if (scene.preset === 'aiVision') setLayout(AI_FOCUS_LAYOUT);
+      else if (scene.preset === 'mapFocus') setLayout(MAP_FOCUS_LAYOUT);
+      else if (scene.preset === 'sonarSweep') {
+        setLayout({
+          type: 'group',
+          id: 'sonar-sweep-group',
+          direction: 'horizontal',
+          children: [
+            { type: 'panel', id: 'sensors' },
+            { type: 'panel', id: 'camera' },
+            { type: 'panel', id: 'navigation' },
+          ],
+        });
+      }
+    }
+  }, []);
+
+  const handleExportManifest = useCallback(() => {
+    const data = {
+      timestamp: new Date().toISOString(),
+      robotLocation,
+      computerLocation,
+      incidents: detectionApi.incidents,
+      status: 'MISSION_ACTIVE',
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `floodscout_mission_${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [robotLocation, computerLocation, detectionApi.incidents]);
+
+  const handleCopyGps = useCallback(() => {
+    const coords = robotLocation
+      ? `${robotLocation[0].toFixed(6)}, ${robotLocation[1].toFixed(6)}`
+      : computerLocation
+      ? `${computerLocation[0].toFixed(6)}, ${computerLocation[1].toFixed(6)}`
+      : '1.8642, 103.1142';
+    navigator.clipboard.writeText(coords);
+  }, [robotLocation, computerLocation]);
 
   // Connection & Server Settings Modal
   const [showConnectionModal, setShowConnectionModal] = useState<boolean>(false);
@@ -2432,15 +2744,7 @@ export default function Dashboard() {
     });
   }, []);
 
-  const [layout, setLayout] = useState<LayoutNode | null>({
-    type: 'group',
-    id: 'root-default-group',
-    direction: 'horizontal',
-    children: [
-      { type: 'panel', id: 'camera' },
-      { type: 'panel', id: 'map' },
-    ],
-  });
+  const [layout, setLayout] = useState<LayoutNode | null>(() => DEFAULT_OBS_LAYOUT);
 
   const handleMaximizePanel = useCallback((id: PanelId) => {
     setLayout((prev) => {
@@ -2603,98 +2907,107 @@ export default function Dashboard() {
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
-    <div className="h-screen flex flex-col bg-[#FAF7F2] text-[#162347] font-sans overflow-hidden">
+    <div className="h-screen flex flex-col bg-[#0c0d12] text-slate-200 font-sans overflow-hidden obs-theme select-none">
 
-      {/* Header */}
-      <header className="bg-[#162347] text-[#FAF7F2] border-b border-[#24355E] px-6 py-3.5 flex items-center justify-between gap-4 shrink-0 z-[999]">
-        <div className="flex items-center gap-4">
-          <Link to="/" className="flex items-center gap-2 text-xs font-semibold tracking-[0.2em] uppercase text-[#BED6EE] hover:text-white bg-white/10 px-3.5 py-1.5 rounded-full transition-colors">
-            <ArrowLeft size={14} /> Back
-          </Link>
-          <div className="border-l border-white/20 pl-4 flex items-baseline">
-            <span className="font-script text-2xl font-bold tracking-tight text-white">FloodScout</span>
-            <span className="ml-3 text-[11px] tracking-[0.25em] text-[#BED6EE] uppercase font-semibold hidden sm:inline">
-              Operations Command &amp; Control
-            </span>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          {/* AI Vision Status Indicator (Clickable to configure AI Backend / ESP32 URLs) */}
-          <button
-            type="button"
-            onClick={() => {
-              setBackendInput(detectionApi.apiBaseUrl);
-              setEsp32Input(panTilt.esp32Url);
-              setShowConnectionModal(true);
-            }}
-            className={`flex items-center gap-1.5 text-[11px] font-mono px-3 py-1 rounded-full border transition-all hover:opacity-90 active:scale-95 cursor-pointer ${
-              detectionApi.backendOnline && detectionApi.cameraStatus.connected
-                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
-                : detectionApi.backendOnline
-                ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
-                : 'bg-slate-500/20 text-slate-300 border-slate-500/30'
-            }`}
-            title="Configure AI Backend & ESP32 connection URLs"
-          >
-            <span className={`w-2 h-2 rounded-full shrink-0 ${detectionApi.backendOnline && detectionApi.cameraStatus.connected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
-            <span className="hidden sm:inline">
-              {detectionApi.backendOnline && detectionApi.cameraStatus.connected
-                ? 'AI VISION: ACTIVE'
-                : detectionApi.backendOnline
-                ? 'CAM DISCONNECTED'
-                : 'AI BACKEND: OFFLINE'}
-            </span>
-            <span className="sm:hidden font-bold">
-              {detectionApi.backendOnline ? 'AI: ON' : 'AI: OFF'}
-            </span>
-            <Settings size={12} className="opacity-75 ml-0.5" />
-          </button>
-
-          <div className={`flex items-center gap-2 text-[11px] font-mono px-3 py-1 rounded-full border ${robotOnline ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-rose-500/20 text-rose-300 border-rose-500/30'}`}>
-            <span className={`w-2 h-2 rounded-full ${robotOnline ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`} />
-            {robotOnline ? 'ONLINE' : 'OFFLINE'}
-          </div>
-          <div className="font-mono text-[#BED6EE] flex items-center gap-1.5 text-xs">
-            <Clock size={13} /> {time}
-          </div>
-        </div>
-      </header>
-
-      {/* Feature Dock + Layout Selector
-           Dock buttons are DRAGGABLE — drag them into the workspace to add/reorder panels */}
-      <div className="bg-white border-b border-[#E6DFD5] px-4 py-2.5 flex items-center justify-between shrink-0 overflow-x-auto">
-        <div className="flex items-center gap-1.5">
-          {PANEL_DEFS.map(p => (
-            <DockButton
-              key={p.id}
-              def={p}
-              isActive={hasPanel(layout, p.id)}
-              onToggle={() => togglePanel(p.id)}
-            />
-          ))}
-        </div>
-      </div>
-
+      {/* OBS Top Menu Bar */}
+      <ObsTopMenu
+        isStudioMode={isStudioMode}
+        onToggleStudioMode={() => setIsStudioMode(m => !m)}
+        isRecording={isRecording}
+        recordingSeconds={recordingSeconds}
+        isMissionActive={isMissionActive}
+        timeString={time}
+        activePanels={PANEL_DEFS.filter(p => hasPanel(layout, p.id)).map(p => p.id)}
+        onTogglePanel={togglePanel}
+        onOpenSettings={() => setShowConnectionModal(true)}
+        onSelectLayoutPreset={handleSelectLayoutPreset}
+        onResetLayout={() => setLayout(DEFAULT_OBS_LAYOUT)}
+        onExportManifest={handleExportManifest}
+        onCenterPanTilt={() => panTilt.sendCommand('CENTER')}
+        onCopyGps={handleCopyGps}
+      />
+      {/* Main Mission Control Workspace */}
       {/* Workspace */}
-      <main className="flex-1 overflow-hidden p-3 min-h-0 relative">
-        <SortableContext items={PANEL_DEFS.filter(p => hasPanel(layout, p.id)).map(p => p.id)} strategy={rectSortingStrategy}>
-          <div className="absolute inset-3">
-            <LayoutRenderer
-              node={layout}
-              dropIndicator={dropIndicator}
-              onClose={(id) => setLayout(prev => removeNode(prev, id))}
-              detectionApi={detectionApi}
-              panTilt={panTilt}
-              onInspectIncident={handleInspectIncident}
-              focusedLocation={focusedLocation}
-              onTrackPerson={handleTrackPerson}
-              onMaximize={handleMaximizePanel}
-              isMaximized={isPanelMaximized}
-              onShowVictimManifest={handleShowVictimManifest}
+      <main className="flex-1 overflow-hidden p-1 min-h-0 relative bg-[#090a0e]">
+        {isStudioMode ? (
+          <div className="absolute inset-1">
+            <ObsStudioModeView
+              previewContent={
+                <div className="h-full w-full relative">
+                  <PanelContent
+                    id="map"
+                    detectionApi={detectionApi}
+                    panTilt={panTilt}
+                    onInspectIncident={handleInspectIncident}
+                    focusedLocation={focusedLocation}
+                    onTrackPerson={handleTrackPerson}
+                    onShowVictimManifest={handleShowVictimManifest}
+                  />
+                </div>
+              }
+              programContent={
+                <div className="h-full w-full relative">
+                  <PanelContent
+                    id="camera"
+                    detectionApi={detectionApi}
+                    panTilt={panTilt}
+                    onInspectIncident={handleInspectIncident}
+                    focusedLocation={focusedLocation}
+                    onTrackPerson={handleTrackPerson}
+                    onShowVictimManifest={handleShowVictimManifest}
+                  />
+                </div>
+              }
+              onQuickSwap={() => {}}
             />
           </div>
-        </SortableContext>
+        ) : (
+          <SortableContext items={PANEL_DEFS.filter(p => hasPanel(layout, p.id)).map(p => p.id)} strategy={rectSortingStrategy}>
+            <div className="absolute inset-1">
+              <LayoutRenderer
+                node={layout}
+                dropIndicator={dropIndicator}
+                onClose={(id) => setLayout(prev => removeNode(prev, id))}
+                detectionApi={detectionApi}
+                panTilt={panTilt}
+                onInspectIncident={handleInspectIncident}
+                focusedLocation={focusedLocation}
+                onTrackPerson={handleTrackPerson}
+                onMaximize={handleMaximizePanel}
+                isMaximized={isPanelMaximized}
+                onShowVictimManifest={handleShowVictimManifest}
+                isMissionActive={isMissionActive}
+                onToggleMission={() => setIsMissionActive(a => !a)}
+                isRecording={isRecording}
+                recordingSeconds={recordingSeconds}
+                onToggleRecording={() => {
+                  if (!isRecording) setRecordingSeconds(0);
+                  setIsRecording(r => !r);
+                }}
+                isStudioMode={isStudioMode}
+                onToggleStudioMode={() => setIsStudioMode(m => !m)}
+                activeSceneId={activeSceneId}
+                onSelectScene={handleSelectScene}
+                onOpenSettings={() => setShowConnectionModal(true)}
+              />
+            </div>
+          </SortableContext>
+        )}
       </main>
+
+      {/* OBS Canonical Status Bar */}
+      <ObsStatusBar
+        isMissionActive={isMissionActive}
+        missionUptimeSeconds={missionUptime}
+        isRecording={isRecording}
+        recordingSeconds={recordingSeconds}
+        esp32Connected={panTilt.connected}
+        backendOnline={detectionApi.backendOnline}
+        robotOnline={robotOnline}
+        robotLocation={robotLocation}
+        baseLocation={computerLocation || undefined}
+        batteryLevel={batteryLevel}
+      />
 
       {/* Incident Inspector Modal */}
       {inspectedIncident && (

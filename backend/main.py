@@ -348,6 +348,12 @@ def capture_and_detect_loop():
                         state.history.insert(0, history_entry)
                         if len(state.history) > 50:
                             state.history.pop()
+
+                        if state.incident_manager:
+                            state.incident_manager._broadcast_event_sync({
+                                "type": "detection_log",
+                                "entry": history_entry
+                            })
                     else:
                         # Existing person(s) continuously visible — keep HUD alert active without repeating log entries
                         alert_active = True
@@ -367,6 +373,13 @@ def capture_and_detect_loop():
                         state.history.pop()
                     alert_active = False
 
+                    if state.incident_manager:
+                        state.incident_manager._broadcast_event_sync({
+                            "type": "detection_log",
+                            "entry": history_entry
+                        })
+
+                status_changed = (person_detected != prev_detection_state)
                 prev_detection_state = person_detected
 
                 state.current_summary = {
@@ -377,6 +390,12 @@ def capture_and_detect_loop():
                     "alertActive": alert_active,
                     "detections": detections
                 }
+
+                if status_changed and state.incident_manager:
+                    state.incident_manager._broadcast_event_sync({
+                        "type": "detection_status",
+                        "status": state.current_summary
+                    })
 
                 # Encode frame to JPEG for MJPEG stream — quality 80 for sharp HD output
                 ret, buffer = cv2.imencode(".jpg", display_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])

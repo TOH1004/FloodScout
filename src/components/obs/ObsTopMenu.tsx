@@ -77,13 +77,13 @@ export function ObsTopMenu({
   };
 
   const DOCK_LIST: { id: PanelId; label: string }[] = [
-    { id: 'camera', label: 'USV Recon Stream' },
-    { id: 'map', label: 'Tactical GIS Map' },
-    { id: 'navigation', label: 'Thrusters & Pan-Tilt (PTZ)' },
-    { id: 'sensors', label: 'Victim Distance Sonar (HC-SR04)' },
-    { id: 'victims', label: 'Victim Geolocation Manifest' },
-    { id: 'status', label: 'Hardware System Telemetry' },
-    { id: 'log', label: 'Search Mission Log' },
+    { id: 'camera', label: 'LIVE RECONNAISSANCE' },
+    { id: 'map', label: 'TACTICAL MAP' },
+    { id: 'navigation', label: 'CAMERA CONTROL (SG90)' },
+    { id: 'victims', label: 'TARGET INFORMATION' },
+    { id: 'status', label: 'SYSTEM & PROPULSION STATUS' },
+    { id: 'sensors', label: 'FRONT RANGE SENSOR (HC-SR04)' },
+    { id: 'log', label: 'MISSION & DETECTION HISTORY' },
   ];
 
   return (

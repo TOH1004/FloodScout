@@ -18,7 +18,7 @@ export const DEFAULT_MISSION_LAYOUT: LayoutNode = {
   children: [
     {
       type: 'group',
-      id: 'mission-upper-row',
+      id: 'mission-top-row',
       direction: 'horizontal',
       children: [
         { type: 'panel', id: 'camera' },
@@ -27,15 +27,17 @@ export const DEFAULT_MISSION_LAYOUT: LayoutNode = {
     },
     {
       type: 'group',
-      id: 'mission-bottom-row',
+      id: 'mission-second-row',
       direction: 'horizontal',
       children: [
         { type: 'panel', id: 'navigation' },
-        { type: 'panel', id: 'sensors' },
         { type: 'panel', id: 'victims' },
-        { type: 'panel', id: 'log' },
         { type: 'panel', id: 'status' },
       ],
+    },
+    {
+      type: 'panel',
+      id: 'log',
     },
   ],
 };

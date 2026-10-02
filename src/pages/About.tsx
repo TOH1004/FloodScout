@@ -438,18 +438,7 @@ export default function About() {
 
             {/* The Hard-Won Lesson */}
             <div className="max-w-2xl mx-auto space-y-3.5 pt-4 border-t border-[#162347]/15 text-center font-writing text-xs sm:text-sm text-[#162347]/90 leading-relaxed">
-              <p>But this project taught us that building something real is rarely a straight line.</p>
-              
-              <div className="flex flex-wrap items-center justify-center gap-1.5 text-xs font-writing font-bold text-[#162347]">
-                <span>We started with a design.</span>
-                <span>&bull;</span>
-                <span>We got stuck.</span>
-                <span>&bull;</span>
-                <span>We asked for guidance.</span>
-                <span>&bull;</span>
-                <span>We changed our approach.</span>
-              </div>
-
+             
               <p>We spent hours testing and debugging.</p>
               <p className="font-writing font-bold text-xs sm:text-sm text-[#162347]">
                 And eventually, we got it working.
@@ -457,7 +446,7 @@ export default function About() {
 
               <div className="py-2">
                 <p className="text-xs font-writing text-[#162347]/70 italic mb-1">
-                  Because innovation doesn't happen when the first idea works perfectly.
+                  Innovation doesn't happen when the first idea works perfectly.
                 </p>
                 <div className="p-2.5 rounded-xl bg-[#F6F0DC] border border-[#162347] inline-block shadow-xs">
                   <p className="font-writing font-bold text-xs sm:text-sm text-[#162347]">

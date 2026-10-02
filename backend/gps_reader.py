@@ -39,6 +39,12 @@ LNG_REGEX = re.compile(r"(?:Longitude|Lng):\s*([+-]?\d+(?:\.\d+)?)", re.IGNORECA
 SAT_REGEX = re.compile(r"(?:\[GPS Satellites\]|Satellites:?)\s*(\d+)", re.IGNORECASE)
 ALT_REGEX = re.compile(r"(?:Altitude|Alt):\s*([+-]?\d+(?:\.\d+)?)\s*m?", re.IGNORECASE)
 DIST_REGEX = re.compile(r"\[Distance\]\s*([+-]?\d+(?:\.\d+)?)\s*cm", re.IGNORECASE)
+MOTOR_REGEX = re.compile(
+    r"\[(?:Left BLDC|Left Motor)\]:\s*([^\|]+?)\s*\|\s*\[(?:Right BLDC|Right Motor)\]:\s*([^\-]+?)\s*-->\s*Motion:\s*([^\r\n]+)",
+    re.IGNORECASE
+)
+PWM_EXTRACT_REGEX = re.compile(r"\[(\d+)\s*us\]", re.IGNORECASE)
+PERCENT_EXTRACT_REGEX = re.compile(r"(\d+)%", re.IGNORECASE)
 
 
 def haversine_distance_m(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
@@ -86,6 +92,16 @@ class GpsSerialReader:
         self.last_update_time: Optional[float] = None
         self.last_status_message: str = "Initializing GPS receiver..."
         self.history: List[Dict[str, Any]] = []
+
+        # Motor Telemetry State
+        self.motor_state: Dict[str, Any] = {
+            "state": "STOP",
+            "direction": "STOP",
+            "rc_connected": False,
+            "left": {"us": 1500, "percent": 0, "dir": "STOP", "status": "STOP [1500us]"},
+            "right": {"us": 1500, "percent": 0, "dir": "STOP", "status": "STOP [1500us]"},
+            "last_seen": None
+        }
 
         # Temporary buffer for parsing incoming line pairs
         self._pending_lat: Optional[float] = None
@@ -192,6 +208,57 @@ class GpsSerialReader:
 
     def _process_line(self, line: str):
         """Parse incoming line and trigger update when full fix is assembled."""
+        # 0. Check Motor Telemetry
+        if "RC signal lost!" in line:
+            with self._lock:
+                self.motor_state = {
+                    "state": "STOP",
+                    "direction": "STOP",
+                    "rc_connected": False,
+                    "left": {"us": 1500, "percent": 0, "dir": "STOP", "status": "STOP [1500us]"},
+                    "right": {"us": 1500, "percent": 0, "dir": "STOP", "status": "STOP [1500us]"},
+                    "last_seen": time.time()
+                }
+        else:
+            motor_match = MOTOR_REGEX.search(line)
+            if motor_match:
+                left_str = motor_match.group(1).strip()
+                right_str = motor_match.group(2).strip()
+                m_state = motor_match.group(3).strip()
+
+                left_us_m = PWM_EXTRACT_REGEX.search(left_str)
+                right_us_m = PWM_EXTRACT_REGEX.search(right_str)
+                left_pct_m = PERCENT_EXTRACT_REGEX.search(left_str)
+                right_pct_m = PERCENT_EXTRACT_REGEX.search(right_str)
+
+                left_us = int(left_us_m.group(1)) if left_us_m else 1500
+                right_us = int(right_us_m.group(1)) if right_us_m else 1500
+                left_pct = int(left_pct_m.group(1)) if left_pct_m else 0
+                right_pct = int(right_pct_m.group(1)) if right_pct_m else 0
+
+                left_dir = "FWD" if left_us > 1530 else ("REV" if left_us < 1470 else "STOP")
+                right_dir = "FWD" if right_us > 1530 else ("REV" if right_us < 1470 else "STOP")
+
+                with self._lock:
+                    self.motor_state = {
+                        "state": m_state,
+                        "direction": m_state,
+                        "rc_connected": True,
+                        "left": {
+                            "us": left_us,
+                            "percent": left_pct,
+                            "dir": left_dir,
+                            "status": left_str
+                        },
+                        "right": {
+                            "us": right_us,
+                            "percent": right_pct,
+                            "dir": right_dir,
+                            "status": right_str
+                        },
+                        "last_seen": time.time()
+                    }
+
         # 1. Check Distance from Ultrasonic Sensor
         dist_match = DIST_REGEX.search(line)
         if dist_match:
@@ -261,7 +328,7 @@ class GpsSerialReader:
             self._pending_sat = None
             self._pending_alt = None
 
-    def update_from_wifi(self, gps_data: Dict[str, Any], distance_cm: Optional[float] = None):
+    def update_from_wifi(self, gps_data: Dict[str, Any], distance_cm: Optional[float] = None, motor_data: Optional[Dict[str, Any]] = None):
         """Update telemetry from ESP32 /api/sensors HTTP response."""
         now = time.time()
         self.connected = True
@@ -269,6 +336,14 @@ class GpsSerialReader:
 
         if distance_cm is not None and self.distance_callback:
             self.distance_callback(distance_cm)
+
+        if motor_data and isinstance(motor_data, dict):
+            with self._lock:
+                self.motor_state = {
+                    **self.motor_state,
+                    **motor_data,
+                    "last_seen": now
+                }
 
         if not isinstance(gps_data, dict):
             return
@@ -372,6 +447,14 @@ class GpsSerialReader:
                 "last_update_age_sec": round(age_sec, 1) if age_sec is not None else None,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "history_count": len(self.history),
+            }
+
+    def get_motor_status(self) -> Dict[str, Any]:
+        """Return current BLDC motor telemetry snapshot."""
+        with self._lock:
+            return {
+                "success": True,
+                "motors": dict(self.motor_state)
             }
 
 

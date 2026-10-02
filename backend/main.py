@@ -213,10 +213,10 @@ def esp32_sensor_wifi_loop():
     """Polls ESP32 /api/sensors over Wi-Fi every 800ms."""
     import urllib.request
     import json
-    esp32_url = (os.getenv("ESP32_PAN_TILT_URL") or os.getenv("ESP32_BASE_URL") or "http://10.185.112.106").rstrip("/")
-    logger.info(f"ESP32 Wi-Fi Sensor poller active targeting {esp32_url}/api/sensors")
+    logger.info("ESP32 Wi-Fi Sensor poller active.")
     while state.running:
         try:
+            esp32_url = (ESP32_PAN_TILT_URL or os.getenv("ESP32_PAN_TILT_URL") or os.getenv("ESP32_BASE_URL") or "http://10.185.112.106").rstrip("/")
             target_url = f"{esp32_url}/api/sensors"
             req = urllib.request.Request(
                 target_url,
@@ -228,12 +228,13 @@ def esp32_sensor_wifi_loop():
                 if data.get("success"):
                     dist_cm = data.get("distance_cm")
                     gps_data = data.get("gps", {})
+                    motor_data = data.get("motors", {})
 
                     if dist_cm is not None:
                         _on_hardware_distance(float(dist_cm))
 
-                    if state.gps_reader and gps_data:
-                        state.gps_reader.update_from_wifi(gps_data, dist_cm)
+                    if state.gps_reader:
+                        state.gps_reader.update_from_wifi(gps_data, dist_cm, motor_data)
         except Exception:
             pass
         time.sleep(0.8)
@@ -775,8 +776,32 @@ def pan_tilt_command(payload: PanTiltCommandPayload):
 
 @app.get("/api/pan-tilt/status")
 @app.get("/pan-tilt/status")
-def pan_tilt_status():
+def pan_tilt_status(target: Optional[str] = Query(None)):
     """Return the current simulated or physical Pan & Tilt servo angles and connection state."""
+    import urllib.request
+    import json
+
+    global ESP32_PAN_TILT_URL
+    active_base = (target.rstrip("/") if target and target.strip() else ESP32_PAN_TILT_URL).rstrip("/")
+    if active_base and not active_base.startswith("mock") and not active_base.startswith("serial"):
+        target_url = f"{active_base}/api/pan-tilt/status"
+        try:
+            req = urllib.request.Request(
+                target_url,
+                headers={"User-Agent": "FloodScout-Backend-PanTiltProxy", "Accept": "application/json"}
+            )
+            with urllib.request.urlopen(req, timeout=1.5) as resp:
+                body = resp.read().decode("utf-8")
+                if target and target.strip():
+                    ESP32_PAN_TILT_URL = active_base
+                data = json.loads(body)
+                return JSONResponse(content=data, headers={"Access-Control-Allow-Origin": "*"})
+        except Exception as e:
+            return JSONResponse(
+                status_code=504,
+                content={"success": False, "connected": False, "error": f"ESP32 unreachable at {active_base}: {e}"},
+                headers={"Access-Control-Allow-Origin": "*"}
+            )
     return state.pan_tilt_controller.get_status()
 
 
@@ -939,32 +964,53 @@ async def incident_websocket(websocket: WebSocket):
 # ─── ESP32 Wi-Fi Pan/Tilt Proxy (Enables mobile HTTPS clients to control ESP32) ───
 ESP32_PAN_TILT_URL = (os.getenv("ESP32_PAN_TILT_URL") or "http://10.185.112.106").rstrip("/")
 
+@app.api_route("/api/esp32/config", methods=["GET", "POST"])
+def configure_esp32_url(ip: Optional[str] = Query(None), target: Optional[str] = Query(None)):
+    """Dynamically update active ESP32 IP/URL used by backend background poller and proxies."""
+    global ESP32_PAN_TILT_URL
+    new_ip = ip or target
+    if new_ip and new_ip.strip():
+        cleaned = new_ip.strip()
+        if not cleaned.startswith("http://") and not cleaned.startswith("https://"):
+            cleaned = f"http://{cleaned}"
+        ESP32_PAN_TILT_URL = cleaned.rstrip("/")
+        logger.info(f"[ESP32 Config] Active ESP32 base URL updated to: {ESP32_PAN_TILT_URL}")
+    return JSONResponse(
+        content={"success": True, "esp32_url": ESP32_PAN_TILT_URL},
+        headers={"Access-Control-Allow-Origin": "*"}
+    )
+
 @app.get("/api/pan-tilt/{command}")
-def proxy_pan_tilt_command(command: str):
+def proxy_pan_tilt_command(command: str, target: Optional[str] = Query(None)):
     """Proxies pan/tilt commands to ESP32 over local Wi-Fi.
     Allows mobile phones accessing over HTTPS to control the ESP32 without Mixed Content blocks."""
     import urllib.request
     import urllib.error
     import json
     
+    global ESP32_PAN_TILT_URL
     cmd = command.lower().strip()
-    target_url = f"{ESP32_PAN_TILT_URL}/api/pan-tilt/{cmd}"
+    active_base = (target.rstrip("/") if target and target.strip() else ESP32_PAN_TILT_URL).rstrip("/")
+    target_url = f"{active_base}/api/pan-tilt/{cmd}"
     try:
         req = urllib.request.Request(
             target_url,
             headers={"User-Agent": "FloodScout-Backend-Proxy", "Accept": "*/*"}
         )
-        with urllib.request.urlopen(req, timeout=2.5) as response:
+        with urllib.request.urlopen(req, timeout=2.0) as response:
             body = response.read().decode("utf-8")
+            if target and target.strip():
+                ESP32_PAN_TILT_URL = active_base
             try:
-                return json.loads(body)
+                data = json.loads(body)
+                return JSONResponse(content=data, headers={"Access-Control-Allow-Origin": "*"})
             except Exception:
-                return {"success": True, "command": cmd, "message": body}
+                return JSONResponse(content={"success": True, "command": cmd, "message": body}, headers={"Access-Control-Allow-Origin": "*"})
     except urllib.error.URLError as e:
         logger.warning(f"ESP32 Wi-Fi unreachable at {target_url}: {e}")
         return JSONResponse(
             status_code=504,
-            content={"success": False, "error": f"ESP32 unreachable at {ESP32_PAN_TILT_URL}: {e}", "connected": False},
+            content={"success": False, "error": f"ESP32 unreachable at {active_base}: {e}", "connected": False},
             headers={"Access-Control-Allow-Origin": "*"}
         )
     except Exception as e:
@@ -1035,12 +1081,13 @@ class ObstacleUpdatePayload(BaseModel):
 
 @app.get("/api/sensors")
 @app.get("/api/esp32/sensors")
-def proxy_esp32_sensors():
+def proxy_esp32_sensors(target: Optional[str] = Query(None)):
     """Proxy ESP32 /api/sensors over Wi-Fi with CORS and fallback."""
     import urllib.request
     import json
-    esp32_url = (os.getenv("ESP32_PAN_TILT_URL") or os.getenv("ESP32_BASE_URL") or "http://10.185.112.106").rstrip("/")
-    target_url = f"{esp32_url}/api/sensors"
+    global ESP32_PAN_TILT_URL
+    active_base = (target.rstrip("/") if target and target.strip() else ESP32_PAN_TILT_URL).rstrip("/")
+    target_url = f"{active_base}/api/sensors"
     try:
         req = urllib.request.Request(
             target_url,
@@ -1048,6 +1095,8 @@ def proxy_esp32_sensors():
         )
         with urllib.request.urlopen(req, timeout=1.8) as response:
             body = response.read().decode("utf-8")
+            if target and target.strip():
+                ESP32_PAN_TILT_URL = active_base
             data = json.loads(body)
             if data.get("success"):
                 dist_cm = data.get("distance_cm")
@@ -1075,6 +1124,23 @@ def proxy_esp32_sensors():
             },
             headers={"Access-Control-Allow-Origin": "*"}
         )
+
+@app.get("/api/motors")
+@app.get("/api/sensor/motors")
+def get_motor_telemetry():
+    """Retrieve real-time BLDC dual motor telemetry from ESP32 or serial bridge."""
+    if state.gps_reader:
+        return state.gps_reader.get_motor_status()
+    return {
+        "success": True,
+        "motors": {
+            "state": "STOP",
+            "direction": "STOP",
+            "rc_connected": False,
+            "left": {"us": 1500, "percent": 0, "dir": "STOP", "status": "STOP [1500us]"},
+            "right": {"us": 1500, "percent": 0, "dir": "STOP", "status": "STOP [1500us]"}
+        }
+    }
 
 @app.get("/api/sensor/obstacle")
 @app.get("/sensor/obstacle")

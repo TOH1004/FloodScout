@@ -4,59 +4,52 @@
 #include <TinyGPSPlus.h>
 
 // ============================================================================
-// FloodScout — Comprehensive Multi-Controller
-// 1. Pan & Tilt Arm (Pins 18 & 19) — SG90 / MG90S Positional Servos
-// 2. Ultrasonic Obstacle Sensor (TRIG 5, ECHO 4) — Ringing/Glitch Filtered
-// 3. NEO-8M Hardware GPS (UART2: RXD2 12, TXD2 13) — TinyGPSPlus NMEA
-// 4. Physical Push Buttons (Pins 25, 26, 27, 14) — Debounced & Non-blocking
-// 5. Dual ESC Thruster Motors (Left Pin 21, Right Pin 16) — 50Hz Hardware PWM
-// 6. RC Receiver Inputs (CH1 Steering: Pin 34, CH2 Throttle: Pin 35)
+// FloodScout — 完整一体化多功能飞控固件
+// 包含：
+// 1. HotRC 遥控器 + BLDC 无刷电机双电调差速混控 (GPIO 21 & 16)
+// 2. 双轴云台机械臂伺服舵机 (GPIO 18 & 19)
+// 3. NEO-8M 硬件串口 GPS 定位模块 (UART2 GPIO 12 & 13)
+// 4. HC-SR04 超声波避障测距传感器 (GPIO 5 & 4)
+// 5. 跨域 CORS 支持的 WebServer HTTP API (供网页端控制与数据读取)
 // ============================================================================
 
-// --- Wi-Fi Credentials ---
-const char* WIFI_SSID     = "vivo V30";
-const char* WIFI_PASSWORD = "halogoodgood";
-
-WebServer server(80);
-
 // ============================================================================
-// 1. DUAL ESC THRUSTER MOTOR CONFIGURATION
+// 1. BLDC 电调 (ESC) 与 HotRC 遥控器配置
 // ============================================================================
-const int PIN_RC_CH1   = 34;    // Receiver CH1 (Steering)
-const int PIN_RC_CH2   = 35;    // Receiver CH2 (Throttle)
-const int PIN_ESC_LEFT  = 21;   // Left ESC signal
-const int PIN_ESC_RIGHT = 16;   // Right ESC signal
 
-const int PWM_FREQ = 50;        // 50Hz standard servo/ESC refresh rate (20ms)
-const int PWM_RES  = 16;        // 16-bit resolution (0 - 65535)
+// ========== Pin Definitions ==========
+const int PIN_RC_CH1 = 34;      // 接收机 CH1 (方向) - 遥控器混控必须关闭
+const int PIN_RC_CH2 = 35;      // 接收机 CH2 (油门) - 遥控器混控必须关闭
+const int PIN_ESC_LEFT = 21;    // 左无刷电机电调 (BLDC Left)
+const int PIN_ESC_RIGHT = 16;   // 右无刷电机电调 (BLDC Right)
+
+// 使用 Servo 对象驱动电调与云台舵机
+Servo escLeft;
+Servo escRight;
+
+// 电调中位停止信号与校准基准
 const int ESC_STOP = 1500;
-
 int rc_mid_ch1 = 1500;
-int rc_mid_ch2 = 1384;          // Custom throttle center reference
+int rc_mid_ch2 = 1384; // 你的遥控器油门中位基准值
 
-int currentLeftUs  = ESC_STOP;
+// 全局电调状态追踪 (供 HTTP API 与系统遥测实时读取)
+int currentLeftUs = ESC_STOP;
 int currentRightUs = ESC_STOP;
-int rawCh1 = 1500;
-int rawCh2 = 1500;
-bool rcSignalActive = false;
-String motionState = "STOP";
-unsigned long lastRcReadTime = 0;
-unsigned long lastPrintTime = 0;
-unsigned long lastFailsafePrintTime = 0;
-unsigned long webOverrideUntil = 0; // For web manual driving commands
+String currentMotion = "STOP";
+bool rcConnected = false;
 
-// Convert pulse width in microseconds to PWM duty cycle: (us / 20000.0) * 65535
-uint32_t usToDuty(int us) {
-  return (uint32_t)((us / 20000.0) * 65535.0);
-}
-
+// 输出给电调的专用函数
 void writeMotorPWM(int leftUs, int rightUs) {
-  currentLeftUs  = constrain(leftUs, 1000, 2000);
+  currentLeftUs = constrain(leftUs, 1000, 2000);
   currentRightUs = constrain(rightUs, 1000, 2000);
-  ledcWrite(PIN_ESC_LEFT, usToDuty(currentLeftUs));
-  ledcWrite(PIN_ESC_RIGHT, usToDuty(currentRightUs));
+  escLeft.writeMicroseconds(currentLeftUs);
+  escRight.writeMicroseconds(currentRightUs);
 }
 
+// 串口打印计时器
+unsigned long lastPrintTime = 0;
+
+// 电机状态解析辅助函数
 String getMotorStatus(int pwm) {
   if (pwm > 1530) {
     int percent = map(pwm, 1500, 2000, 0, 100);
@@ -69,250 +62,168 @@ String getMotorStatus(int pwm) {
   }
 }
 
-String evaluateMotion(int left, int right) {
-  if (left == ESC_STOP && right == ESC_STOP) {
-    return "STOP";
-  } else if (left > 1530 && right > 1530) {
-    if (left > right + 40) return "FORWARD RIGHT";
-    else if (right > left + 40) return "FORWARD LEFT";
-    else return "FORWARD STRAIGHT";
-  } else if (left < 1470 && right < 1470) {
-    if (left < right - 40) return "REVERSE RIGHT";
-    else if (right < left - 40) return "REVERSE LEFT";
-    else return "REVERSE STRAIGHT";
-  } else if (left > 1530 && right < 1470) {
-    return "SPIN RIGHT";
-  } else if (left < 1470 && right > 1530) {
-    return "SPIN LEFT";
-  } else {
-    return "TURNING TRIM";
-  }
-}
+// ============================================================================
+// 2. FloodScout — 云台机械臂舵机 (Pan & Tilt) + GPS + 超声波
+// ============================================================================
 
-// ============================================================================
-// 2. PAN & TILT SERVO CONFIGURATION (PINS 18 & 19)
-// ============================================================================
+// --- Wi-Fi 设置 ---
+const char* WIFI_SSID     = "vivo V30";
+const char* WIFI_PASSWORD = "halogoodgood";
+
+WebServer server(80);
+
+// --- 云台舵机引脚与对象 ---
 #define SERVO_PAN_PIN   18
 #define SERVO_TILT_PIN  19
 
 Servo panServo;
 Servo tiltServo;
 
-int panAngle  = 90;
-int tiltAngle = 90;
-const int SERVO_STEP_DEG = 10;
-const int MIN_PAN  = 0,   MAX_PAN  = 180;
-const int MIN_TILT = 15,  MAX_TILT = 165;
+const int STOP_US        = 1500;
+const int SPEED_SLOW_CW  = 1380;
+const int SPEED_SLOW_CCW = 1620;
+const unsigned long STEP_DURATION_MS = 300; // 网页点击每次动作 300ms，动作清晰明显
 
-// ============================================================================
-// 3. PHYSICAL BUTTONS (PINS 25, 26, 27, 14)
-// ============================================================================
+unsigned long panStopAt  = 0;
+unsigned long tiltStopAt = 0;
+int panTargetSpeed       = STOP_US;
+int tiltTargetSpeed      = STOP_US;
+
+// --- 物理按钮引脚 ---
 #define BTN_LEFT   25
 #define BTN_RIGHT  26
 #define BTN_UP     27
 #define BTN_DOWN   14
 
-unsigned long lastBtnCheck = 0;
-const unsigned long BTN_REPEAT_DELAY_MS = 350;
-const unsigned long BTN_REPEAT_RATE_MS = 120;
-unsigned long btnLeftHoldStart = 0,  btnLeftLastStep = 0;
-unsigned long btnRightHoldStart = 0, btnRightLastStep = 0;
-unsigned long btnUpHoldStart = 0,    btnUpLastStep = 0;
-unsigned long btnDownHoldStart = 0,  btnDownLastStep = 0;
-
-// ============================================================================
-// 4. GPS HARDWARE SERIAL (UART2)
-// ============================================================================
-#define RXD2 12  // Connects to GPS TXD
-#define TXD2 13  // Connects to GPS RXD
+// --- GPS 硬件串口 (UART2) ---
+#define RXD2 12  // 接 GPS TXD
+#define TXD2 13  // 接 GPS RXD
 #define GPS_BAUDRATE 9600
 
 TinyGPSPlus gps;
 
-// ============================================================================
-// 5. HC-SR04 ULTRASONIC SENSOR
-// ============================================================================
+// --- HC-SR04 超声波引脚 ---
 #define TRIG_PIN 5
 #define ECHO_PIN 4
 #define SOUND_SPEED 0.0343 // cm/us
 
 float latestDistance = -1.0;
 unsigned long lastSensorRead = 0;
-const unsigned long SENSOR_INTERVAL_MS = 300;
+const unsigned long SENSOR_INTERVAL_MS = 1000;
 
-float readSinglePulseCM() {
+// ============================================================================
+// 超声波读取函数
+// ============================================================================
+
+float readDistanceCM() {
   digitalWrite(TRIG_PIN, LOW);
   delayMicroseconds(2);
   digitalWrite(TRIG_PIN, HIGH);
   delayMicroseconds(10);
   digitalWrite(TRIG_PIN, LOW);
 
-  long duration = pulseIn(ECHO_PIN, HIGH, 26000);
-  if (duration <= 180) return -1.0;
-  float cm = (duration * SOUND_SPEED) / 2.0;
-  if (cm > 450.0) return -1.0;
-  return cm;
-}
-
-float readDistanceCM() {
-  float s1 = readSinglePulseCM();
-  delay(6);
-  float s2 = readSinglePulseCM();
-  delay(6);
-  float s3 = readSinglePulseCM();
-
-  if (s1 < 0 && s2 < 0 && s3 < 0) return -1.0;
-
-  float valid[3];
-  int count = 0;
-  if (s1 > 0) valid[count++] = s1;
-  if (s2 > 0) valid[count++] = s2;
-  if (s3 > 0) valid[count++] = s3;
-
-  if (count == 1) return valid[0];
-  if (count == 2) return (valid[0] + valid[1]) / 2.0;
-
-  if (valid[0] > valid[1]) { float t = valid[0]; valid[0] = valid[1]; valid[1] = t; }
-  if (valid[1] > valid[2]) { float t = valid[1]; valid[1] = valid[2]; valid[2] = t; }
-  if (valid[0] > valid[1]) { float t = valid[0]; valid[0] = valid[1]; valid[1] = t; }
-  return valid[1];
+  long duration = pulseIn(ECHO_PIN, HIGH, 20000); // 20ms 超时保护
+  if (duration == 0) return -1.0;
+  return (duration * SOUND_SPEED) / 2.0;
 }
 
 // ============================================================================
-// PAN & TILT SERVO EXECUTION
+// 云台舵机命令执行
 // ============================================================================
-void executePanTilt(String cmd) {
+
+void executeCommand(String cmd) {
   cmd.trim();
   cmd.toUpperCase();
+  unsigned long now = millis();
 
   if (cmd == "LEFT") {
-    panAngle = constrain(panAngle - SERVO_STEP_DEG, MIN_PAN, MAX_PAN);
-    panServo.write(panAngle);
-    Serial.printf("[Servo] LEFT -> Pan: %d°, Tilt: %d°\n", panAngle, tiltAngle);
+    panTargetSpeed = SPEED_SLOW_CW;
+    panStopAt = now + STEP_DURATION_MS;
+    Serial.println("Command: LEFT");
   } else if (cmd == "RIGHT") {
-    panAngle = constrain(panAngle + SERVO_STEP_DEG, MIN_PAN, MAX_PAN);
-    panServo.write(panAngle);
-    Serial.printf("[Servo] RIGHT -> Pan: %d°, Tilt: %d°\n", panAngle, tiltAngle);
+    panTargetSpeed = SPEED_SLOW_CCW;
+    panStopAt = now + STEP_DURATION_MS;
+    Serial.println("Command: RIGHT");
   } else if (cmd == "UP") {
-    tiltAngle = constrain(tiltAngle + SERVO_STEP_DEG, MIN_TILT, MAX_TILT);
-    tiltServo.write(tiltAngle);
-    Serial.printf("[Servo] UP -> Pan: %d°, Tilt: %d°\n", panAngle, tiltAngle);
+    tiltTargetSpeed = SPEED_SLOW_CW;
+    tiltStopAt = now + STEP_DURATION_MS;
+    Serial.println("Command: UP");
   } else if (cmd == "DOWN") {
-    tiltAngle = constrain(tiltAngle - SERVO_STEP_DEG, MIN_TILT, MAX_TILT);
-    tiltServo.write(tiltAngle);
-    Serial.printf("[Servo] DOWN -> Pan: %d°, Tilt: %d°\n", panAngle, tiltAngle);
-  } else if (cmd == "CENTER") {
-    panAngle  = 90;
-    tiltAngle = 90;
-    panServo.write(panAngle);
-    tiltServo.write(tiltAngle);
-    Serial.println("[Servo] CENTER -> Pan: 90°, Tilt: 90°");
-  } else if (cmd == "STOP") {
-    Serial.printf("[Servo] STOP -> Holding Pan: %d°, Tilt: %d°\n", panAngle, tiltAngle);
+    tiltTargetSpeed = SPEED_SLOW_CCW;
+    tiltStopAt = now + STEP_DURATION_MS;
+    Serial.println("Command: DOWN");
+  } else if (cmd == "STOP" || cmd == "CENTER") {
+    panTargetSpeed  = STOP_US;
+    tiltTargetSpeed = STOP_US;
+    panStopAt       = 0;
+    tiltStopAt      = 0;
+    panServo.writeMicroseconds(STOP_US);
+    tiltServo.writeMicroseconds(STOP_US);
+    Serial.println("Command: STOP/CENTER");
   }
 }
 
 // ============================================================================
-// WEB MANUAL MOTOR DRIVING
+// Web Server 路由处理 (全面注入 CORS 跨域头，防止浏览器拦截)
 // ============================================================================
-void executeWebMotor(String action) {
-  action.trim();
-  action.toLowerCase();
-  unsigned long now = millis();
-  webOverrideUntil = now + 600; // Hold for 600ms unless refreshed
 
-  if (action == "forward") {
-    writeMotorPWM(1750, 1750);
-  } else if (action == "reverse") {
-    writeMotorPWM(1250, 1250);
-  } else if (action == "left") {
-    writeMotorPWM(1300, 1700); // Spin left
-  } else if (action == "right") {
-    writeMotorPWM(1700, 1300); // Spin right
-  } else if (action == "stop") {
-    writeMotorPWM(ESC_STOP, ESC_STOP);
-    webOverrideUntil = 0;
-  }
-  motionState = evaluateMotion(currentLeftUs, currentRightUs);
-}
-
-// ============================================================================
-// WEB SERVER API HANDLERS (CORS ENABLED)
-// ============================================================================
-void sendCorsHeaders() {
+void sendCORSHeaders() {
   server.sendHeader("Access-Control-Allow-Origin", "*");
   server.sendHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
   server.sendHeader("Access-Control-Allow-Headers", "*");
 }
 
-void handlePanTiltLeft()   { executePanTilt("LEFT");   sendCorsHeaders(); server.send(200, "application/json", "{\"success\":true,\"command\":\"LEFT\",\"panAngle\":" + String(panAngle) + ",\"tiltAngle\":" + String(tiltAngle) + "}"); }
-void handlePanTiltRight()  { executePanTilt("RIGHT");  sendCorsHeaders(); server.send(200, "application/json", "{\"success\":true,\"command\":\"RIGHT\",\"panAngle\":" + String(panAngle) + ",\"tiltAngle\":" + String(tiltAngle) + "}"); }
-void handlePanTiltUp()     { executePanTilt("UP");     sendCorsHeaders(); server.send(200, "application/json", "{\"success\":true,\"command\":\"UP\",\"panAngle\":" + String(panAngle) + ",\"tiltAngle\":" + String(tiltAngle) + "}"); }
-void handlePanTiltDown()   { executePanTilt("DOWN");   sendCorsHeaders(); server.send(200, "application/json", "{\"success\":true,\"command\":\"DOWN\",\"panAngle\":" + String(panAngle) + ",\"tiltAngle\":" + String(tiltAngle) + "}"); }
-void handlePanTiltStop()   { executePanTilt("STOP");   sendCorsHeaders(); server.send(200, "application/json", "{\"success\":true,\"command\":\"STOP\",\"panAngle\":" + String(panAngle) + ",\"tiltAngle\":" + String(tiltAngle) + "}"); }
-void handlePanTiltCenter() { executePanTilt("CENTER"); sendCorsHeaders(); server.send(200, "application/json", "{\"success\":true,\"command\":\"CENTER\",\"panAngle\":90,\"tiltAngle\":90}"); }
-
-void handleMotorForward()  { executeWebMotor("forward"); sendCorsHeaders(); server.send(200, "application/json", "{\"success\":true,\"action\":\"forward\",\"state\":\"" + motionState + "\"}"); }
-void handleMotorReverse()  { executeWebMotor("reverse"); sendCorsHeaders(); server.send(200, "application/json", "{\"success\":true,\"action\":\"reverse\",\"state\":\"" + motionState + "\"}"); }
-void handleMotorLeft()     { executeWebMotor("left");    sendCorsHeaders(); server.send(200, "application/json", "{\"success\":true,\"action\":\"left\",\"state\":\"" + motionState + "\"}"); }
-void handleMotorRight()    { executeWebMotor("right");   sendCorsHeaders(); server.send(200, "application/json", "{\"success\":true,\"action\":\"right\",\"state\":\"" + motionState + "\"}"); }
-void handleMotorStop()     { executeWebMotor("stop");    sendCorsHeaders(); server.send(200, "application/json", "{\"success\":true,\"action\":\"stop\",\"state\":\"STOP\"}"); }
-
-void handleMotorSet() {
-  sendCorsHeaders();
-  if (server.hasArg("left") && server.hasArg("right")) {
-    int l = server.arg("left").toInt();
-    int r = server.arg("right").toInt();
-    webOverrideUntil = millis() + 1000;
-    writeMotorPWM(l, r);
-    motionState = evaluateMotion(currentLeftUs, currentRightUs);
-    server.send(200, "application/json", "{\"success\":true,\"left\":" + String(currentLeftUs) + ",\"right\":" + String(currentRightUs) + ",\"state\":\"" + motionState + "\"}");
-  } else {
-    server.send(400, "application/json", "{\"success\":false,\"error\":\"Missing left or right parameter\"}");
-  }
+void sendActionResponse(String command) {
+  sendCORSHeaders();
+  String json = "{\"success\":true,\"command\":\"" + command + "\",\"ip\":\"" + WiFi.localIP().toString() + "\"}";
+  server.send(200, "application/json", json);
 }
 
-String getMotorJson() {
-  int leftPercent = currentLeftUs > 1530 ? map(currentLeftUs, 1500, 2000, 0, 100) : (currentLeftUs < 1470 ? map(currentLeftUs, 1500, 1000, 0, 100) : 0);
-  int rightPercent = currentRightUs > 1530 ? map(currentRightUs, 1500, 2000, 0, 100) : (currentRightUs < 1470 ? map(currentRightUs, 1500, 1000, 0, 100) : 0);
-  String leftDir = currentLeftUs > 1530 ? "FWD" : (currentLeftUs < 1470 ? "REV" : "STOP");
-  String rightDir = currentRightUs > 1530 ? "FWD" : (currentRightUs < 1470 ? "REV" : "STOP");
+void handleLeft()   { executeCommand("LEFT");   sendActionResponse("LEFT"); }
+void handleRight()  { executeCommand("RIGHT");  sendActionResponse("RIGHT"); }
+void handleUp()     { executeCommand("UP");     sendActionResponse("UP"); }
+void handleDown()   { executeCommand("DOWN");   sendActionResponse("DOWN"); }
+void handleStop()   { executeCommand("STOP");   sendActionResponse("STOP"); }
+void handleCenter() { executeCommand("CENTER"); sendActionResponse("CENTER"); }
 
-  String json = "{";
-  json += "\"state\":\"" + motionState + "\",";
-  json += "\"rc_connected\":" + String(rcSignalActive ? "true" : "false") + ",";
-  json += "\"left\":{";
-  json += "\"us\":" + String(currentLeftUs) + ",";
-  json += "\"percent\":" + String(leftPercent) + ",";
-  json += "\"dir\":\"" + leftDir + "\",";
-  json += "\"status\":\"" + getMotorStatus(currentLeftUs) + "\"";
-  json += "},";
-  json += "\"right\":{";
-  json += "\"us\":" + String(currentRightUs) + ",";
-  json += "\"percent\":" + String(rightPercent) + ",";
-  json += "\"dir\":\"" + rightDir + "\",";
-  json += "\"status\":\"" + getMotorStatus(currentRightUs) + "\"";
-  json += "},";
-  json += "\"rc\":{";
-  json += "\"ch1Steer\":" + String(rawCh1) + ",";
-  json += "\"ch2Throttle\":" + String(rawCh2);
-  json += "}";
-  json += "}";
-  return json;
-}
-
-void handleMotors() {
-  sendCorsHeaders();
-  server.send(200, "application/json", "{\"success\":true,\"motors\":" + getMotorJson() + "}");
-}
-
-void handleSensors() {
-  sendCorsHeaders();
+void handleStatus() {
+  sendCORSHeaders();
   String json = "{";
   json += "\"success\":true,";
-  json += "\"distance_cm\":" + String(latestDistance > 0 ? latestDistance : -1.0, 1) + ",";
-  json += "\"panAngle\":" + String(panAngle) + ",";
-  json += "\"tiltAngle\":" + String(tiltAngle) + ",";
+  json += "\"device\":\"FloodScout Multi-Controller\",";
+  json += "\"wifi\":true,";
+  json += "\"ip\":\"" + WiFi.localIP().toString() + "\",";
+  json += "\"rssi\":" + String(WiFi.RSSI());
+  json += "}";
+  server.send(200, "application/json", json);
+}
+
+// 统一传感器与遥测端点 (超声波 + GPS + BLDC 双电调实时动力状态)
+void handleSensors() {
+  sendCORSHeaders();
+  int leftPercent = 0;
+  String leftDir = "STOP";
+  if (currentLeftUs > 1530) {
+    leftPercent = map(currentLeftUs, 1500, 2000, 0, 100);
+    leftDir = "FWD";
+  } else if (currentLeftUs < 1470) {
+    leftPercent = map(currentLeftUs, 1500, 1000, 0, 100);
+    leftDir = "REV";
+  }
+
+  int rightPercent = 0;
+  String rightDir = "STOP";
+  if (currentRightUs > 1530) {
+    rightPercent = map(currentRightUs, 1500, 2000, 0, 100);
+    rightDir = "FWD";
+  } else if (currentRightUs < 1470) {
+    rightPercent = map(currentRightUs, 1500, 1000, 0, 100);
+    rightDir = "REV";
+  }
+
+  String json = "{";
+  json += "\"success\":true,";
+  json += "\"distance_cm\":" + String(latestDistance, 1) + ",";
   json += "\"gps\":{";
   json += "\"fix\":" + String(gps.location.isValid() ? "true" : "false") + ",";
   json += "\"lat\":" + String(gps.location.lat(), 6) + ",";
@@ -320,81 +231,61 @@ void handleSensors() {
   json += "\"altitude_m\":" + String(gps.altitude.meters(), 1) + ",";
   json += "\"satellites\":" + String(gps.satellites.value());
   json += "},";
-  json += "\"motors\":" + getMotorJson();
+  json += "\"motors\":{";
+  json += "\"state\":\"" + currentMotion + "\",";
+  json += "\"direction\":\"" + currentMotion + "\",";
+  json += "\"rc_connected\":" + String(rcConnected ? "true" : "false") + ",";
+  json += "\"left\":{\"us\":" + String(currentLeftUs) + ",\"percent\":" + String(leftPercent) + ",\"dir\":\"" + leftDir + "\",\"status\":\"" + getMotorStatus(currentLeftUs) + "\"},";
+  json += "\"right\":{\"us\":" + String(currentRightUs) + ",\"percent\":" + String(rightPercent) + ",\"dir\":\"" + rightDir + "\",\"status\":\"" + getMotorStatus(currentRightUs) + "\"}";
   json += "}";
-  server.send(200, "application/json", json);
-}
-
-void handleStatus() {
-  sendCorsHeaders();
-  String json = "{";
-  json += "\"success\":true,";
-  json += "\"device\":\"FloodScout Multi-Controller\",";
-  json += "\"wifi\":true,";
-  json += "\"ip\":\"" + WiFi.localIP().toString() + "\",";
-  json += "\"rssi\":" + String(WiFi.RSSI()) + ",";
-  json += "\"panAngle\":" + String(panAngle) + ",";
-  json += "\"tiltAngle\":" + String(tiltAngle) + ",";
-  json += "\"motors\":" + getMotorJson();
   json += "}";
   server.send(200, "application/json", json);
 }
 
 void handleOptions() {
-  sendCorsHeaders();
+  sendCORSHeaders();
   server.send(204);
 }
 
 // ============================================================================
-// SETUP
+// Setup
 // ============================================================================
+
 void setup() {
   Serial.begin(115200);
-  delay(100);
-  Serial.println("\n\n========================================");
-  Serial.println("FloodScout Multi-Controller Initializing");
-  Serial.println("========================================");
 
-  // 1. Initialize Hardware UART 2 for GPS
-  Serial2.begin(GPS_BAUDRATE, SERIAL_8N1, RXD2, TXD2);
-  Serial.printf("[GPS] Hardware Serial2 started at %d baud\n", GPS_BAUDRATE);
+  // 1. 初始化遥控器接收机引脚
+  pinMode(PIN_RC_CH1, INPUT);
+  pinMode(PIN_RC_CH2, INPUT);
 
-  // 2. Initialize Physical Buttons
-  pinMode(BTN_LEFT,  INPUT_PULLUP);
-  pinMode(BTN_RIGHT, INPUT_PULLUP);
-  pinMode(BTN_UP,    INPUT_PULLUP);
-  pinMode(BTN_DOWN,  INPUT_PULLUP);
-
-  // 3. Initialize Ultrasonic Sensor
-  pinMode(TRIG_PIN, OUTPUT);
-  pinMode(ECHO_PIN, INPUT);
-  digitalWrite(TRIG_PIN, LOW);
-
-  // 4. Initialize Servos (Pins 18 & 19)
+  // 2. 核心关键！必须分配 4 个硬件定时器，供左右电调 + 双轴舵机同时使用！
   ESP32PWM::allocateTimer(0);
   ESP32PWM::allocateTimer(1);
   ESP32PWM::allocateTimer(2);
   ESP32PWM::allocateTimer(3);
+
+  // 3. 初始化 BLDC 电调 (ESC) - 绑定到 GPIO 21 与 16
+  escLeft.setPeriodHertz(50);
+  escRight.setPeriodHertz(50);
+  escLeft.attach(PIN_ESC_LEFT, 1000, 2000);
+  escRight.attach(PIN_ESC_RIGHT, 1000, 2000);
+
+  // 电调输出 1500us 停转中位信号解锁
+  writeMotorPWM(ESC_STOP, ESC_STOP);
+  Serial.println("\n--- FloodScout Initializing, arming BLDC ESCs ---");
+  delay(1500);
+
+  // 4. 初始化云台舵机 - 绑定到 GPIO 18 与 19
   panServo.setPeriodHertz(50);
   tiltServo.setPeriodHertz(50);
   panServo.attach(SERVO_PAN_PIN, 500, 2500);
   tiltServo.attach(SERVO_TILT_PIN, 500, 2500);
-  panServo.write(panAngle);
-  tiltServo.write(tiltAngle);
+  panServo.writeMicroseconds(STOP_US);
+  tiltServo.writeMicroseconds(STOP_US);
+  Serial.printf("[Arm Init] Servos attached successfully: Pan Pin %d, Tilt Pin %d\n", SERVO_PAN_PIN, SERVO_TILT_PIN);
 
-  // 5. Initialize ESC Thruster Motors & RC Pins
-  pinMode(PIN_RC_CH1, INPUT);
-  pinMode(PIN_RC_CH2, INPUT);
-  ledcAttach(PIN_ESC_LEFT, PWM_FREQ, PWM_RES);
-  ledcAttach(PIN_ESC_RIGHT, PWM_FREQ, PWM_RES);
-
-  // 5.1 Force 1500us neutral output at startup to prevent sudden motor spin & arm ESCs
-  writeMotorPWM(ESC_STOP, ESC_STOP);
-  Serial.println("\n--- Initializing ESCs & RC Receiver ---");
-  delay(2000); // Wait for ESCs to complete self-test and recognize neutral signal
-
-  // 5.2 Auto-sample transmitter neutral position
-  Serial.println("[RC] Sampling RC center position. Do NOT touch remote sticks...");
+  // 5. 自动校准遥控器中位
+  Serial.println("Sampling RC center position. Do NOT touch remote sticks...");
   long sum1 = 0, sum2 = 0;
   int count = 0;
   for (int i = 0; i < 20; i++) {
@@ -411,52 +302,54 @@ void setup() {
   if (count > 5) {
     rc_mid_ch1 = sum1 / count;
     rc_mid_ch2 = sum2 / count;
-    Serial.printf("[RC] Calibration successful -> CH1 Center: %d | CH2 Center: %d\n", rc_mid_ch1, rc_mid_ch2);
+    Serial.printf("Calibration successful -> CH1 Center: %d | CH2 Center: %d\n", rc_mid_ch1, rc_mid_ch2);
   } else {
-    Serial.println("[RC] RC signal not detected at boot. Using default fallback centers (1500, 1384).");
+    Serial.println("RC signal lost or transmitter offline. Using default fallback values.");
+    rc_mid_ch1 = 1500;
+    rc_mid_ch2 = 1384;
   }
-
   writeMotorPWM(ESC_STOP, ESC_STOP);
-  Serial.println("[Motors] Thrusters armed & ready. Move sticks or use web dashboard!\n");
+  Serial.println("BLDC ESCs armed and ready.\n");
 
-  // 6. Connect to Wi-Fi
-  Serial.printf("[Wi-Fi] Connecting to '%s'...\n", WIFI_SSID);
+  // 6. 初始化 GPS 串口
+  Serial2.begin(GPS_BAUDRATE, SERIAL_8N1, RXD2, TXD2);
+
+  // 7. 初始化物理按键
+  pinMode(BTN_LEFT,  INPUT_PULLUP);
+  pinMode(BTN_RIGHT, INPUT_PULLUP);
+  pinMode(BTN_UP,    INPUT_PULLUP);
+  pinMode(BTN_DOWN,  INPUT_PULLUP);
+
+  // 8. 初始化超声波
+  pinMode(TRIG_PIN, OUTPUT);
+  pinMode(ECHO_PIN, INPUT);
+  digitalWrite(TRIG_PIN, LOW);
+
+  // 9. 连接 Wi-Fi (持续尝试直至连接)
+  Serial.print("Connecting to Wi-Fi: ");
+  Serial.println(WIFI_SSID);
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  int attempts = 0;
-  while (WiFi.status() != WL_CONNECTED && attempts < 25) {
-    delay(400);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
     Serial.print(".");
-    attempts++;
   }
 
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("\n[Wi-Fi] Connected Successfully!");
-    Serial.print("[Wi-Fi] ESP32 IP: http://");
-    Serial.println(WiFi.localIP());
-  } else {
-    Serial.println("\n[Wi-Fi] Connection timed out. System will continue offline.");
-  }
+  Serial.println("\nWi-Fi Connected!");
+  Serial.print("ESP32 IP: ");
+  Serial.println(WiFi.localIP());
 
-  // 7. Register Web Server Routes
-  server.on("/api/pan-tilt/left",   HTTP_GET, handlePanTiltLeft);
-  server.on("/api/pan-tilt/right",  HTTP_GET, handlePanTiltRight);
-  server.on("/api/pan-tilt/up",     HTTP_GET, handlePanTiltUp);
-  server.on("/api/pan-tilt/down",   HTTP_GET, handlePanTiltDown);
-  server.on("/api/pan-tilt/stop",   HTTP_GET, handlePanTiltStop);
-  server.on("/api/pan-tilt/center", HTTP_GET, handlePanTiltCenter);
+  // 10. Web 路由设置
+  server.on("/api/pan-tilt/left",   HTTP_GET, handleLeft);
+  server.on("/api/pan-tilt/right",  HTTP_GET, handleRight);
+  server.on("/api/pan-tilt/up",     HTTP_GET, handleUp);
+  server.on("/api/pan-tilt/down",   HTTP_GET, handleDown);
+  server.on("/api/pan-tilt/stop",   HTTP_GET, handleStop);
+  server.on("/api/pan-tilt/center", HTTP_GET, handleCenter);
   server.on("/api/pan-tilt/status", HTTP_GET, handleStatus);
   server.on("/api/sensors",         HTTP_GET, handleSensors);
-  server.on("/api/motors",          HTTP_GET, handleMotors);
+  server.on("/api/motors",          HTTP_GET, handleSensors);
 
-  server.on("/api/motor/forward",   HTTP_GET, handleMotorForward);
-  server.on("/api/motor/reverse",   HTTP_GET, handleMotorReverse);
-  server.on("/api/motor/left",      HTTP_GET, handleMotorLeft);
-  server.on("/api/motor/right",     HTTP_GET, handleMotorRight);
-  server.on("/api/motor/stop",      HTTP_GET, handleMotorStop);
-  server.on("/api/motor/set",       HTTP_GET, handleMotorSet);
-
-  // CORS Handlers
   server.on("/api/pan-tilt/left",   HTTP_OPTIONS, handleOptions);
   server.on("/api/pan-tilt/right",  HTTP_OPTIONS, handleOptions);
   server.on("/api/pan-tilt/up",     HTTP_OPTIONS, handleOptions);
@@ -466,123 +359,165 @@ void setup() {
   server.on("/api/pan-tilt/status", HTTP_OPTIONS, handleOptions);
   server.on("/api/sensors",         HTTP_OPTIONS, handleOptions);
   server.on("/api/motors",          HTTP_OPTIONS, handleOptions);
-  server.on("/api/motor/forward",   HTTP_OPTIONS, handleOptions);
-  server.on("/api/motor/reverse",   HTTP_OPTIONS, handleOptions);
-  server.on("/api/motor/left",      HTTP_OPTIONS, handleOptions);
-  server.on("/api/motor/right",     HTTP_OPTIONS, handleOptions);
-  server.on("/api/motor/stop",      HTTP_OPTIONS, handleOptions);
-  server.on("/api/motor/set",       HTTP_OPTIONS, handleOptions);
 
   server.begin();
-  Serial.println("[Web Server] HTTP Server Started. All systems ready!");
+  Serial.println("FloodScout System Ready & Serving Web API.");
 }
 
 // ============================================================================
-// MAIN LOOP
+// Main Loop
 // ============================================================================
-void loop() {
-  unsigned long now = millis();
 
-  // 1. Service Web Server Requests
+void loop() {
+  // 1. 服务 Web 请求
   server.handleClient();
 
-  // 2. Continually parse NMEA GPS sentences
+  // 2. 解析 GPS 串口流
   while (Serial2.available() > 0) {
     gps.encode(Serial2.read());
   }
 
-  // 3. Periodic Ultrasonic Distance Readings (every 300ms)
+  unsigned long now = millis();
+
+  // 3. 定时读取超声波传感器与 GPS (每 1000ms 一次，避免占用 CPU)
   if (now - lastSensorRead >= SENSOR_INTERVAL_MS) {
     lastSensorRead = now;
     latestDistance = readDistanceCM();
-  }
 
-  // 4. Physical Push Buttons for Pan/Tilt
-  if (now - lastBtnCheck >= 25) {
-    lastBtnCheck = now;
-    bool leftActive  = (digitalRead(BTN_LEFT)  == LOW);
-    bool rightActive = (digitalRead(BTN_RIGHT) == LOW);
-    bool upActive    = (digitalRead(BTN_UP)    == LOW);
-    bool downActive  = (digitalRead(BTN_DOWN)  == LOW);
-
-    if (leftActive) {
-      if (btnLeftHoldStart == 0) { btnLeftHoldStart = now; btnLeftLastStep = now; executePanTilt("LEFT"); }
-      else if (now - btnLeftHoldStart > BTN_REPEAT_DELAY_MS && now - btnLeftLastStep > BTN_REPEAT_RATE_MS) { btnLeftLastStep = now; executePanTilt("LEFT"); }
-    } else { btnLeftHoldStart = 0; }
-
-    if (rightActive) {
-      if (btnRightHoldStart == 0) { btnRightHoldStart = now; btnRightLastStep = now; executePanTilt("RIGHT"); }
-      else if (now - btnRightHoldStart > BTN_REPEAT_DELAY_MS && now - btnRightLastStep > BTN_REPEAT_RATE_MS) { btnRightLastStep = now; executePanTilt("RIGHT"); }
-    } else { btnRightHoldStart = 0; }
-
-    if (upActive) {
-      if (btnUpHoldStart == 0) { btnUpHoldStart = now; btnUpLastStep = now; executePanTilt("UP"); }
-      else if (now - btnUpHoldStart > BTN_REPEAT_DELAY_MS && now - btnUpLastStep > BTN_REPEAT_RATE_MS) { btnUpLastStep = now; executePanTilt("UP"); }
-    } else { btnUpHoldStart = 0; }
-
-    if (downActive) {
-      if (btnDownHoldStart == 0) { btnDownHoldStart = now; btnDownLastStep = now; executePanTilt("DOWN"); }
-      else if (now - btnDownHoldStart > BTN_REPEAT_DELAY_MS && now - btnDownLastStep > BTN_REPEAT_RATE_MS) { btnDownLastStep = now; executePanTilt("DOWN"); }
-    } else { btnDownHoldStart = 0; }
-  }
-
-  // 5. RC Receiver Pulse Reading & ESC Thruster Control (every 40ms)
-  if (now - lastRcReadTime >= 40) {
-    lastRcReadTime = now;
-
-    // Only read RC if no active web override
-    if (now >= webOverrideUntil) {
-      unsigned long r1 = pulseIn(PIN_RC_CH1, HIGH, 25000);
-      unsigned long r2 = pulseIn(PIN_RC_CH2, HIGH, 25000);
-
-      // Check if RC receiver is actively transmitting valid 50Hz signals
-      if (r1 >= 900 && r1 <= 2100 && r2 >= 900 && r2 <= 2100) {
-        rcSignalActive = true;
-        rawCh1 = (int)r1;
-        rawCh2 = (int)r2;
-
-        int steer = rawCh1 - rc_mid_ch1;
-        int throttle = rawCh2 - rc_mid_ch2;
-
-        // Apply a 45us deadband to prevent stick jitter near center
-        if (abs(steer) < 45) steer = 0;
-        if (abs(throttle) < 45) throttle = 0;
-
-        int leftOut  = ESC_STOP;
-        int rightOut = ESC_STOP;
-
-        // Differential thrust mixing
-        if (steer != 0 || throttle != 0) {
-          leftOut  = ESC_STOP + throttle + steer;
-          rightOut = ESC_STOP + throttle - steer;
-        }
-
-        writeMotorPWM(leftOut, rightOut);
-        motionState = evaluateMotion(currentLeftUs, currentRightUs);
-      } else {
-        rcSignalActive = false;
-        // Failsafe: stop motors if RC signal is lost and no web override
-        writeMotorPWM(ESC_STOP, ESC_STOP);
-        motionState = "STOP";
-        if (now - lastFailsafePrintTime > 1500) {
-          lastFailsafePrintTime = now;
-          Serial.println("[WARNING] RC signal lost! Motors stopped.");
-        }
-      }
+    Serial.print("[Distance] ");
+    if (latestDistance > 0 && latestDistance <= 400.0) {
+      Serial.print(latestDistance, 1);
+      Serial.print(" cm | ");
     } else {
-      // In web manual driving mode
-      motionState = evaluateMotion(currentLeftUs, currentRightUs);
+      Serial.print("Clear | ");
+    }
+
+    Serial.print("[GPS Satellites] ");
+    Serial.print(gps.satellites.value());
+    if (gps.location.isValid()) {
+      Serial.print(" | Lat: ");
+      Serial.print(gps.location.lat(), 6);
+      Serial.print(" Lng: ");
+      Serial.print(gps.location.lng(), 6);
+    }
+    if (gps.altitude.isValid()) {
+      Serial.print(" | Alt: ");
+      Serial.print(gps.altitude.meters(), 1);
+      Serial.print(" m");
+    }
+    Serial.println();
+  }
+
+  // 4. 物理按键与云台控制 (按键优先级高于网页定时步进)
+  bool leftPressed  = (digitalRead(BTN_LEFT)  == LOW);
+  bool rightPressed = (digitalRead(BTN_RIGHT) == LOW);
+  bool upPressed    = (digitalRead(BTN_UP)    == LOW);
+  bool downPressed  = (digitalRead(BTN_DOWN)  == LOW);
+
+  // PAN 舵机控制
+  if (leftPressed && !rightPressed) {
+    panServo.writeMicroseconds(SPEED_SLOW_CW);
+    panStopAt = 0;
+  } else if (rightPressed && !leftPressed) {
+    panServo.writeMicroseconds(SPEED_SLOW_CCW);
+    panStopAt = 0;
+  } else if (now < panStopAt) {
+    panServo.writeMicroseconds(panTargetSpeed);
+  } else {
+    panServo.writeMicroseconds(STOP_US);
+  }
+
+  // TILT 舵机控制
+  if (upPressed && !downPressed) {
+    tiltServo.writeMicroseconds(SPEED_SLOW_CW);
+    tiltStopAt = 0;
+  } else if (downPressed && !upPressed) {
+    tiltServo.writeMicroseconds(SPEED_SLOW_CCW);
+    tiltStopAt = 0;
+  } else if (now < tiltStopAt) {
+    tiltServo.writeMicroseconds(tiltTargetSpeed);
+  } else {
+    tiltServo.writeMicroseconds(STOP_US);
+  }
+
+  // 再次处理 Web 请求以保证超低延迟响应
+  server.handleClient();
+
+  // 5. HotRC 遥控器差速控制 BLDC 无刷电机
+  unsigned long raw1 = pulseIn(PIN_RC_CH1, HIGH, 18000);
+  unsigned long raw2 = pulseIn(PIN_RC_CH2, HIGH, 18000);
+
+  // 失控保护 (Failsafe)
+  if (raw1 < 900 || raw1 > 2100 || raw2 < 900 || raw2 > 2100) {
+    writeMotorPWM(ESC_STOP, ESC_STOP);
+    currentMotion = "STOP";
+    rcConnected = false;
+    if (now - lastPrintTime > 1000) {
+      Serial.println("[WARNING] RC signal lost! BLDC Motors stopped.");
+      lastPrintTime = now;
+    }
+  } else {
+    rcConnected = true;
+    int steer = (int)raw1 - rc_mid_ch1;
+    int throttle = (int)raw2 - rc_mid_ch2;
+
+    // 死区消除微小抖动
+    if (abs(steer) < 45) steer = 0;
+    if (abs(throttle) < 45) throttle = 0;
+
+    int leftOut = ESC_STOP;
+    int rightOut = ESC_STOP;
+
+    // 差速混控计算
+    if (steer != 0 || throttle != 0) {
+      leftOut  = ESC_STOP + throttle + steer;
+      rightOut = ESC_STOP + throttle - steer;
+      leftOut  = constrain(leftOut, 1000, 2000);
+      rightOut = constrain(rightOut, 1000, 2000);
+    }
+
+    // 输出 PWM 到左右两个 BLDC 电调
+    writeMotorPWM(leftOut, rightOut);
+
+    // 判断船体运动状态
+    if (leftOut == ESC_STOP && rightOut == ESC_STOP) {
+      currentMotion = "STOP";
+    } else if (leftOut > 1530 && rightOut > 1530) {
+      if (leftOut > rightOut + 40) currentMotion = "FORWARD RIGHT";
+      else if (rightOut > leftOut + 40) currentMotion = "FORWARD LEFT";
+      else currentMotion = "FORWARD STRAIGHT";
+    } else if (leftOut < 1470 && rightOut < 1470) {
+      if (leftOut < rightOut - 40) currentMotion = "REVERSE RIGHT";
+      else if (rightOut < leftOut - 40) currentMotion = "REVERSE LEFT";
+      else currentMotion = "REVERSE STRAIGHT";
+    } else if (leftOut > 1530 && rightOut < 1470) {
+      currentMotion = "SPIN RIGHT";
+    } else if (leftOut < 1470 && rightOut > 1530) {
+      currentMotion = "SPIN LEFT";
+    } else {
+      currentMotion = "TURNING TRIM";
+    }
+
+    // 电机状态监控输出 (每 100ms 刷新一次)
+    if (now - lastPrintTime >= 100) {
+      lastPrintTime = now;
+
+      Serial.print("[Left BLDC]: ");
+      Serial.print(getMotorStatus(leftOut));
+      Serial.print("  |  [Right BLDC]: ");
+      Serial.print(getMotorStatus(rightOut));
+
+      Serial.print("  -->  Motion: ");
+      Serial.println(currentMotion);
     }
   }
 
-  // 6. Periodic Serial Monitor Telemetry Output (100ms interval)
-  if (now - lastPrintTime >= 100) {
-    lastPrintTime = now;
-    Serial.print("[Left Motor]: ");
-    Serial.print(getMotorStatus(currentLeftUs));
-    Serial.print("  |  [Right Motor]: ");
-    Serial.print(getMotorStatus(currentRightUs));
-    Serial.print("  -->  Motion: ");
-    Serial.println(motionState);
+  // 6. Wi-Fi 掉线自动重连保障
+  if (WiFi.status() != WL_CONNECTED) {
+    static unsigned long lastWifiReconnect = 0;
+    if (now - lastWifiReconnect > 5000) {
+      lastWifiReconnect = now;
+      WiFi.reconnect();
+    }
   }
 }

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getEsp32BaseUrl } from '../config/esp32';
+import { getBackendBaseUrl } from './useDetectionApi';
 
 export interface MotorItemState {
   us: number;
@@ -44,10 +45,11 @@ export function useMotorTelemetry(): UseMotorTelemetryReturn {
   // Poll ESP32 for live motor metrics
   useEffect(() => {
     let isMounted = true;
-    const esp32Base = getEsp32BaseUrl();
+    const backendBase = getBackendBaseUrl();
 
     const fetchMotorData = async () => {
       let gotData = false;
+      const esp32Base = getEsp32BaseUrl();
 
       // Tier 1: Direct ESP32 /api/sensors (contains "motors")
       try {
@@ -86,8 +88,24 @@ export function useMotorTelemetry(): UseMotorTelemetryReturn {
         const mRes = await fetch(`${esp32Base}/api/motors`, { signal: AbortSignal.timeout(1000) });
         if (mRes.ok && isMounted) {
           const data = await mRes.json();
-          if (data && (data.motion || data.left)) {
-            updateFromPayload(data.motion || data);
+          if (data && (data.motion || data.motors || data.left)) {
+            updateFromPayload(data.motors || data.motion || data);
+            gotData = true;
+          }
+        }
+      } catch {
+        // Standalone failed
+      }
+
+      if (gotData) return;
+
+      // Tier 4: Backend /api/motors (via USB serial or backend relay)
+      try {
+        const bRes = await fetch(`${backendBase}/api/motors`, { signal: AbortSignal.timeout(1000) });
+        if (bRes.ok && isMounted) {
+          const data = await bRes.json();
+          if (data && (data.motors || data.motion)) {
+            updateFromPayload(data.motors || data.motion);
             gotData = true;
           }
         }
@@ -132,10 +150,17 @@ export function useMotorTelemetry(): UseMotorTelemetryReturn {
     };
 
     fetchMotorData();
-    const interval = setInterval(fetchMotorData, 250);
+    const interval = setInterval(fetchMotorData, 350);
+
+    const handleUrlChange = () => {
+      fetchMotorData();
+    };
+    window.addEventListener('floodscout_esp32_url_changed', handleUrlChange);
+
     return () => {
       isMounted = false;
       clearInterval(interval);
+      window.removeEventListener('floodscout_esp32_url_changed', handleUrlChange);
     };
   }, []);
 

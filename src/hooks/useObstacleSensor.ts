@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { getBackendBaseUrl } from './useDetectionApi';
+import { getEsp32BaseUrl } from '../config/esp32';
 
 export type ObstacleStatus = 'CLEAR' | 'CAUTION' | 'DANGER' | 'OFFLINE';
 
@@ -104,25 +105,25 @@ export function useObstacleSensor(): ObstacleSensorState {
   useEffect(() => {
     let isMounted = true;
     const backendBase = getBackendBaseUrl();
-    const esp32Base = (localStorage.getItem('floodscout_esp32_url') || 'http://10.185.112.106').replace(/\/+$/, '');
 
     const pollHardware = async () => {
       let gotReading = false;
+      const esp32Base = getEsp32BaseUrl();
 
-      // Tier 1: Direct fetch to ESP32 /api/sensors (fastest & most direct)
+      // Tier 1: Direct fetch to ESP32 /api/sensors (fastest over local Wi-Fi)
       try {
         const directRes = await fetch(`${esp32Base}/api/sensors`, {
-          signal: AbortSignal.timeout(1000),
+          signal: AbortSignal.timeout(800),
         });
         if (directRes.ok && isMounted) {
           const directData = await directRes.json();
           if (directData && typeof directData.distance_cm === 'number') {
             const rawCm = directData.distance_cm;
             if (rawCm > 0 && rawCm <= 450.0) {
-              const dM = parseFloat((rawCm / 100.0).toFixed(2));
-              setDistanceM(dM);
+              setDistanceM(parseFloat((rawCm / 100.0).toFixed(2)));
               setDistanceCm(parseFloat(rawCm.toFixed(1)));
             } else {
+              // -1.0 or >450cm indicates clear path beyond 4 meters
               setDistanceM(4.0);
               setDistanceCm(400.0);
             }
@@ -132,23 +133,50 @@ export function useObstacleSensor(): ObstacleSensorState {
           }
         }
       } catch {
-        // Direct Wi-Fi unreachable or CORS on mobile, try Vite proxy
+        // Direct Wi-Fi blocked by CORS or network, proceed to proxy
       }
 
       if (gotReading) return;
 
-      // Tier 1.5: Fetch via Vite reverse proxy /esp32-api/sensors (avoids browser CORS)
+      // Tier 1.5: Fetch via Backend proxy with ?target= (100% CORS-free and targets exact active ESP32 IP)
       try {
-        const proxyRes = await fetch('/esp32-api/sensors', {
-          signal: AbortSignal.timeout(1000),
+        const proxyRes = await fetch(`${backendBase}/api/sensors?target=${encodeURIComponent(esp32Base)}`, {
+          headers: { 'Accept': 'application/json' },
+          signal: AbortSignal.timeout(1200),
         });
         if (proxyRes.ok && isMounted) {
           const proxyData = await proxyRes.json();
           if (proxyData && typeof proxyData.distance_cm === 'number') {
             const rawCm = proxyData.distance_cm;
             if (rawCm > 0 && rawCm <= 450.0) {
-              const dM = parseFloat((rawCm / 100.0).toFixed(2));
-              setDistanceM(dM);
+              setDistanceM(parseFloat((rawCm / 100.0).toFixed(2)));
+              setDistanceCm(parseFloat(rawCm.toFixed(1)));
+            } else {
+              setDistanceM(4.0);
+              setDistanceCm(400.0);
+            }
+            setIsHardwareConnected(Boolean(proxyData.success));
+            setDataSource('live');
+            gotReading = true;
+          }
+        }
+      } catch {
+        // Backend proxy failed, try Vite reverse proxy
+      }
+
+      if (gotReading) return;
+
+      // Tier 2: Vite reverse proxy /esp32-api/sensors
+      try {
+        const vRes = await fetch('/esp32-api/sensors', {
+          signal: AbortSignal.timeout(1000),
+        });
+        if (vRes.ok && isMounted) {
+          const vData = await vRes.json();
+          if (vData && typeof vData.distance_cm === 'number') {
+            const rawCm = vData.distance_cm;
+            if (rawCm > 0 && rawCm <= 450.0) {
+              setDistanceM(parseFloat((rawCm / 100.0).toFixed(2)));
               setDistanceCm(parseFloat(rawCm.toFixed(1)));
             } else {
               setDistanceM(4.0);
@@ -160,39 +188,27 @@ export function useObstacleSensor(): ObstacleSensorState {
           }
         }
       } catch {
-        // Vite proxy unreachable
+        // Tier 2 failed
       }
 
-      if (gotReading) return;
-
-      // Tier 2: Fetch via backend proxy /api/sensor/obstacle
-      try {
-        const res = await fetch(`${backendBase}/api/sensor/obstacle`, {
-          headers: { 'Accept': 'application/json' },
-          signal: AbortSignal.timeout(1200),
-        });
-        if (res.ok && isMounted) {
-          const data = await res.json();
-          if (typeof data.distanceM === 'number' || typeof data.distanceCm === 'number') {
-            const dM = typeof data.distanceM === 'number' ? data.distanceM : (data.distanceCm / 100.0);
-            const dCm = typeof data.distanceCm === 'number' ? data.distanceCm : Math.round(dM * 100);
-            setDistanceM(parseFloat(dM.toFixed(2)));
-            setDistanceCm(parseFloat(dCm.toFixed(1)));
-            setIsHardwareConnected(Boolean(data.hardwareConnected));
-            setDataSource('live');
-          }
-        }
-      } catch {
-        // Both backend and ESP32 offline
+      if (!gotReading && isMounted) {
+        setIsHardwareConnected(false);
       }
     };
 
-    // Poll every 350ms for near-instantaneous live distance updates
+    // Poll every 500ms for live distance updates
     pollHardware();
     const interval = setInterval(pollHardware, 350);
+
+    const handleUrlChange = () => {
+      pollHardware();
+    };
+    window.addEventListener('floodscout_esp32_url_changed', handleUrlChange);
+
     return () => {
       isMounted = false;
       clearInterval(interval);
+      window.removeEventListener('floodscout_esp32_url_changed', handleUrlChange);
     };
   }, []);
 

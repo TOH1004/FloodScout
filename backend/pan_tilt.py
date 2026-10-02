@@ -311,9 +311,20 @@ class ESP32PanTiltController(PanTiltController):
             req = urllib.request.Request(url, headers={"User-Agent": "FloodScout/2.0"}, method="GET")
             with urllib.request.urlopen(req, timeout=self._timeout) as resp:
                 if resp.status == 200:
-                    with self._lock:
-                        self._connected = True
-                        self._last_error = None
+                    try:
+                        body = resp.read().decode("utf-8")
+                        parsed = json.loads(body)
+                        with self._lock:
+                            if "panAngle" in parsed and isinstance(parsed["panAngle"], (int, float)):
+                                self._pan_angle = int(parsed["panAngle"])
+                            if "tiltAngle" in parsed and isinstance(parsed["tiltAngle"], (int, float)):
+                                self._tilt_angle = int(parsed["tiltAngle"])
+                            self._connected = True
+                            self._last_error = None
+                    except Exception:
+                        with self._lock:
+                            self._connected = True
+                            self._last_error = None
                     return {"success": True, "mode": self._mode, "connected": True}
         except Exception as e:
             with self._lock:
@@ -390,6 +401,14 @@ class ESP32PanTiltController(PanTiltController):
         try:
             with urllib.request.urlopen(req, timeout=self._timeout) as resp:
                 resp_data = resp.read().decode("utf-8")
+                try:
+                    parsed = json.loads(resp_data)
+                    if "panAngle" in parsed and isinstance(parsed["panAngle"], (int, float)):
+                        new_pan = int(parsed["panAngle"])
+                    if "tiltAngle" in parsed and isinstance(parsed["tiltAngle"], (int, float)):
+                        new_tilt = int(parsed["tiltAngle"])
+                except Exception:
+                    pass
                 with self._lock:
                     self._pan_angle = new_pan
                     self._tilt_angle = new_tilt

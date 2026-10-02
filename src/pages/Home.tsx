@@ -8,22 +8,16 @@ import {
   Navigation,
   Eye,
   Radio,
-  Zap,
   ChevronRight,
   Map,
   Camera,
-  Cpu,
   Waves,
+  Menu,
+  X,
 } from 'lucide-react';
 
-const FloodScoutLogo = () => (
-  <svg className="w-7 h-7" viewBox="0 0 32 32" fill="none">
-    <rect width="32" height="32" rx="8" fill="#22d3ee" />
-    <path d="M6 22 Q10 14 16 18 Q22 22 26 10" stroke="#0f172a" strokeWidth="2.5" strokeLinecap="round" fill="none" />
-    <circle cx="16" cy="18" r="3" fill="#0f172a" />
-    <path d="M13 24 h6" stroke="#0f172a" strokeWidth="2" strokeLinecap="round" />
-  </svg>
-);
+import FloodScoutLogo from '../components/common/FloodScoutLogo';
+
 
 const USVIllustration = () => (
   <svg viewBox="0 0 340 200" className="w-full h-full" fill="none">
@@ -84,16 +78,52 @@ const USVIllustration = () => (
   </svg>
 );
 
+const techSpecs = [
+  {
+    category: 'EDGE COMPUTER VISION & SENSING',
+    items: [
+      { name: 'YOLOv8 Edge AI Person Detection', desc: 'Custom trained model detects half-submerged human bodies, life vests, and waving gestures', spec: '96.4% Accuracy' },
+      { name: 'Dual Optical & FLIR Thermal Sensors', desc: 'High-definition 1080p 60fps RGB optical feed with zero-lux thermal night vision infrared', spec: '150m Range' },
+      { name: 'Bathymetric Ultrasonic Sonar', desc: 'Real-time underwater depth mapping to prevent rescue boats from grounding on submerged obstacles', spec: '0.3m – 30.0m' },
+    ]
+  },
+  {
+    category: 'HULL & PROPULSION ENGINEERING',
+    items: [
+      { name: 'Dual Encapsulated Brushless Thrusters', desc: 'High-torque weedless ducted thrusters providing 4.5 knots forward thrust in turbulent floodwaters', spec: '8.3 km/h Max' },
+      { name: 'Ultra-Shallow Draft Carbon Composite Hull', desc: 'IP68 fully sealed waterproof casing capable of navigating through 15cm shallow floodwaters', spec: '0.15m Draft' },
+      { name: 'Hot-Swappable LiFePO4 Power System', desc: '4S high-density battery pack providing 4.2 hours of continuous autonomous search and rescue', spec: '4.2 Hours' },
+    ]
+  },
+  {
+    category: 'TELEMETRY & MESH COMMUNICATIONS',
+    items: [
+      { name: '5.8 GHz COFDM Encrypted Video Link', desc: 'Ultra-low latency (18ms) encrypted digital video stream directly to operator laptop dashboard', spec: '3.5 km LOS' },
+      { name: 'LoRa 433 MHz Emergency Telemetry', desc: 'Long-range low-bandwidth backup telemetry for remote disaster zones with collapsed cellular networks', spec: '12 km Range' },
+      { name: 'Multi-Constellation GNSS Geotagging', desc: 'GPS + GLONASS + Galileo RTK positioning with centimeter-level victim coordinate tagging', spec: '±0.5m Precision' },
+    ]
+  }
+];
+
 export default function Home() {
   const [email, setEmail] = useState('');
   const [subscribed, setSubscribed] = useState(false);
-  const [scrollY, setScrollY] = useState(0);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
-    const handleScroll = () => setScrollY(window.scrollY);
+    const handleScroll = () => {
+      if (mobileMenuOpen) setMobileMenuOpen(false);
+    };
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
+  }, [mobileMenuOpen]);
+
+  const scrollTo = (id: string) => {
+    setMobileMenuOpen(false);
+    setTimeout(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
+    }, 50);
+  };
 
   const handleSubscribe = (e: React.FormEvent) => {
     e.preventDefault();
@@ -123,6 +153,14 @@ export default function Home() {
     { label: 'Radio', value: 'HotRC CT-6A + F-06A — 2.4 GHz RC with 6-channel failsafe override' },
   ];
 
+  const navItems = [
+    { label: 'Our Story', id: 'our-story' },
+    { label: 'Technology', id: 'technology' },
+    { label: 'Mission', id: 'mission' },
+    { label: 'Hardware', id: 'hardware' },
+    { label: 'Contact', id: 'contact' },
+  ];
+
   return (
     <div className="w-full min-h-screen bg-[#060d14] text-white font-sans selection:bg-[#22d3ee]/30 selection:text-[#22d3ee]">
 
@@ -131,33 +169,60 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
 
           {/* Logo */}
-          <Link to="/" className="flex items-center gap-2.5 group">
+          <Link to="/" className="flex items-center gap-2.5 group shrink-0">
             <FloodScoutLogo />
-            <span className="font-bold text-white tracking-tight text-lg">FLOODSCOUT</span>
+            <span className="font-extrabold text-white tracking-widest text-lg">FLOODSCOUT</span>
           </Link>
 
-          {/* Center links */}
-          <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-slate-400">
-            <Link to="/our-story" className="hover:text-white transition-colors">Our Story</Link>
-            <Link to="/technology" className="hover:text-white transition-colors">Technology</Link>
-            <Link to="/victims" className="hover:text-white transition-colors">Victim Radar</Link>
-            <Link to="/contact" className="hover:text-white transition-colors">Contact</Link>
+          {/* Center nav — desktop */}
+          <nav className="hidden md:flex items-center gap-7 text-sm font-medium text-slate-400">
+            {navItems.map(item => (
+              <button
+                key={item.id}
+                onClick={() => scrollTo(item.id)}
+                className="hover:text-white transition-colors cursor-pointer"
+              >
+                {item.label}
+              </button>
+            ))}
           </nav>
 
-          {/* CTA */}
+          {/* CTA + mobile toggle */}
           <div className="flex items-center gap-3">
             <Link
-              to="/dashboard"
+              to="/login"
               className="bg-[#f97316] hover:bg-[#ea6c0c] text-white text-sm font-bold px-5 py-2.5 rounded-full transition-all shadow-lg shadow-orange-900/30 active:scale-95"
             >
               Launch Dashboard →
             </Link>
+            <button
+              className="md:hidden text-slate-400 hover:text-white transition-colors p-1"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label="Toggle mobile menu"
+            >
+              {mobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
+            </button>
           </div>
         </div>
+
+        {/* Mobile drawer */}
+        {mobileMenuOpen && (
+          <div className="md:hidden border-t border-white/5 bg-[#060d14]/98 px-6 py-4 flex flex-col gap-2">
+            {navItems.map(item => (
+              <button
+                key={item.id}
+                onClick={() => scrollTo(item.id)}
+                className="text-left text-sm font-medium text-slate-400 hover:text-white py-2.5 border-b border-white/5 last:border-0 transition-colors"
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        )}
       </header>
 
       {/* ── HERO ─────────────────────────────────────────────────────────── */}
-      <section className="max-w-7xl mx-auto px-6 pt-20 pb-16 grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+      <section id="hero" className="max-w-7xl mx-auto px-6 pt-20 pb-16 grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
 
         {/* Left: Headline */}
         <div className="space-y-8">
@@ -178,14 +243,14 @@ export default function Home() {
 
           <div className="flex flex-wrap gap-4">
             <Link
-              to="/dashboard"
+              to="/login"
               className="bg-[#f97316] hover:bg-[#ea6c0c] text-white font-bold px-8 py-4 rounded-full transition-all text-sm shadow-xl shadow-orange-900/40 active:scale-95 flex items-center gap-2"
             >
               Open Robot Console
               <ArrowRight size={16} />
             </Link>
             <Link
-              to="/operations"
+              to="/login"
               className="bg-white/10 hover:bg-white/15 border border-white/20 text-white font-semibold px-8 py-4 rounded-full transition-all text-sm flex items-center gap-2"
             >
               Operations Dashboard
@@ -227,13 +292,9 @@ export default function Home() {
             {/* USV illustration */}
             <div className="relative h-48 rounded-2xl overflow-hidden bg-gradient-to-b from-[#0a1929] to-[#071220]">
               <USVIllustration />
-
-              {/* Floating detection badge */}
               <div className="absolute top-3 right-3 bg-[#f97316] text-white text-[10px] font-bold px-2.5 py-1 rounded-lg shadow-lg animate-pulse">
                 PERSON DETECTED · 94%
               </div>
-
-              {/* GPS coords */}
               <div className="absolute bottom-3 left-3 bg-black/60 backdrop-blur-sm text-[10px] font-mono text-slate-300 px-2.5 py-1.5 rounded-lg border border-white/10">
                 4.2988°N · 100.7642°E · 2.45 m
               </div>
@@ -254,7 +315,7 @@ export default function Home() {
 
       {/* ── TICKER STATS BAR ─────────────────────────────────────────────── */}
       <div className="border-y border-white/5 bg-white/[0.02] py-5 overflow-hidden">
-        <div className="flex items-center gap-16 animate-none">
+        <div className="flex items-center gap-16">
           <div className="flex items-center gap-16 whitespace-nowrap px-8">
             {[
               { label: 'SECTORS COVERED', value: '12' },
@@ -313,8 +374,77 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ── 4-STEP PROCESS (actually 6 steps from deploy to localise) ─────── */}
-      <section className="border-t border-white/5 py-24">
+      {/* ── OUR STORY ─────────────────────────────────────────────────────── */}
+      <section id="our-story" className="border-t border-white/5 py-24">
+        <div className="max-w-7xl mx-auto px-6">
+          {/* Header */}
+          <div className="text-center mb-16">
+            <span className="text-[11px] font-mono uppercase tracking-widest text-slate-500 border border-white/10 px-3.5 py-1.5 rounded-full inline-block mb-5">
+              Heritage &amp; Life-Saving Vision
+            </span>
+            <h2 className="text-4xl sm:text-5xl font-extrabold tracking-tight">
+              Our Story
+            </h2>
+            <p className="text-slate-500 text-xs mt-3 tracking-[0.3em] uppercase font-mono">
+              Autonomous Robotics for Extreme Flood Disaster Response
+            </p>
+            <div className="w-16 h-px bg-white/10 mx-auto mt-4" />
+          </div>
+
+          {/* Narrative + images */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center mb-16">
+            {/* Left: text */}
+            <div className="space-y-5 text-slate-400 text-base leading-relaxed">
+              <p>
+                <span className="text-6xl font-extrabold text-white float-left mr-4 leading-[0.85]">B</span>
+                orn from the devastating monsoon flash floods across Southeast Asia, FloodScout was created by a dedicated team of robotics engineers and disaster response pioneers. We witnessed firsthand how conventional aerial drones are blinded by corrugated roofs, awnings, and tree canopies, while human responders are put in grave danger by swift currents and submerged hazards.
+              </p>
+              <p className="clear-left">
+                FloodScout redefines flood search-and-rescue by shifting the perspective directly to the water level. Operating at water level, our autonomous IP68 composite amphibious hull navigates inundated streets, scans submerged porches, and peers directly under eaves.
+              </p>
+              <p>
+                Equipped with custom edge AI YOLOv8 computer vision, bathymetric sonar depth mapping, and mesh RF telemetry, FloodScout automatically flags trapped human silhouettes, logs GPS coordinates, and alerts frontline rescue boats in sub-second time.
+              </p>
+              <button
+                onClick={() => scrollTo('technology')}
+                className="inline-flex items-center gap-2 mt-2 bg-[#22d3ee]/10 hover:bg-[#22d3ee]/20 border border-[#22d3ee]/30 text-[#22d3ee] font-semibold px-6 py-3 rounded-full text-sm transition-all"
+              >
+                Discover Our Technology <ArrowRight size={14} />
+              </button>
+            </div>
+
+            {/* Right: dual images */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="aspect-[3/4] overflow-hidden rounded-2xl border border-white/10 shadow-xl">
+                <img
+                  src="https://images.unsplash.com/photo-1547683905-f686c993aae5?q=80&w=600&auto=format&fit=crop"
+                  alt="Flood Rescue Operations"
+                  className="w-full h-full object-cover hover:scale-105 transition-transform duration-700"
+                />
+              </div>
+              <div className="aspect-[3/4] overflow-hidden rounded-2xl border border-white/10 shadow-xl mt-8">
+                <img
+                  src="https://images.unsplash.com/photo-1581092160607-ee22621dd758?q=80&w=600&auto=format&fit=crop"
+                  alt="Engineering Team"
+                  className="w-full h-full object-cover hover:scale-105 transition-transform duration-700"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* 6-step banner */}
+          <div className="bg-[#0e1722] border border-[#1b2b3c] rounded-3xl p-12 text-center">
+            <span className="text-[11px] font-mono uppercase tracking-widest text-slate-500 mb-4 block">Operational Protocol</span>
+            <h3 className="text-2xl font-extrabold text-white mb-4">The 6-Step Operational Cycle</h3>
+            <p className="text-slate-400 max-w-2xl mx-auto text-sm leading-relaxed">
+              "Deploy into raging torrents, Monitor real-time bathymetry, Detect trapped victims with edge AI, Locate with precision GPS, Assess triage urgency, and Rescue with frontline coordination."
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* ── MISSION FLOW ─────────────────────────────────────────────────── */}
+      <section id="mission" className="border-t border-white/5 py-24">
         <div className="max-w-7xl mx-auto px-6">
           <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-14 gap-4">
             <div>
@@ -325,13 +455,13 @@ export default function Home() {
                 From launch to location<br />in six steps.
               </h2>
             </div>
-            <Link to="/dashboard" className="flex items-center gap-1.5 text-[#22d3ee] text-sm font-semibold hover:underline shrink-0">
+            <Link to="/login" className="flex items-center gap-1.5 text-[#22d3ee] text-sm font-semibold hover:underline shrink-0">
               Open live console <ChevronRight size={16} />
             </Link>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {steps.map((step, i) => (
+            {steps.map((step) => (
               <div
                 key={step.num}
                 className="bg-white/[0.03] border border-white/10 rounded-2xl p-6 hover:bg-white/[0.05] hover:border-[#22d3ee]/30 transition-all group"
@@ -350,8 +480,61 @@ export default function Home() {
         </div>
       </section>
 
+      {/* ── RESCUE TECHNOLOGY ────────────────────────────────────────────── */}
+      <section id="technology" className="border-t border-white/5 py-24">
+        <div className="max-w-7xl mx-auto px-6">
+          {/* Header */}
+          <div className="text-center mb-16">
+            <span className="text-[11px] font-mono uppercase tracking-widest text-slate-500 border border-white/10 px-3.5 py-1.5 rounded-full inline-block mb-5">
+              Engineering &amp; Hardware Architecture
+            </span>
+            <h2 className="text-4xl sm:text-5xl font-extrabold tracking-tight">
+              Rescue Technology
+            </h2>
+            <p className="text-slate-500 text-xs mt-3 tracking-[0.3em] uppercase font-mono">
+              Autonomous Water-Level Systems &amp; AI Vision
+            </p>
+            <div className="w-16 h-px bg-white/10 mx-auto mt-4" />
+          </div>
+
+          {/* Hero image */}
+          <div className="w-full aspect-[21/9] overflow-hidden rounded-2xl border border-white/10 mb-16 shadow-2xl">
+            <img
+              src="https://images.unsplash.com/photo-1581092160607-ee22621dd758?q=80&w=1600&auto=format&fit=crop"
+              alt="Rescue Robotics Hardware Engineering"
+              className="w-full h-full object-cover"
+            />
+          </div>
+
+          {/* Spec sections */}
+          <div className="space-y-16 max-w-5xl mx-auto">
+            {techSpecs.map((section, idx) => (
+              <div key={idx} className="border-t border-white/5 pt-10">
+                <h3 className="text-[11px] font-mono uppercase tracking-widest text-slate-500 text-center mb-10">
+                  {section.category}
+                </h3>
+                <div className="space-y-0">
+                  {section.items.map((item, i) => (
+                    <div
+                      key={i}
+                      className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-2 border-b border-white/5 py-5 last:border-0 hover:bg-white/[0.02] transition-colors rounded-lg px-3 -mx-3"
+                    >
+                      <div className="pr-4">
+                        <h4 className="text-white font-semibold text-sm">{item.name}</h4>
+                        <p className="text-slate-500 text-xs mt-1 leading-relaxed">{item.desc}</p>
+                      </div>
+                      <span className="text-[#22d3ee] font-bold font-mono text-sm shrink-0">{item.spec}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* ── BUILT FROM PARTS ─────────────────────────────────────────────── */}
-      <section className="border-t border-white/5 py-24">
+      <section id="hardware" className="border-t border-white/5 py-24">
         <div className="max-w-7xl mx-auto px-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
 
@@ -380,7 +563,7 @@ export default function Home() {
                 Built from parts any<br />team can source.
               </h2>
               <p className="text-slate-400 text-base leading-relaxed mb-8">
-                Every component is available on Shopee or Lazada. Total BOM cost under RM 350. The software is fully open and runs on free-tier cloud.
+                Every component is available on Shopee or Lazada. Total BOM cost under RM 700. The software is fully open and runs on free-tier cloud.
               </p>
 
               <div className="space-y-3">
@@ -492,7 +675,7 @@ export default function Home() {
 
               <div className="px-5 py-4 border-t border-white/5 flex items-center justify-between">
                 <span className="text-slate-500 text-xs">Robot console — pilot view</span>
-                <Link to="/dashboard" className="text-[#22d3ee] text-xs font-semibold flex items-center gap-1 hover:gap-2 transition-all">
+                <Link to="/login" className="text-[#22d3ee] text-xs font-semibold flex items-center gap-1 hover:gap-2 transition-all">
                   Open Console <ArrowRight size={13} />
                 </Link>
               </div>
@@ -532,31 +715,26 @@ export default function Home() {
               <div className="p-4">
                 <div className="bg-[#060d14] border border-[#192738] rounded-xl overflow-hidden h-44 relative">
                   <div className="absolute inset-0 opacity-20" style={{backgroundImage: 'linear-gradient(#22d3ee15 1px, transparent 1px), linear-gradient(90deg, #22d3ee15 1px, transparent 1px)', backgroundSize: '14px 14px'}} />
-                  {/* Zone polygons */}
                   <svg className="absolute inset-0 w-full h-full" viewBox="0 0 300 176" preserveAspectRatio="none">
                     <polygon points="60,40 120,30 140,90 80,100" fill="#f9731620" stroke="#f97316" strokeWidth="1.5" />
                     <polygon points="150,50 210,45 220,105 155,110" fill="#f59e0b15" stroke="#f59e0b" strokeWidth="1.5" strokeDasharray="4 2" />
                     <polygon points="80,110 140,105 150,145 90,150" fill="#22d3ee10" stroke="#22d3ee" strokeWidth="1" strokeDasharray="4 2" />
-                    {/* USV marker */}
                     <polygon points="100,68 108,88 100,82 92,88" fill="#22d3ee" />
                     <circle cx="100" cy="68" r="12" stroke="#22d3ee" strokeWidth="0.8" fill="none" opacity="0.4" />
-                    {/* Person marker */}
                     <circle cx="135" cy="62" r="5" fill="#f97316" />
                     <circle cx="135" cy="62" r="9" stroke="#f97316" strokeWidth="0.8" fill="none" opacity="0.5" />
                   </svg>
-                  {/* Legend */}
                   <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-sm rounded-lg px-3 py-1.5 text-[8px] font-mono space-y-0.5">
                     <div className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 bg-[#22d3ee] rotate-45 inline-block" />USV-01</div>
                     <div className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#f97316] inline-block" />Detected person</div>
                   </div>
-                  {/* Map tile label */}
                   <div className="absolute top-2 right-2 bg-black/60 rounded-lg px-2 py-1 text-[8px] font-mono text-slate-400">[GOOGLE HYBRID]</div>
                 </div>
               </div>
 
               <div className="px-5 py-4 border-t border-white/5 flex items-center justify-between">
                 <span className="text-slate-500 text-xs">Operations dashboard — commander view</span>
-                <Link to="/operations" className="text-[#f97316] text-xs font-semibold flex items-center gap-1 hover:gap-2 transition-all">
+                <Link to="/login" className="text-[#f97316] text-xs font-semibold flex items-center gap-1 hover:gap-2 transition-all">
                   Open Dashboard <ArrowRight size={13} />
                 </Link>
               </div>
@@ -567,7 +745,7 @@ export default function Home() {
       </section>
 
       {/* ── FIELD TRIALS CTA BANNER ──────────────────────────────────────── */}
-      <section className="py-6 px-6 max-w-7xl mx-auto pb-16">
+      <section id="contact" className="py-6 px-6 max-w-7xl mx-auto pb-16">
         <div className="bg-[#f97316] rounded-3xl p-10 sm:p-14 relative overflow-hidden">
           {/* Background texture */}
           <div className="absolute inset-0 opacity-10" style={{backgroundImage: 'radial-gradient(circle at 80% 50%, #ffffff 0%, transparent 60%)'}} />
@@ -618,7 +796,7 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-6">
           <Link to="/" className="flex items-center gap-2.5">
             <FloodScoutLogo />
-            <span className="font-bold text-white tracking-tight">FLOODSCOUT</span>
+            <span className="font-extrabold text-white tracking-widest">FLOODSCOUT</span>
           </Link>
 
           <div className="text-slate-600 text-xs font-mono text-center">
@@ -627,13 +805,12 @@ export default function Home() {
 
           <div className="flex items-center gap-3">
             {[
-              { to: '/dashboard', label: 'Robot Console' },
-              { to: '/operations', label: 'Operations' },
-              { to: '/technology', label: 'Technology' },
+              { to: '/login', label: 'Robot Console' },
+              { to: '/login', label: 'Operations' },
               { to: '/contact', label: 'Contact' },
-            ].map(l => (
+            ].map((l, i) => (
               <Link
-                key={l.to}
+                key={i}
                 to={l.to}
                 className="text-slate-600 hover:text-slate-300 text-xs transition-colors"
               >

@@ -1,5 +1,4 @@
 import { Outlet, useLocation } from 'react-router-dom';
-import Navbar from './Navbar';
 import Footer from './Footer';
 
 export default function Layout() {
@@ -7,16 +6,14 @@ export default function Layout() {
   const isHome = location.pathname === '/';
 
   return (
-    <div className={`min-h-screen ${isHome ? 'bg-[#F6F4F0]' : 'bg-[#FAF7F2]'} text-[#162347] flex flex-col font-sans selection:bg-[#7BD7FF] selection:text-[#162347]`}>
-      {!isHome && <Navbar />}
-
+    <div className={`min-h-screen ${isHome ? 'bg-[#060d14]' : 'bg-[#FAF7F2]'} text-[#162347] flex flex-col font-sans selection:bg-[#7BD7FF] selection:text-[#162347]`}>
       {/* Main Page Content */}
       <main className="flex-grow">
         <Outlet />
       </main>
 
+      {/* Footer only on non-home sub-pages */}
       {!isHome && <Footer />}
     </div>
   );
 }
-

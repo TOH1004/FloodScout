@@ -99,7 +99,8 @@ export function ObsTopMenu({
             title="Return to FloodScout Web Home"
           >
             <ArrowLeft size={12} />
-            <span className="font-mono text-emerald-400 font-bold">FloodScout</span>
+            <img src="/logo-icon.png" alt="FloodScout" className="w-4 h-4 object-contain rounded" />
+            <span className="font-mono text-cyan-400 font-bold">FloodScout</span>
             <span className="text-[10px] text-slate-400 uppercase font-mono font-semibold">GCS Control</span>
           </Link>
 

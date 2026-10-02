@@ -7,6 +7,7 @@ import Rescue from './pages/Rescue';
 import Contact from './pages/Contact';
 import Dashboard from './pages/Dashboard';
 import Operations from './pages/Operations';
+import Login from './pages/Login';
 import { RescueProvider } from './context/RescueContext';
 
 function App() {
@@ -29,6 +30,8 @@ function App() {
           {/* Operations Command Dashboard & USV Robot Console */}
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/operations" element={<Operations />} />
+          {/* Login */}
+          <Route path="/login" element={<Login />} />
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

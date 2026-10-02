@@ -29,12 +29,15 @@ export default function Navbar({ onOpenDeploy }: NavbarProps) {
         <div className="py-6 px-4 md:px-8 text-center relative">
           <Link 
             to="/" 
-            className="inline-block hover:opacity-90 transition-opacity"
+            className="inline-flex flex-col items-center hover:opacity-90 transition-opacity"
           >
-            <h1 className="font-script text-4xl sm:text-5xl md:text-6xl text-[#162347] leading-none tracking-tight font-bold">
-              FloodScout
-            </h1>
-            <span className="block text-[10px] font-editorial-serif tracking-[0.35em] text-[#162347]/70 uppercase mt-1">
+            <div className="flex items-center gap-3">
+              <img src="/logo-icon.png" alt="FloodScout" className="w-10 h-10 object-contain rounded-xl shadow-sm" />
+              <h1 className="font-sans text-3xl sm:text-4xl text-[#162347] leading-none tracking-wider font-black">
+                FLOODSCOUT
+              </h1>
+            </div>
+            <span className="block text-[10px] font-mono tracking-[0.35em] text-[#162347]/70 uppercase mt-2">
               Autonomous Water-Level Rescue Robotics
             </span>
           </Link>

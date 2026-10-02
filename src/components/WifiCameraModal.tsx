@@ -49,7 +49,7 @@ export const WifiCameraModal: React.FC<WifiCameraModalProps> = ({
     return normalizeCameraStreamUrl(raw);
   });
   const [feedMode, setFeedMode] = useState<CameraFeedMode>(() => activeFeedMode || getCameraFeedMode());
-  const [syncPanTilt, setSyncPanTilt] = useState(false);
+  const [syncPanTilt, setSyncPanTilt] = useState(true);
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'failed'>('idle');
   const [testMessage, setTestMessage] = useState<string>('');
   const [saveSuccess, setSaveSuccess] = useState(false);

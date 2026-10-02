@@ -20,11 +20,6 @@ export function getEsp32BaseUrl(): string {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved && saved.trim()) {
       let cleaned = saved.trim();
-      // Guard: 10.185.112.149 is the separate Camera board, not the pan/tilt & sensor board
-      if (cleaned.includes('10.185.112.149')) {
-        cleaned = `http://${DEFAULT_ESP32_IP}`;
-        try { localStorage.setItem(STORAGE_KEY, cleaned); } catch {}
-      }
       if (!cleaned.startsWith('http://') && !cleaned.startsWith('https://')) {
         cleaned = `http://${cleaned}`;
       }
@@ -60,13 +55,6 @@ export function setEsp32BaseUrl(rawInput: string): string {
   } catch {
     // ignore
   }
-
-  // Broadcast to all hooks and notify backend
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('floodscout_esp32_url_changed', { detail: cleaned }));
-    fetch(`/api/esp32/config?target=${encodeURIComponent(cleaned)}`, { method: 'POST' }).catch(() => {});
-  }
-
   return cleaned;
 }
 

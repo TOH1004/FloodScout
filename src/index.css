@@ -29,12 +29,6 @@
   font-family: 'Cormorant Garamond', Georgia, serif;
 }
 
-.font-comic,
-.font-story,
-.font-writing {
-  font-family: 'Shantell Sans', 'Kalam', 'Patrick Hand', 'Comic Sans MS', cursive, sans-serif;
-}
-
 /* Subtle image zoom on card hover */
 .img-zoom {
   transition: transform 0.7s cubic-bezier(0.25, 1, 0.5, 1);

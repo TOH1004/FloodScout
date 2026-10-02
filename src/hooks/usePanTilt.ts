@@ -78,17 +78,16 @@ export async function sendPanTiltCommand(command: string, customBaseUrl?: string
 
   const isHttpsOrigin = typeof window !== 'undefined' && window.location.protocol === 'https:';
   const url = isHttpsOrigin && rootUrl.startsWith('http://')
-    ? `${getBackendBaseUrl()}/api/pan-tilt/${endpoint}?target=${encodeURIComponent(rootUrl)}`
+    ? `${getBackendBaseUrl()}/api/pan-tilt/${endpoint}`
     : `${rootUrl}/api/pan-tilt/${endpoint}`;
 
-  // Try direct fetch first
   try {
     const response = await fetch(url, {
       method: 'GET',
       headers: {
         Accept: 'application/json, text/plain, */*',
       },
-      signal: AbortSignal.timeout(1200),
+      signal: AbortSignal.timeout(2500),
     });
 
     if (!response.ok) {
@@ -102,33 +101,13 @@ export async function sendPanTiltCommand(command: string, customBaseUrl?: string
       return { success: true, message: text, command: endpoint, connected: true };
     }
   } catch (error: unknown) {
-    // Fallback 1: try Backend proxy /api/pan-tilt/:command with ?target= (bypasses browser CORS completely!)
-    try {
-      const backendUrl = `${getBackendBaseUrl()}/api/pan-tilt/${endpoint}?target=${encodeURIComponent(rootUrl)}`;
-      const bRes = await fetch(backendUrl, {
-        method: 'GET',
-        headers: { Accept: 'application/json, text/plain, */*' },
-        signal: AbortSignal.timeout(2000),
-      });
-      if (bRes.ok) {
-        const bText = await bRes.text();
-        try {
-          return JSON.parse(bText);
-        } catch {
-          return { success: true, message: bText, command: endpoint, connected: true };
-        }
-      }
-    } catch {
-      // Backend proxy failed, try Vite proxy
-    }
-
-    // Fallback 2: try Vite proxy /esp32-api to bypass browser CORS / mixed-content
+    // Fallback: try Vite proxy /esp32-api to bypass browser CORS / mixed-content
     try {
       const fbUrl = `/esp32-api/pan-tilt/${endpoint}`;
       const fbRes = await fetch(fbUrl, {
         method: 'GET',
         headers: { Accept: 'application/json, text/plain, */*' },
-        signal: AbortSignal.timeout(1200),
+        signal: AbortSignal.timeout(1500),
       });
       if (fbRes.ok) {
         const fbText = await fbRes.text();
@@ -139,7 +118,7 @@ export async function sendPanTiltCommand(command: string, customBaseUrl?: string
         }
       }
     } catch {
-      // Vite proxy failed
+      // Fallback failed, proceed to normal error handling
     }
 
     const err = error as Error;
@@ -150,6 +129,14 @@ export async function sendPanTiltCommand(command: string, customBaseUrl?: string
         `[PanTilt Wi-Fi] Request to ${url} timed out (ESP32 unreachable).\n` +
           `• Verify that ESP32 is powered on and connected to the same Wi-Fi.\n` +
           `• Check if the ESP32 IP address has changed.`
+      );
+    } else if (err?.name === 'TypeError' || err?.message?.includes('Failed to fetch')) {
+      console.warn(
+        `[PanTilt Wi-Fi] Could not reach ESP32 at ${url}.\n` +
+          `Check that:\n` +
+          `  1. Your computer and ESP32 are connected to the same Wi-Fi network.\n` +
+          `  2. ESP32 IP is correct (configured: ${rootUrl}).\n` +
+          `  3. If DevTools shows a CORS error, ensure the ESP32 HTTP handler includes header: 'Access-Control-Allow-Origin: *'.`
       );
     } else {
       console.warn(`[PanTilt Wi-Fi] Error reaching ${url}:`, err.message || err);
@@ -166,16 +153,15 @@ export async function fetchPanTiltStatus(customBaseUrl?: string): Promise<PanTil
   const rootUrl = customBaseUrl || getEsp32BaseUrl();
   const isHttpsOrigin = typeof window !== 'undefined' && window.location.protocol === 'https:';
   const url = isHttpsOrigin && rootUrl.startsWith('http://')
-    ? `${getBackendBaseUrl()}/api/pan-tilt/status?target=${encodeURIComponent(rootUrl)}`
+    ? `${getBackendBaseUrl()}/api/pan-tilt/status`
     : `${rootUrl}/api/pan-tilt/status`;
-
   try {
     const response = await fetch(url, {
       method: 'GET',
       headers: {
         Accept: 'application/json, text/plain, */*',
       },
-      signal: AbortSignal.timeout(1200),
+      signal: AbortSignal.timeout(2000),
     });
 
     if (!response.ok) {
@@ -189,28 +175,12 @@ export async function fetchPanTiltStatus(customBaseUrl?: string): Promise<PanTil
       return { success: true, connected: true, status: text };
     }
   } catch (err) {
-    // Try Backend proxy fallback with ?target=
-    try {
-      const backendUrl = `${getBackendBaseUrl()}/api/pan-tilt/status?target=${encodeURIComponent(rootUrl)}`;
-      const bRes = await fetch(backendUrl, {
-        method: 'GET',
-        headers: { Accept: 'application/json, text/plain, */*' },
-        signal: AbortSignal.timeout(1800),
-      });
-      if (bRes.ok) {
-        const bText = await bRes.text();
-        return JSON.parse(bText);
-      }
-    } catch {
-      // ignore
-    }
-
     // Try Vite proxy fallback
     try {
       const fbResponse = await fetch('/esp32-api/pan-tilt/status', {
         method: 'GET',
         headers: { Accept: 'application/json, text/plain, */*' },
-        signal: AbortSignal.timeout(1200),
+        signal: AbortSignal.timeout(1500),
       });
       if (fbResponse.ok) {
         const fbText = await fbResponse.text();
@@ -219,7 +189,6 @@ export async function fetchPanTiltStatus(customBaseUrl?: string): Promise<PanTil
     } catch {
       // ignore
     }
-
     throw err;
   }
 }
@@ -261,10 +230,6 @@ export function usePanTilt(): UsePanTiltReturn {
   const fetchStatus = useCallback(async () => {
     try {
       const data = await fetchPanTiltStatus(esp32Url);
-      if (data && data.connected === false) {
-        setConnected(false);
-        return;
-      }
       setConnected(true);
       setError(null);
       if (typeof data.panAngle === 'number') setPanAngle(data.panAngle);
@@ -290,9 +255,6 @@ export function usePanTilt(): UsePanTiltReturn {
 
       try {
         const data = await sendPanTiltCommand(normalizedCmd, esp32Url);
-        if (data && (data.connected === false || data.success === false)) {
-          throw new Error(data.error || `ESP32 command failed`);
-        }
         setConnected(true);
         setError(null);
 

@@ -1,19 +1,99 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ArrowRight,
   ArrowUpRight,
-  Volume2,
-  Menu,
-  X
+  Wifi,
+  Battery,
+  Navigation,
+  Eye,
+  Radio,
+  Zap,
+  ChevronRight,
+  Map,
+  Camera,
+  Cpu,
+  Waves,
 } from 'lucide-react';
 
+const FloodScoutLogo = () => (
+  <svg className="w-7 h-7" viewBox="0 0 32 32" fill="none">
+    <rect width="32" height="32" rx="8" fill="#22d3ee" />
+    <path d="M6 22 Q10 14 16 18 Q22 22 26 10" stroke="#0f172a" strokeWidth="2.5" strokeLinecap="round" fill="none" />
+    <circle cx="16" cy="18" r="3" fill="#0f172a" />
+    <path d="M13 24 h6" stroke="#0f172a" strokeWidth="2" strokeLinecap="round" />
+  </svg>
+);
+
+const USVIllustration = () => (
+  <svg viewBox="0 0 340 200" className="w-full h-full" fill="none">
+    {/* Water surface */}
+    <path d="M0 140 Q40 130 80 138 Q120 146 160 138 Q200 130 240 138 Q280 146 320 138 L340 140 L340 200 L0 200 Z" fill="#0e3a5c" opacity="0.6" />
+    <path d="M0 150 Q30 143 60 148 Q90 153 120 148 Q150 143 180 148 Q210 153 240 148 Q270 143 300 148 L340 150 L340 200 L0 200 Z" fill="#0a2d4a" opacity="0.5" />
+
+    {/* USV hull */}
+    <rect x="80" y="115" width="180" height="30" rx="12" fill="#1e40af" />
+    <rect x="100" y="108" width="140" height="22" rx="6" fill="#2563eb" />
+
+    {/* Thruster pods */}
+    <rect x="72" y="128" width="20" height="12" rx="6" fill="#1d4ed8" />
+    <rect x="248" y="128" width="20" height="12" rx="6" fill="#1d4ed8" />
+    <circle cx="82" cy="134" r="4" fill="#60a5fa" />
+    <circle cx="258" cy="134" r="4" fill="#60a5fa" />
+
+    {/* Mast */}
+    <rect x="168" y="72" width="4" height="40" rx="2" fill="#93c5fd" />
+
+    {/* Camera */}
+    <rect x="158" y="65" width="24" height="16" rx="4" fill="#22d3ee" />
+    <circle cx="170" cy="73" r="5" fill="#0e1722" />
+    <circle cx="170" cy="73" r="2.5" fill="#22d3ee" opacity="0.5" />
+
+    {/* Detection cone */}
+    <path d="M170 73 L120 30 L220 30 Z" fill="#22d3ee" opacity="0.08" />
+    <path d="M170 73 L130 35 L210 35" stroke="#22d3ee" strokeWidth="0.8" strokeDasharray="3 3" opacity="0.4" />
+
+    {/* Detection box */}
+    <rect x="148" y="18" width="44" height="34" rx="4" stroke="#f97316" strokeWidth="2" fill="none" strokeDasharray="3 3" />
+    <rect x="150" y="20" width="40" height="30" rx="3" fill="#f97316" opacity="0.08" />
+    <text x="170" y="40" textAnchor="middle" fill="#f97316" fontSize="8" fontWeight="bold">PERSON</text>
+    <text x="170" y="50" textAnchor="middle" fill="#f97316" fontSize="7">94%</text>
+
+    {/* Signal waves */}
+    <path d="M290 80 Q295 75 300 80" stroke="#22d3ee" strokeWidth="1.5" fill="none" opacity="0.6" />
+    <path d="M286 76 Q295 68 304 76" stroke="#22d3ee" strokeWidth="1.5" fill="none" opacity="0.4" />
+    <path d="M282 72 Q295 61 308 72" stroke="#22d3ee" strokeWidth="1.5" fill="none" opacity="0.2" />
+    <circle cx="295" cy="83" r="2" fill="#22d3ee" opacity="0.8" />
+
+    {/* GPS dot */}
+    <circle cx="170" cy="125" r="3" fill="#22d3ee" />
+    <circle cx="170" cy="125" r="6" stroke="#22d3ee" strokeWidth="1" opacity="0.4" />
+
+    {/* Solar panels on deck */}
+    <rect x="115" y="112" width="35" height="8" rx="2" fill="#1e3a5f" />
+    <rect x="190" y="112" width="35" height="8" rx="2" fill="#1e3a5f" />
+    <line x1="125" y1="112" x2="125" y2="120" stroke="#2563eb" strokeWidth="0.5" />
+    <line x1="135" y1="112" x2="135" y2="120" stroke="#2563eb" strokeWidth="0.5" />
+    <line x1="200" y1="112" x2="200" y2="120" stroke="#2563eb" strokeWidth="0.5" />
+    <line x1="210" y1="112" x2="210" y2="120" stroke="#2563eb" strokeWidth="0.5" />
+
+    {/* Sonar ripple */}
+    <circle cx="170" cy="138" r="12" stroke="#22d3ee" strokeWidth="0.8" opacity="0.3" fill="none" />
+    <circle cx="170" cy="138" r="22" stroke="#22d3ee" strokeWidth="0.6" opacity="0.2" fill="none" />
+    <circle cx="170" cy="138" r="32" stroke="#22d3ee" strokeWidth="0.5" opacity="0.1" fill="none" />
+  </svg>
+);
+
 export default function Home() {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [email, setEmail] = useState('');
-  const [newsletterEmail, setNewsletterEmail] = useState('');
   const [subscribed, setSubscribed] = useState(false);
-  const [newsletterSubscribed, setNewsletterSubscribed] = useState(false);
+  const [scrollY, setScrollY] = useState(0);
+
+  useEffect(() => {
+    const handleScroll = () => setScrollY(window.scrollY);
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   const handleSubscribe = (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,738 +104,543 @@ export default function Home() {
     }
   };
 
-  const handleNewsletter = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (newsletterEmail.trim()) {
-      setNewsletterSubscribed(true);
-      setTimeout(() => setNewsletterSubscribed(false), 3500);
-      setNewsletterEmail('');
-    }
-  };
+  const steps = [
+    { icon: <Navigation size={18} />, num: '1', label: 'Deploy', desc: 'Launch USV-01 from staging bank into flooded zone. Autonomous navigation begins immediately.' },
+    { icon: <Waves size={18} />, num: '2', label: 'Navigate', desc: 'Sonar-guided path finding avoids submerged debris while mapping the flood boundary.' },
+    { icon: <Camera size={18} />, num: '3', label: 'Scan', desc: 'XIAO ESP32-S3 streams live pan-tilt camera. AI model scans every frame for human presence.' },
+    { icon: <Eye size={18} />, num: '4', label: 'Detect', desc: 'OpenCV + SVM classifier triggers alert with confidence score, GPS coords, and front-range distance.' },
+    { icon: <Radio size={18} />, num: '5', label: 'Confirm', desc: 'Operator reviews live feed, confirms contact or marks false-alarm via the Robot Console.' },
+    { icon: <Map size={18} />, num: '6', label: 'Localise', desc: 'GPS fix transmitted to Operations dashboard. Rescue team dispatched with exact coordinates.' },
+  ];
+
+  const parts = [
+    { label: 'Camera', value: 'XIAO ESP32-S3 Sense — 2MP OV2640, Wi-Fi, AI inference onboard' },
+    { label: 'Controller', value: 'NodeMCU ESP32 — dual-core, BLE + Wi-Fi, GPIO bus for servo & ESC' },
+    { label: 'Propulsion', value: 'Dual BLDC thrusters — bidirectional ESCs, ±20° yaw authority' },
+    { label: 'Navigation', value: 'GY-NEO8M GPS — 10 Hz fix, 2.5 m CEP, NMEA serial to ESP32' },
+    { label: 'Sonar', value: 'HC-SR04 ultrasonic — 2 cm–4 m, 10 Hz, front obstacle & proximity' },
+    { label: 'Gimbal', value: '2× SG90 servo — 180° pan, 90° tilt, PWM via GPIO 18 / 19' },
+    { label: 'Radio', value: 'HotRC CT-6A + F-06A — 2.4 GHz RC with 6-channel failsafe override' },
+  ];
 
   return (
-    <div className="w-full min-h-screen bg-[#F6F4F0] text-[#14171F] font-sans selection:bg-[#7BD7FF] selection:text-[#14171F]">
-      
-      {/* ── TOP NAV BAR (Pill Style from Reference) ────────────────────────── */}
-      <header className="max-w-[1380px] mx-auto px-4 sm:px-6 lg:px-8 pt-5 sm:pt-7">
-        <div className="flex items-center justify-between">
-          
-          {/* Left Pill Navigation (Real FloodScout Pages, No Mock Data) */}
-          <nav className="hidden md:flex items-center gap-6 bg-white/90 backdrop-blur-md border border-[#E5E0D8] rounded-full px-6 py-2.5 shadow-xs text-[13px] font-medium tracking-wide">
-            <Link to="/" className="flex items-center gap-1.5 text-[#14171F] font-semibold">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#14171F]"></span>
-              Home
-            </Link>
-            <Link to="/our-story" className="text-[#64748B] hover:text-[#14171F] transition-colors">
-              Our Story
-            </Link>
-            <Link to="/technology" className="text-[#64748B] hover:text-[#14171F] transition-colors">
-              Technology
-            </Link>
-          </nav>
+    <div className="w-full min-h-screen bg-[#060d14] text-white font-sans selection:bg-[#22d3ee]/30 selection:text-[#22d3ee]">
 
-          {/* Center Brand Logo (8-spoke Asterisk) */}
-          <Link to="/" className="flex items-center gap-2 text-xl font-bold tracking-tight text-[#14171F] hover:opacity-90 transition-opacity">
-            <svg className="w-6 h-6 text-[#14171F]" viewBox="0 0 24 24" fill="currentColor">
-              {/* Geometric 8-spoke starburst / asterisk icon */}
-              <circle cx="12" cy="12" r="2.5" />
-              <path d="M12 2a1.5 1.5 0 0 1 1.5 1.5v3a1.5 1.5 0 0 1-3 0v-3A1.5 1.5 0 0 1 12 2zm0 14a1.5 1.5 0 0 1 1.5 1.5v3a1.5 1.5 0 0 1-3 0v-3A1.5 1.5 0 0 1 12 16zm10-4a1.5 1.5 0 0 1-1.5 1.5h-3a1.5 1.5 0 0 1 0-3h3A1.5 1.5 0 0 1 22 12zM8 12a1.5 1.5 0 0 1-1.5 1.5h-3a1.5 1.5 0 0 1 0-3h3A1.5 1.5 0 0 1 8 12zm11.07-7.07a1.5 1.5 0 0 1 0 2.12l-2.12 2.12a1.5 1.5 0 1 1-2.12-2.12l2.12-2.12a1.5 1.5 0 0 1 2.12 0zm-9.9 9.9a1.5 1.5 0 0 1 0 2.12l-2.12 2.12a1.5 1.5 0 0 1-2.12-2.12l2.12-2.12a1.5 1.5 0 0 1 2.12 0zm0-9.9a1.5 1.5 0 0 1 2.12 0l2.12 2.12a1.5 1.5 0 0 1-2.12 2.12L7.05 7.05a1.5 1.5 0 0 1 0-2.12zm9.9 9.9a1.5 1.5 0 0 1 0 2.12l-2.12 2.12a1.5 1.5 0 0 1-2.12-2.12l2.12-2.12a1.5 1.5 0 0 1 2.12 0z" />
-            </svg>
-            <span className="font-semibold tracking-tight text-lg">FloodScout</span>
+      {/* ── NAV ─────────────────────────────────────────────────────────── */}
+      <header className="sticky top-0 z-50 bg-[#060d14]/95 backdrop-blur-md border-b border-white/5">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+
+          {/* Logo */}
+          <Link to="/" className="flex items-center gap-2.5 group">
+            <FloodScoutLogo />
+            <span className="font-bold text-white tracking-tight text-lg">FLOODSCOUT</span>
           </Link>
 
-          {/* Right Pill Navigation & Actions (Real FloodScout Pages, No Mock Data) */}
-          <div className="hidden md:flex items-center gap-6 bg-white/90 backdrop-blur-md border border-[#E5E0D8] rounded-full px-6 py-2.5 shadow-xs text-[13px] font-medium tracking-wide">
-            <Link to="/victims" className="text-[#64748B] hover:text-[#14171F] transition-colors">
-              Victim Radar
-            </Link>
-            <Link to="/contact" className="text-[#64748B] hover:text-[#14171F] transition-colors">
-              Contact
-            </Link>
+          {/* Center links */}
+          <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-slate-400">
+            <Link to="/our-story" className="hover:text-white transition-colors">Our Story</Link>
+            <Link to="/technology" className="hover:text-white transition-colors">Technology</Link>
+            <Link to="/victims" className="hover:text-white transition-colors">Victim Radar</Link>
+            <Link to="/contact" className="hover:text-white transition-colors">Contact</Link>
+          </nav>
+
+          {/* CTA */}
+          <div className="flex items-center gap-3">
             <Link
               to="/dashboard"
-              className="bg-[#14171F] hover:bg-[#0F172A] text-white text-xs font-semibold px-4 py-1.5 rounded-full transition-all shadow-xs"
+              className="bg-[#f97316] hover:bg-[#ea6c0c] text-white text-sm font-bold px-5 py-2.5 rounded-full transition-all shadow-lg shadow-orange-900/30 active:scale-95"
             >
-              Launch Dashboard
+              Launch Dashboard →
             </Link>
           </div>
-
-          {/* Mobile Menu Button */}
-          <div className="md:hidden flex items-center gap-2">
-            <Link
-              to="/dashboard"
-              className="bg-[#14171F] text-white text-[11px] font-semibold px-4 py-2 rounded-full uppercase tracking-wider"
-            >
-              Dashboard
-            </Link>
-            <button
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-2 text-[#14171F] bg-white rounded-full border border-[#E5E0D8]"
-              aria-label="Toggle menu"
-            >
-              {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
-            </button>
-          </div>
-
         </div>
-
-        {/* Mobile Dropdown Drawer (Real FloodScout Pages, No Mock Data) */}
-        {mobileMenuOpen && (
-          <div className="md:hidden mt-3 bg-white rounded-2xl p-5 border border-[#E5E0D8] shadow-lg flex flex-col gap-3 animate-in fade-in slide-in-from-top-2">
-            <Link to="/" className="text-sm font-semibold py-1">Home</Link>
-            <Link to="/our-story" className="text-sm text-[#64748B] py-1">Our Story</Link>
-            <Link to="/technology" className="text-sm text-[#64748B] py-1">Technology</Link>
-            <Link to="/victims" className="text-sm text-[#64748B] py-1">Victim Radar</Link>
-            <Link to="/contact" className="text-sm text-[#64748B] py-1">Contact</Link>
-            <Link
-              to="/dashboard"
-              className="bg-[#14171F] text-white text-center py-2.5 rounded-full font-semibold text-xs tracking-wider uppercase mt-2 shadow"
-            >
-              Launch Dashboard
-            </Link>
-          </div>
-        )}
       </header>
 
-      {/* ── MAIN CONTENT CONTAINER ────────────────────────────────────────── */}
-      <main className="max-w-[1380px] mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-20 sm:space-y-28">
+      {/* ── HERO ─────────────────────────────────────────────────────────── */}
+      <section className="max-w-7xl mx-auto px-6 pt-20 pb-16 grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
 
-        {/* =================================================================== */}
-        {/* 1. HERO SECTION: Split Bento Grid (Light Blue Left Card)             */}
-        {/* =================================================================== */}
-        <section className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
-
-          {/* ── LEFT HERO CARD (Changed from light yellow/green to LIGHT BLUE) ─ */}
-          <div className="lg:col-span-6 bg-[#7BD7FF] rounded-[36px] p-8 sm:p-12 lg:p-14 flex flex-col justify-between relative overflow-hidden shadow-xs">
-            {/* Ambient subtle glow */}
-            <div className="absolute top-0 right-0 w-80 h-80 bg-white/20 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
-
-            {/* Top Subtitle / Tag */}
-            <div className="flex items-center gap-2 text-[#0F172A] font-semibold text-xs tracking-wide relative z-10">
-              <svg className="w-4 h-4 text-[#0F172A]" viewBox="0 0 24 24" fill="currentColor">
-                <circle cx="12" cy="12" r="2.5" />
-                <path d="M12 2a1.5 1.5 0 0 1 1.5 1.5v3a1.5 1.5 0 0 1-3 0v-3A1.5 1.5 0 0 1 12 2zm0 14a1.5 1.5 0 0 1 1.5 1.5v3a1.5 1.5 0 0 1-3 0v-3A1.5 1.5 0 0 1 12 16zm10-4a1.5 1.5 0 0 1-1.5 1.5h-3a1.5 1.5 0 0 1 0-3h3A1.5 1.5 0 0 1 22 12zM8 12a1.5 1.5 0 0 1-1.5 1.5h-3a1.5 1.5 0 0 1 0-3h3A1.5 1.5 0 0 1 8 12zm11.07-7.07a1.5 1.5 0 0 1 0 2.12l-2.12 2.12a1.5 1.5 0 1 1-2.12-2.12l2.12-2.12a1.5 1.5 0 0 1 2.12 0zm-9.9 9.9a1.5 1.5 0 0 1 0 2.12l-2.12 2.12a1.5 1.5 0 0 1-2.12-2.12l2.12-2.12a1.5 1.5 0 0 1 2.12 0zm0-9.9a1.5 1.5 0 0 1 2.12 0l2.12 2.12a1.5 1.5 0 0 1-2.12 2.12L7.05 7.05a1.5 1.5 0 0 1 0-2.12zm9.9 9.9a1.5 1.5 0 0 1 0 2.12l-2.12 2.12a1.5 1.5 0 0 1-2.12-2.12l2.12-2.12a1.5 1.5 0 0 1 2.12 0z" />
-              </svg>
-              <span>FloodScout Group</span>
-            </div>
-
-            {/* Main Headline with Diagonal Arrow Badge */}
-            <div className="my-10 sm:my-14 relative z-10">
-              <h1 className="text-4xl sm:text-5xl lg:text-[56px] font-bold text-[#0F172A] leading-[1.08] tracking-tight">
-                Saving{' '}
-                <span className="inline-flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-full border border-[#0F172A]/40 mx-1 align-middle transition-transform hover:scale-110">
-                  <ArrowUpRight size={22} className="text-[#0F172A]" />
-                </span>{' '}
-                Nature &amp; Fighting{' '}
-                <span className="underline decoration-[#0F172A]/30 underline-offset-8">
-                  Floods
-                </span>{' '}
-                Together.
-              </h1>
-            </div>
-
-            {/* Email Subscribe / Launch Input Form */}
-            <div className="relative z-10 space-y-7">
-              <form
-                onSubmit={handleSubscribe}
-                className="bg-white rounded-full p-1.5 pl-5 sm:pl-6 flex items-center justify-between shadow-xs max-w-md w-full border border-white/80"
-              >
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Enter your email"
-                  required
-                  className="bg-transparent text-xs sm:text-sm text-[#0F172A] placeholder:text-[#64748B] outline-none flex-grow pr-2"
-                />
-                <button
-                  type="submit"
-                  className="bg-[#0F172A] hover:bg-[#1E293B] text-white text-xs sm:text-sm font-semibold px-5 sm:px-6 py-2.5 sm:py-3 rounded-full transition-all flex items-center gap-1.5 active:scale-95 shadow-sm"
-                >
-                  <span>{subscribed ? 'Joined!' : 'Subscribe'}</span>
-                  <ArrowRight size={14} />
-                </button>
-              </form>
-
-              {/* Social Proof Overlapping Avatars */}
-              <div className="flex items-center gap-3">
-                <div className="flex -space-x-2.5 overflow-hidden">
-                  <img
-                    className="inline-block h-8 w-8 rounded-full ring-2 ring-white object-cover"
-                    src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=200&auto=format&fit=crop"
-                    alt="Responder 1"
-                  />
-                  <img
-                    className="inline-block h-8 w-8 rounded-full ring-2 ring-white object-cover"
-                    src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=200&auto=format&fit=crop"
-                    alt="Responder 2"
-                  />
-                  <img
-                    className="inline-block h-8 w-8 rounded-full ring-2 ring-white object-cover"
-                    src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=200&auto=format&fit=crop"
-                    alt="Responder 3"
-                  />
-                </div>
-                <span className="text-[11px] sm:text-xs text-[#0F172A]/85 font-medium leading-tight">
-                  1,200+ members &amp; emergency responders in our fleet network
-                </span>
-              </div>
-            </div>
+        {/* Left: Headline */}
+        <div className="space-y-8">
+          <div className="inline-flex items-center gap-2 bg-[#22d3ee]/10 border border-[#22d3ee]/30 text-[#22d3ee] text-xs font-mono px-4 py-1.5 rounded-full">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#22d3ee] animate-pulse" />
+            FloodScout USV-01 · Ayer Tawar, Perak
           </div>
 
-          {/* ── RIGHT HERO CARD (Aerial Nature / Flood Landscape Photo) ─────── */}
-          <div className="lg:col-span-6 rounded-[36px] overflow-hidden relative min-h-[460px] sm:min-h-[560px] shadow-xs group">
-            {/* Background Landscape Photo */}
-            <img
-              src="https://images.unsplash.com/photo-1506744038136-46273834b3fb?q=80&w=1600&auto=format&fit=crop"
-              alt="Flood landscape & pristine nature"
-              className="absolute inset-0 w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105"
-            />
-            {/* Atmospheric gradient overlay */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-black/30"></div>
+          <h1 className="text-5xl sm:text-6xl lg:text-[68px] font-extrabold leading-[1.0] tracking-tight">
+            Find people<br />
+            in floodwater<br />
+            <span className="text-[#f97316]">faster.</span>
+          </h1>
 
-            {/* Floating Top-Left Card ("We & Our Volunteers / Rescuers") */}
-            <div className="absolute top-6 left-6 bg-white/95 backdrop-blur-md rounded-2xl p-2.5 pr-4 flex items-center gap-3 border border-white/80 shadow-md">
-              <img
-                src="https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=120&auto=format&fit=crop"
-                alt="Volunteer"
-                className="w-10 h-10 rounded-xl object-cover"
-              />
-              <div>
-                <span className="text-[10px] text-[#64748B] block font-mono">Operations</span>
-                <span className="text-xs font-bold text-[#0F172A] leading-tight block">
-                  We &amp; Our Volunteers
-                </span>
-              </div>
-              <div className="w-6 h-6 rounded-full bg-[#7BD7FF] text-[#0F172A] flex items-center justify-center font-bold text-xs ml-1 shadow-xs">
-                <ArrowUpRight size={13} />
-              </div>
-            </div>
+          <p className="text-slate-400 text-lg leading-relaxed max-w-md">
+            FloodScout is an autonomous water-level rescue robot that streams live video, detects victims with AI, and transmits GPS coordinates to rescue teams — all from a vessel built from off-the-shelf parts.
+          </p>
 
-            {/* Floating Top-Right Sound / Mic Button */}
-            <div className="absolute top-6 right-6 w-10 h-10 rounded-full bg-white/25 backdrop-blur-md border border-white/40 flex items-center justify-center text-white hover:bg-white/35 transition-colors cursor-pointer shadow-md">
-              <Volume2 size={16} />
-            </div>
-
-            {/* Interactive Hotspot Pins on Terrain (Light Blue Dots) */}
-            <div className="absolute top-[38%] left-[22%] bg-black/40 backdrop-blur-md border border-white/30 text-white/90 text-[11px] font-medium px-3 py-1 rounded-full flex items-center gap-1.5 shadow-sm">
-              <span className="w-2 h-2 rounded-full bg-[#7BD7FF] animate-pulse"></span>
-              <span>Autonomous Sonar</span>
-            </div>
-
-            <div className="absolute top-[28%] right-[18%] bg-black/40 backdrop-blur-md border border-white/30 text-white/90 text-[11px] font-medium px-3 py-1 rounded-full flex items-center gap-1.5 shadow-sm">
-              <span className="w-2 h-2 rounded-full bg-[#7BD7FF] animate-ping"></span>
-              <span>AI Victim Detection</span>
-            </div>
-
-            <div className="absolute top-[48%] left-[45%] bg-black/40 backdrop-blur-md border border-white/30 text-white/90 text-[11px] font-medium px-3 py-1 rounded-full flex items-center gap-1.5 shadow-sm">
-              <span className="w-2 h-2 rounded-full bg-[#7BD7FF]"></span>
-              <span>ESP32 Wi-Fi Telemetry</span>
-            </div>
-
-            {/* Bottom-Left Floating Pill Card */}
-            <div className="absolute bottom-6 left-6 bg-white/95 backdrop-blur-md rounded-full py-2 px-3.5 flex items-center gap-2.5 border border-white/80 shadow-md">
-              <img
-                src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=120&auto=format&fit=crop"
-                alt="Member"
-                className="w-7 h-7 rounded-full object-cover"
-              />
-              <span className="text-xs font-semibold text-[#0F172A]">
-                Join us in fighting environmental disasters
-              </span>
-            </div>
-
-            {/* Bottom-Right Subtitle & Social Links */}
-            <div className="absolute bottom-6 right-6 text-right max-w-[240px] hidden sm:block">
-              <div className="flex justify-end gap-2 mb-2">
-                <span className="w-6 h-6 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center text-[10px] text-white font-mono cursor-pointer hover:bg-white/40 transition-colors">
-                  FB
-                </span>
-                <span className="w-6 h-6 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center text-[10px] text-white font-mono cursor-pointer hover:bg-white/40 transition-colors">
-                  TW
-                </span>
-              </div>
-              <p className="text-[11px] text-white/90 font-medium leading-snug drop-shadow-sm">
-                We are an engineering initiative dedicated to protecting human lives &amp; nature.
-              </p>
-            </div>
+          <div className="flex flex-wrap gap-4">
+            <Link
+              to="/dashboard"
+              className="bg-[#f97316] hover:bg-[#ea6c0c] text-white font-bold px-8 py-4 rounded-full transition-all text-sm shadow-xl shadow-orange-900/40 active:scale-95 flex items-center gap-2"
+            >
+              Open Robot Console
+              <ArrowRight size={16} />
+            </Link>
+            <Link
+              to="/operations"
+              className="bg-white/10 hover:bg-white/15 border border-white/20 text-white font-semibold px-8 py-4 rounded-full transition-all text-sm flex items-center gap-2"
+            >
+              Operations Dashboard
+              <ArrowUpRight size={16} />
+            </Link>
           </div>
 
-        </section>
-
-        {/* ── MOUSE SCROLL INDICATOR ───────────────────────────────────────── */}
-        <div className="flex justify-center -mt-6">
-          <div className="w-6 h-10 rounded-full border-2 border-[#14171F]/25 flex items-start justify-center p-1 cursor-pointer hover:border-[#14171F] transition-colors">
-            <span className="w-1.5 h-2.5 rounded-full bg-[#14171F] animate-bounce mt-1"></span>
+          {/* Stat pills */}
+          <div className="flex flex-wrap gap-3 pt-2">
+            {[
+              { label: 'Detection accuracy', value: '94%' },
+              { label: 'Range (HC-SR04)', value: '4 m' },
+              { label: 'Video latency', value: '<120 ms' },
+            ].map(s => (
+              <div key={s.label} className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-center">
+                <div className="text-[#22d3ee] font-extrabold text-lg font-mono">{s.value}</div>
+                <div className="text-slate-500 text-[11px] uppercase tracking-wide">{s.label}</div>
+              </div>
+            ))}
           </div>
         </div>
 
-        {/* =================================================================== */}
-        {/* 2. STATEMENT & ORBITING PREVIEWS SECTION                           */}
-        {/* =================================================================== */}
-        <section className="relative py-12 sm:py-20 text-center max-w-4xl mx-auto px-4">
-          
-          {/* Orbiting Floating Thumbnail 1 (Top-Left: Flood Water) */}
-          <div className="hidden md:block absolute -top-2 left-6 w-16 h-16 rounded-full overflow-hidden border-2 border-white shadow-lg animate-pulse">
-            <img
-              src="https://images.unsplash.com/photo-1547683905-f686c993aae5?q=80&w=200&auto=format&fit=crop"
-              alt="Water surface"
-              className="w-full h-full object-cover"
-            />
-          </div>
-
-          {/* Orbiting Floating Thumbnail 2 (Lower-Left: Rescue Boat) */}
-          <div className="hidden md:block absolute bottom-8 left-16 w-14 h-14 rounded-full overflow-hidden border-2 border-white shadow-lg">
-            <img
-              src="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=200&auto=format&fit=crop"
-              alt="Nature"
-              className="w-full h-full object-cover"
-            />
-          </div>
-
-          {/* Orbiting Floating Thumbnail 3 (Top-Right: Sonar / Glacial Water) */}
-          <div className="hidden md:block absolute top-2 right-12 w-14 h-14 rounded-full overflow-hidden border-2 border-white shadow-lg">
-            <img
-              src="https://images.unsplash.com/photo-1498084393753-b411b2d26b34?q=80&w=200&auto=format&fit=crop"
-              alt="Glacier lake"
-              className="w-full h-full object-cover"
-            />
-          </div>
-
-          {/* Orbiting Floating Thumbnail 4 (Lower-Right: Terrain) */}
-          <div className="hidden md:block absolute bottom-6 right-20 w-16 h-16 rounded-full overflow-hidden border-2 border-white shadow-lg">
-            <img
-              src="https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?q=80&w=200&auto=format&fit=crop"
-              alt="Terrain landscape"
-              className="w-full h-full object-cover"
-            />
-          </div>
-
-          {/* Central Statement */}
-          <h2 className="text-3xl sm:text-5xl font-bold tracking-tight text-[#0F172A] leading-tight max-w-2xl mx-auto">
-            Let's Make Our World Cleaner &amp; Greener!
-          </h2>
-
-          <p className="text-xs sm:text-sm text-[#64748B] max-w-md mx-auto mt-4 mb-8 leading-relaxed font-normal">
-            We work with partners &amp; communities to ensure nature thrives and climate-driven disaster threats are mitigated.
-          </p>
-
-          <div className="flex items-center justify-center gap-4">
-            <Link
-              to="/dashboard"
-              className="bg-[#0F172A] hover:bg-[#1E293B] text-white text-xs sm:text-sm font-semibold px-6 py-3 rounded-full transition-all flex items-center gap-2 active:scale-95 shadow-sm"
-            >
-              <span>View Projects</span>
-              <ArrowRight size={14} />
-            </Link>
-            <Link
-              to="/technology"
-              className="text-[#0F172A] hover:underline text-xs sm:text-sm font-semibold px-4 py-3 flex items-center gap-1.5"
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-[#0F172A]"></span>
-              <span>Learn More</span>
-            </Link>
-          </div>
-        </section>
-
-        {/* =================================================================== */}
-        {/* 3. 4 PILL CAPSULES BANNER ("We Protect -> Nature" with Light Blue)   */}
-        {/* =================================================================== */}
-        <section className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-5">
-
-          {/* Capsule 1: "We" */}
-          <div className="bg-white rounded-full py-8 sm:py-12 px-6 flex items-center justify-center border border-[#E5E0D8] shadow-xs hover:border-[#14171F]/30 transition-all">
-            <span className="text-3xl sm:text-4xl lg:text-5xl font-bold text-[#0F172A] tracking-tight">
-              We
-            </span>
-          </div>
-
-          {/* Capsule 2: "Protect" with Glacial Water Photo */}
-          <div className="relative rounded-full py-8 sm:py-12 px-6 flex items-center justify-center overflow-hidden border border-[#E5E0D8] shadow-xs group">
-            <img
-              src="https://images.unsplash.com/photo-1498084393753-b411b2d26b34?q=80&w=600&auto=format&fit=crop"
-              alt="Protect Glacial Water"
-              className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
-            />
-            <div className="absolute inset-0 bg-black/35 group-hover:bg-black/25 transition-colors"></div>
-            <span className="relative z-10 text-3xl sm:text-4xl lg:text-5xl font-bold text-white tracking-tight drop-shadow-md">
-              Protect
-            </span>
-          </div>
-
-          {/* Capsule 3: Giant Arrow (Changed from yellow/green to LIGHT BLUE) */}
-          <div className="bg-[#7BD7FF] rounded-full py-8 sm:py-12 px-6 flex items-center justify-center shadow-xs hover:bg-[#68CEF7] transition-all cursor-pointer group">
-            <ArrowRight
-              size={44}
-              className="text-[#0F172A] stroke-[2.5] transition-transform group-hover:translate-x-2"
-            />
-          </div>
-
-          {/* Capsule 4: "Nature" with Mountain Landscape Photo */}
-          <div className="relative rounded-full py-8 sm:py-12 px-6 flex items-center justify-center overflow-hidden border border-[#E5E0D8] shadow-xs group">
-            <img
-              src="https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?q=80&w=600&auto=format&fit=crop"
-              alt="Preserve Nature"
-              className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
-            />
-            <div className="absolute inset-0 bg-black/35 group-hover:bg-black/25 transition-colors"></div>
-            <span className="relative z-10 text-3xl sm:text-4xl lg:text-5xl font-bold text-white tracking-tight drop-shadow-md">
-              Nature
-            </span>
-          </div>
-
-        </section>
-
-        {/* =================================================================== */}
-        {/* 4. INITIATIVES / MISSIONS TABLE (Reference Section 4)              */}
-        {/* =================================================================== */}
-        <section className="bg-white/80 backdrop-blur-md rounded-[36px] p-6 sm:p-10 lg:p-12 border border-[#E5E0D8] shadow-xs relative">
-          
-          {/* Header Row */}
-          <div className="flex flex-col sm:flex-row sm:items-end justify-between pb-8 border-b border-[#E5E0D8] gap-3">
-            <div>
-              <h3 className="text-2xl sm:text-3xl font-bold text-[#0F172A] tracking-tight">
-                Our initiatives for 2026
-              </h3>
+        {/* Right: USV preview card */}
+        <div className="relative">
+          <div className="bg-[#0e1722] border border-[#1b2b3c] rounded-3xl p-6 shadow-2xl relative overflow-hidden">
+            {/* Header bar */}
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-white/5">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse shadow-[0_0_6px_#f43f5e]" />
+                <span className="text-xs font-bold text-slate-200 tracking-wide">LIVE RECONNAISSANCE · USV-01</span>
+              </div>
+              <div className="flex items-center gap-3 text-[10px] font-mono">
+                <span className="text-emerald-400 flex items-center gap-1"><Wifi size={10}/> LINK</span>
+                <span className="text-cyan-400 flex items-center gap-1"><Battery size={10}/> 82%</span>
+                <span className="text-slate-400">GPS FIX</span>
+              </div>
             </div>
-            <p className="text-xs sm:text-sm text-[#64748B] max-w-xs text-left sm:text-right font-normal">
-              Find out what projects we are implementing to protect nature and rescue flood victims.
+
+            {/* USV illustration */}
+            <div className="relative h-48 rounded-2xl overflow-hidden bg-gradient-to-b from-[#0a1929] to-[#071220]">
+              <USVIllustration />
+
+              {/* Floating detection badge */}
+              <div className="absolute top-3 right-3 bg-[#f97316] text-white text-[10px] font-bold px-2.5 py-1 rounded-lg shadow-lg animate-pulse">
+                PERSON DETECTED · 94%
+              </div>
+
+              {/* GPS coords */}
+              <div className="absolute bottom-3 left-3 bg-black/60 backdrop-blur-sm text-[10px] font-mono text-slate-300 px-2.5 py-1.5 rounded-lg border border-white/10">
+                4.2988°N · 100.7642°E · 2.45 m
+              </div>
+            </div>
+
+            {/* Status bar */}
+            <div className="flex items-center justify-between mt-4 text-[11px] font-mono">
+              <span className="text-emerald-400">● Robot online</span>
+              <span className="text-[#22d3ee]">OpenCV HOG+SVM · tracking</span>
+              <span className="text-slate-500">5.9 FPS</span>
+            </div>
+          </div>
+
+          {/* Decorative glow */}
+          <div className="absolute -inset-4 bg-[#22d3ee]/5 rounded-[40px] blur-3xl -z-10" />
+        </div>
+      </section>
+
+      {/* ── TICKER STATS BAR ─────────────────────────────────────────────── */}
+      <div className="border-y border-white/5 bg-white/[0.02] py-5 overflow-hidden">
+        <div className="flex items-center gap-16 animate-none">
+          <div className="flex items-center gap-16 whitespace-nowrap px-8">
+            {[
+              { label: 'SECTORS COVERED', value: '12' },
+              { label: 'VICTIMS LOCATED', value: '7' },
+              { label: 'MISSION TIME', value: '00:06:57' },
+              { label: 'SONAR RANGE', value: '4.0 m' },
+              { label: 'AI CONFIDENCE', value: '94%' },
+              { label: 'RESCUE TEAMS', value: '5 + 1 USV' },
+              { label: 'WATER DEPTH', value: '1.6 m rising' },
+              { label: 'GPS FIX', value: '3D · 8 sats' },
+            ].map((s, i) => (
+              <div key={i} className="flex items-center gap-3">
+                <span className="text-slate-600 font-mono text-[10px] uppercase tracking-widest">{s.label}</span>
+                <span className="text-white font-extrabold font-mono text-sm">{s.value}</span>
+                {i < 7 && <span className="text-white/10 text-lg">·</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ── PROBLEM STATEMENT ────────────────────────────────────────────── */}
+      <section className="max-w-7xl mx-auto px-6 py-28">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+          <div>
+            <span className="text-[11px] font-mono uppercase tracking-widest text-slate-500 border border-white/10 px-3.5 py-1.5 rounded-full inline-block mb-8">
+              Why it matters
+            </span>
+            <h2 className="text-4xl sm:text-5xl font-extrabold leading-tight tracking-tight">
+              When streets become rivers, every minute of{' '}
+              <span className="text-[#22d3ee]">searching counts.</span>
+            </h2>
+          </div>
+          <div className="space-y-6">
+            <p className="text-slate-400 text-lg leading-relaxed">
+              During the 2021 Batu Pahat flood, rescue teams spent hours wading through waist-deep water searching street by street. By the time victims were found, hypothermia had set in.
+            </p>
+            <p className="text-slate-400 text-base leading-relaxed">
+              FloodScout deploys in 90 seconds. It navigates to GPS waypoints autonomously, streams AI-enhanced video to operators on dry land, and transmits exact victim coordinates — cutting search time from hours to minutes.
+            </p>
+            <div className="grid grid-cols-2 gap-4 pt-4">
+              {[
+                { icon: '⏱', stat: '< 2 min', label: 'From launch to first contact' },
+                { icon: '📡', stat: '400 m', label: 'Max operational radius' },
+                { icon: '🤖', stat: '94%', label: 'Victim detection accuracy' },
+                { icon: '⚡', stat: '90 s', label: 'Deployment time' },
+              ].map(c => (
+                <div key={c.label} className="bg-white/[0.03] border border-white/10 rounded-2xl p-4">
+                  <div className="text-2xl mb-1">{c.icon}</div>
+                  <div className="text-[#22d3ee] font-extrabold text-xl font-mono">{c.stat}</div>
+                  <div className="text-slate-500 text-xs mt-0.5 leading-snug">{c.label}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── 4-STEP PROCESS (actually 6 steps from deploy to localise) ─────── */}
+      <section className="border-t border-white/5 py-24">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-14 gap-4">
+            <div>
+              <span className="text-[11px] font-mono uppercase tracking-widest text-slate-500 border border-white/10 px-3.5 py-1.5 rounded-full inline-block mb-5">
+                Mission flow
+              </span>
+              <h2 className="text-4xl sm:text-5xl font-extrabold tracking-tight">
+                From launch to location<br />in six steps.
+              </h2>
+            </div>
+            <Link to="/dashboard" className="flex items-center gap-1.5 text-[#22d3ee] text-sm font-semibold hover:underline shrink-0">
+              Open live console <ChevronRight size={16} />
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {steps.map((step, i) => (
+              <div
+                key={step.num}
+                className="bg-white/[0.03] border border-white/10 rounded-2xl p-6 hover:bg-white/[0.05] hover:border-[#22d3ee]/30 transition-all group"
+              >
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-8 h-8 rounded-full border border-[#22d3ee]/40 flex items-center justify-center text-[#22d3ee] group-hover:bg-[#22d3ee]/10 transition-colors">
+                    {step.icon}
+                  </div>
+                  <span className="text-[11px] font-mono text-slate-500 uppercase tracking-widest">{step.num} / 6</span>
+                </div>
+                <h3 className="text-xl font-bold text-white mb-2">{step.label}</h3>
+                <p className="text-slate-500 text-sm leading-relaxed">{step.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── BUILT FROM PARTS ─────────────────────────────────────────────── */}
+      <section className="border-t border-white/5 py-24">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+
+            {/* Left: illustration / dark card */}
+            <div className="bg-[#0e1722] border border-[#1b2b3c] rounded-3xl p-8 shadow-2xl relative overflow-hidden min-h-[340px] flex items-center justify-center">
+              <div className="w-full max-w-xs mx-auto">
+                <USVIllustration />
+              </div>
+              {/* Bottom left badge */}
+              <div className="absolute bottom-5 left-5 bg-[#22d3ee]/10 border border-[#22d3ee]/30 rounded-xl px-4 py-2.5 text-[#22d3ee] font-mono text-xs">
+                <div className="font-bold">USV-01 · v2.1</div>
+                <div className="text-[#22d3ee]/60 text-[10px] mt-0.5">Water-Level Rescue Robot</div>
+              </div>
+              {/* Top right badge */}
+              <div className="absolute top-5 right-5 bg-emerald-400/10 border border-emerald-400/30 rounded-full px-3 py-1 text-emerald-400 text-[10px] font-mono font-bold">
+                ● OPERATIONAL
+              </div>
+            </div>
+
+            {/* Right: parts list */}
+            <div>
+              <span className="text-[11px] font-mono uppercase tracking-widest text-slate-500 border border-white/10 px-3.5 py-1.5 rounded-full inline-block mb-8">
+                Open hardware
+              </span>
+              <h2 className="text-4xl sm:text-5xl font-extrabold tracking-tight mb-6">
+                Built from parts any<br />team can source.
+              </h2>
+              <p className="text-slate-400 text-base leading-relaxed mb-8">
+                Every component is available on Shopee or Lazada. Total BOM cost under RM 350. The software is fully open and runs on free-tier cloud.
+              </p>
+
+              <div className="space-y-3">
+                {parts.map((p, i) => (
+                  <div key={i} className="flex items-start gap-4 py-3 border-b border-white/5 last:border-0">
+                    <div className="w-6 h-6 rounded-full border border-[#22d3ee]/30 flex items-center justify-center shrink-0 mt-0.5">
+                      <span className="text-[#22d3ee]" style={{ fontSize: 10 }}>✓</span>
+                    </div>
+                    <div>
+                      <span className="text-white font-semibold text-sm">{p.label} — </span>
+                      <span className="text-slate-500 text-sm">{p.value}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── DUAL DASHBOARD PREVIEW ───────────────────────────────────────── */}
+      <section className="border-t border-white/5 py-24">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="text-center mb-14">
+            <span className="text-[11px] font-mono uppercase tracking-widest text-slate-500 border border-white/10 px-3.5 py-1.5 rounded-full inline-block mb-6">
+              Command interface
+            </span>
+            <h2 className="text-4xl sm:text-5xl font-extrabold tracking-tight">
+              One view for the pilot.<br />
+              <span className="text-slate-400">One for the commander.</span>
+            </h2>
+            <p className="text-slate-500 text-base mt-4 max-w-xl mx-auto leading-relaxed">
+              Everything is full-screen and mission-focused. No data entry, no menus — just actionable situational awareness.
             </p>
           </div>
 
-          {/* Table Column Headers */}
-          <div className="grid grid-cols-12 py-3.5 text-[11px] font-mono uppercase tracking-wider text-[#94A3B8] border-b border-[#F1EFE9]">
-            <div className="col-span-5 sm:col-span-5">Title</div>
-            <div className="col-span-4 sm:col-span-4">Tags</div>
-            <div className="col-span-3 sm:col-span-3 text-right">Date</div>
-          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-          {/* Row 1 */}
-          <div className="grid grid-cols-12 py-5 sm:py-6 items-center border-b border-[#F1EFE9] hover:bg-[#F6F4F0]/60 transition-colors rounded-xl px-2">
-            <div className="col-span-5 sm:col-span-5 text-sm sm:text-lg font-bold text-[#0F172A]">
-              Tree planting
-            </div>
-            <div className="col-span-4 sm:col-span-4 flex flex-wrap gap-1.5">
-              <span className="bg-[#F6F4F0] border border-[#E5E0D8] text-[11px] text-[#64748B] px-3 py-0.5 rounded-full font-medium">
-                green and cleaner
-              </span>
-            </div>
-            <div className="col-span-3 sm:col-span-3 flex items-center justify-end gap-3 text-xs sm:text-sm text-[#64748B] font-mono">
-              <span>12/03/26</span>
-              <div className="w-8 h-8 rounded-full border border-[#E5E0D8] flex items-center justify-center hover:bg-[#0F172A] hover:text-white transition-colors cursor-pointer">
-                <ArrowRight size={14} />
+            {/* Robot Console card */}
+            <div className="bg-[#0e1722] border border-[#1b2b3c] rounded-2xl overflow-hidden group hover:border-[#22d3ee]/40 transition-all">
+              {/* Mock header */}
+              <div className="bg-[#090f17] border-b border-white/5 px-5 py-3 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="flex gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#f43f5e]" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#f59e0b]" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#22d3ee]" />
+                  </div>
+                  <span className="text-slate-400 font-mono text-[11px] ml-2">Robot console · dashboard</span>
+                </div>
+                <span className="text-emerald-400 text-[10px] font-mono">● LIVE</span>
+              </div>
+
+              {/* Mock dashboard preview */}
+              <div className="p-4 space-y-3">
+                {/* Top row: camera + target */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-[#060d14] border border-[#192738] rounded-xl p-3 aspect-video flex flex-col justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
+                      <span className="text-[9px] font-mono text-slate-400">LIVE FEED</span>
+                    </div>
+                    <div className="flex items-center justify-center flex-1 py-2">
+                      <div className="border-2 border-dashed border-[#f97316]/60 rounded-lg w-16 h-10 flex items-center justify-center">
+                        <span className="text-[#f97316] text-[8px] font-mono">PERSON 94%</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 text-[9px] font-mono text-slate-500">
+                      <span>XIAO</span><span>·</span><span>5.9 FPS</span>
+                    </div>
+                  </div>
+                  <div className="bg-[#060d14] border border-[#192738] rounded-xl p-3 aspect-video flex flex-col justify-between">
+                    <div className="text-[9px] font-mono text-slate-400">VICTIM #1 CONFIRMED</div>
+                    <div className="text-[#22d3ee] font-extrabold text-2xl font-mono">2.45<span className="text-xs text-slate-500 ml-1">m</span></div>
+                    <div className="grid grid-cols-2 gap-1">
+                      <button className="bg-[#f97316] text-white text-[7px] font-bold py-1 rounded">Confirmed ✓</button>
+                      <button className="bg-white/10 text-slate-300 text-[7px] font-bold py-1 rounded">False alarm</button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bottom row: arm + map + log */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="bg-[#060d14] border border-[#192738] rounded-xl p-3 space-y-1.5">
+                    <div className="text-[9px] font-mono text-slate-400">CAMERA ARM</div>
+                    <div className="w-12 h-12 bg-[#0a1929] border border-[#1b2b3c] rounded-lg mx-auto flex items-center justify-center">
+                      <div className="w-2 h-2 rounded-full bg-[#22d3ee] shadow-[0_0_6px_#22d3ee]" />
+                    </div>
+                    <div className="text-[8px] font-mono text-slate-500 text-center">Pan 90° · Tilt 55°</div>
+                  </div>
+                  <div className="bg-[#060d14] border border-[#192738] rounded-xl p-3 overflow-hidden">
+                    <div className="text-[9px] font-mono text-slate-400 mb-1">TACTICAL MAP</div>
+                    <div className="bg-[#0a1929] rounded-lg w-full h-16 flex items-center justify-center relative overflow-hidden">
+                      <div className="absolute inset-0 opacity-30" style={{backgroundImage: 'linear-gradient(#1e40af22 1px, transparent 1px), linear-gradient(90deg, #1e40af22 1px, transparent 1px)', backgroundSize: '8px 8px'}} />
+                      <div className="w-3 h-3 bg-[#22d3ee] rotate-45 shadow-[0_0_8px_#22d3ee]" />
+                    </div>
+                  </div>
+                  <div className="bg-[#060d14] border border-[#192738] rounded-xl p-3 space-y-1">
+                    <div className="text-[9px] font-mono text-slate-400">LOG</div>
+                    {['Confirmed', 'Detected', 'Scan started'].map((l, i) => (
+                      <div key={i} className="flex items-center gap-1.5 text-[7px] font-mono text-slate-500">
+                        <span className={`w-1 h-1 rounded-full shrink-0 ${i === 0 ? 'bg-emerald-400' : i === 1 ? 'bg-orange-400' : 'bg-slate-500'}`} />
+                        {l}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="px-5 py-4 border-t border-white/5 flex items-center justify-between">
+                <span className="text-slate-500 text-xs">Robot console — pilot view</span>
+                <Link to="/dashboard" className="text-[#22d3ee] text-xs font-semibold flex items-center gap-1 hover:gap-2 transition-all">
+                  Open Console <ArrowRight size={13} />
+                </Link>
               </div>
             </div>
-          </div>
 
-          {/* Row 2 (Featured Row with Light Blue Tag & Hovering Preview Card) */}
-          <div className="relative grid grid-cols-12 py-5 sm:py-6 items-center border-b border-[#F1EFE9] hover:bg-[#F6F4F0]/60 transition-colors rounded-xl px-2">
-            <div className="col-span-5 sm:col-span-5 text-sm sm:text-lg font-bold text-[#0F172A]">
-              Beach cleanup
-            </div>
-            <div className="col-span-4 sm:col-span-4 flex flex-wrap gap-1.5">
-              {/* Light blue pill badge (changed from yellow/green) */}
-              <span className="bg-[#BAE6FD] text-[#0369A1] font-semibold text-[11px] px-3.5 py-0.5 rounded-full border border-[#7BD7FF]">
-                future generations
-              </span>
-            </div>
-            <div className="col-span-3 sm:col-span-3 flex items-center justify-end gap-3 text-xs sm:text-sm text-[#64748B] font-mono">
-              <span>29/05/26</span>
-              {/* Dashed circle icon from reference */}
-              <div className="w-8 h-8 rounded-full border-2 border-dashed border-[#0F172A]/50 flex items-center justify-center text-[#0F172A] hover:bg-[#0F172A] hover:text-white transition-colors cursor-pointer">
-                <ArrowUpRight size={14} />
+            {/* Operations Dashboard card */}
+            <div className="bg-[#0e1722] border border-[#1b2b3c] rounded-2xl overflow-hidden group hover:border-[#f97316]/40 transition-all">
+              {/* Mock header */}
+              <div className="bg-[#090f17] border-b border-white/5 px-5 py-3 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="flex gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#f43f5e]" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#f59e0b]" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#22d3ee]" />
+                  </div>
+                  <span className="text-slate-400 font-mono text-[11px] ml-2">Operations · FLOODSCOUT COMMAND</span>
+                </div>
+                <span className="text-amber-400 text-[10px] font-mono">⚠ ACTIVE OPS</span>
+              </div>
+
+              {/* Stats row */}
+              <div className="grid grid-cols-4 gap-px bg-white/5 border-b border-white/5">
+                {[
+                  { l: 'MISSING', v: '23', c: 'text-white' },
+                  { l: 'RESCUED', v: '14', c: 'text-emerald-400' },
+                  { l: 'STILL MISSING', v: '9', c: 'text-rose-400' },
+                  { l: 'TEAMS', v: '6', c: 'text-cyan-400' },
+                ].map(s => (
+                  <div key={s.l} className="bg-[#090f17] px-4 py-3 text-center">
+                    <div className={`font-extrabold text-lg font-mono ${s.c}`}>{s.v}</div>
+                    <div className="text-slate-600 text-[8px] font-mono uppercase tracking-wider mt-0.5">{s.l}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Mock map */}
+              <div className="p-4">
+                <div className="bg-[#060d14] border border-[#192738] rounded-xl overflow-hidden h-44 relative">
+                  <div className="absolute inset-0 opacity-20" style={{backgroundImage: 'linear-gradient(#22d3ee15 1px, transparent 1px), linear-gradient(90deg, #22d3ee15 1px, transparent 1px)', backgroundSize: '14px 14px'}} />
+                  {/* Zone polygons */}
+                  <svg className="absolute inset-0 w-full h-full" viewBox="0 0 300 176" preserveAspectRatio="none">
+                    <polygon points="60,40 120,30 140,90 80,100" fill="#f9731620" stroke="#f97316" strokeWidth="1.5" />
+                    <polygon points="150,50 210,45 220,105 155,110" fill="#f59e0b15" stroke="#f59e0b" strokeWidth="1.5" strokeDasharray="4 2" />
+                    <polygon points="80,110 140,105 150,145 90,150" fill="#22d3ee10" stroke="#22d3ee" strokeWidth="1" strokeDasharray="4 2" />
+                    {/* USV marker */}
+                    <polygon points="100,68 108,88 100,82 92,88" fill="#22d3ee" />
+                    <circle cx="100" cy="68" r="12" stroke="#22d3ee" strokeWidth="0.8" fill="none" opacity="0.4" />
+                    {/* Person marker */}
+                    <circle cx="135" cy="62" r="5" fill="#f97316" />
+                    <circle cx="135" cy="62" r="9" stroke="#f97316" strokeWidth="0.8" fill="none" opacity="0.5" />
+                  </svg>
+                  {/* Legend */}
+                  <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-sm rounded-lg px-3 py-1.5 text-[8px] font-mono space-y-0.5">
+                    <div className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 bg-[#22d3ee] rotate-45 inline-block" />USV-01</div>
+                    <div className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#f97316] inline-block" />Detected person</div>
+                  </div>
+                  {/* Map tile label */}
+                  <div className="absolute top-2 right-2 bg-black/60 rounded-lg px-2 py-1 text-[8px] font-mono text-slate-400">[GOOGLE HYBRID]</div>
+                </div>
+              </div>
+
+              <div className="px-5 py-4 border-t border-white/5 flex items-center justify-between">
+                <span className="text-slate-500 text-xs">Operations dashboard — commander view</span>
+                <Link to="/operations" className="text-[#f97316] text-xs font-semibold flex items-center gap-1 hover:gap-2 transition-all">
+                  Open Dashboard <ArrowRight size={13} />
+                </Link>
               </div>
             </div>
 
-            {/* Tilted Floating Preview Card Hovering over Row 2 (from screenshot) */}
-            <div className="hidden lg:block absolute right-24 -top-8 w-48 h-32 rounded-2xl overflow-hidden shadow-2xl border-4 border-white transform rotate-6 pointer-events-none z-20">
-              <img
-                src="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=400&auto=format&fit=crop"
-                alt="Beach & Water cleanup"
-                className="w-full h-full object-cover"
-              />
-            </div>
           </div>
+        </div>
+      </section>
 
-          {/* Row 3 */}
-          <div className="grid grid-cols-12 py-5 sm:py-6 items-center border-b border-[#F1EFE9] hover:bg-[#F6F4F0]/60 transition-colors rounded-xl px-2">
-            <div className="col-span-5 sm:col-span-5 text-sm sm:text-lg font-bold text-[#0F172A]">
-              Educational events
-            </div>
-            <div className="col-span-4 sm:col-span-4 flex flex-wrap gap-1.5">
-              <span className="bg-[#F6F4F0] border border-[#E5E0D8] text-[11px] text-[#64748B] px-3 py-0.5 rounded-full font-medium">
-                courses
-              </span>
-              <span className="bg-[#F6F4F0] border border-[#E5E0D8] text-[11px] text-[#64748B] px-3 py-0.5 rounded-full font-medium hidden sm:inline-block">
-                green initiatives
-              </span>
-            </div>
-            <div className="col-span-3 sm:col-span-3 flex items-center justify-end gap-3 text-xs sm:text-sm text-[#64748B] font-mono">
-              <span>05/06/26</span>
-              <div className="w-8 h-8 rounded-full border border-[#E5E0D8] flex items-center justify-center hover:bg-[#0F172A] hover:text-white transition-colors cursor-pointer">
-                <ArrowRight size={14} />
-              </div>
-            </div>
-          </div>
+      {/* ── FIELD TRIALS CTA BANNER ──────────────────────────────────────── */}
+      <section className="py-6 px-6 max-w-7xl mx-auto pb-16">
+        <div className="bg-[#f97316] rounded-3xl p-10 sm:p-14 relative overflow-hidden">
+          {/* Background texture */}
+          <div className="absolute inset-0 opacity-10" style={{backgroundImage: 'radial-gradient(circle at 80% 50%, #ffffff 0%, transparent 60%)'}} />
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -mr-20 -mt-20" />
 
-          {/* Row 4 */}
-          <div className="grid grid-cols-12 py-5 sm:py-6 items-center hover:bg-[#F6F4F0]/60 transition-colors rounded-xl px-2">
-            <div className="col-span-5 sm:col-span-5 text-sm sm:text-lg font-bold text-[#0F172A]">
-              Park cleaning
+          <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-8">
+            <div className="space-y-4 max-w-2xl">
+              <span className="text-[11px] font-mono uppercase tracking-widest text-orange-200/80">Field trials</span>
+              <h2 className="text-4xl sm:text-5xl font-extrabold text-white leading-tight tracking-tight">
+                Work with us on<br />field trials.
+              </h2>
+              <p className="text-orange-100/80 text-base leading-relaxed max-w-lg">
+                We are looking for Civil Defence, Bomba, and engineering teams to run joint deployments. We bring the robot — you bring local knowledge. Together we make flood search faster.
+              </p>
             </div>
-            <div className="col-span-4 sm:col-span-4 flex flex-wrap gap-1.5">
-              <span className="bg-[#F6F4F0] border border-[#E5E0D8] text-[11px] text-[#64748B] px-3 py-0.5 rounded-full font-medium">
-                stay off clearing
-              </span>
-            </div>
-            <div className="col-span-3 sm:col-span-3 flex items-center justify-end gap-3 text-xs sm:text-sm text-[#64748B] font-mono">
-              <span>18/08/26</span>
-              <div className="w-8 h-8 rounded-full border border-[#E5E0D8] flex items-center justify-center hover:bg-[#0F172A] hover:text-white transition-colors cursor-pointer">
-                <ArrowRight size={14} />
-              </div>
-            </div>
-          </div>
 
-        </section>
-
-        {/* =================================================================== */}
-        {/* 5. 4 VERTICAL BENTO PROBLEM CARDS (Reference Section 5)            */}
-        {/* =================================================================== */}
-        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
-
-          {/* ── CARD 1: Ocean Pollution (Featured Card with Light Blue Button) ── */}
-          <div className="relative rounded-[32px] overflow-hidden min-h-[460px] p-6 flex flex-col justify-between shadow-xs group">
-            <img
-              src="https://images.unsplash.com/photo-1518837695005-2083093ee35b?q=80&w=800&auto=format&fit=crop"
-              alt="Ocean Pollution"
-              className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-black/30"></div>
-
-            {/* Top Tags & Light Blue Circular Arrow Badge */}
-            <div className="relative z-10 flex items-start justify-between">
-              <div className="flex flex-col gap-1.5">
-                <span className="bg-black/40 backdrop-blur-md border border-white/30 text-white/90 text-[10px] font-medium px-2.5 py-0.5 rounded-full flex items-center gap-1.5 w-fit">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#7BD7FF]"></span>
-                  Ecological Catastrophe
-                </span>
-                <span className="bg-black/40 backdrop-blur-md border border-white/30 text-white/90 text-[10px] font-medium px-2.5 py-0.5 rounded-full flex items-center gap-1.5 w-fit">
-                  Pollution Issues
-                </span>
-              </div>
-              {/* Light blue circular arrow button (changed from yellow/green) */}
-              <div className="w-9 h-9 rounded-full bg-[#7BD7FF] text-[#0F172A] flex items-center justify-center font-bold shadow-md cursor-pointer hover:scale-110 transition-transform">
+            <div className="flex flex-col gap-4 shrink-0">
+              <Link
+                to="/contact"
+                className="bg-[#0f172a] hover:bg-[#1e293b] text-white font-bold px-8 py-4 rounded-full transition-all text-sm flex items-center gap-2 shadow-xl active:scale-95"
+              >
+                Get in touch
                 <ArrowRight size={16} />
-              </div>
-            </div>
-
-            {/* Bottom Content */}
-            <div className="relative z-10 space-y-3">
-              <h4 className="text-2xl font-bold text-white tracking-tight leading-tight">
-                Ocean<br />Pollution
-              </h4>
-              <p className="text-[11px] text-white/80 line-clamp-3 leading-relaxed font-normal">
-                Restoring natural marine ecosystems through autonomous monitoring and active environmental surveillance.
-              </p>
-              <Link
-                to="/technology"
-                className="w-full bg-white/95 hover:bg-white text-[#0F172A] py-2.5 rounded-full text-[10px] font-bold tracking-wider uppercase transition-all flex items-center justify-center gap-1 shadow-sm block text-center"
-              >
-                <span>EXPLORE PROBLEM</span>
-                <span className="text-xs">›</span>
               </Link>
-            </div>
-          </div>
-
-          {/* ── CARD 2: Glacier Melting ─────────────────────────────────────── */}
-          <div className="relative rounded-[32px] overflow-hidden min-h-[460px] p-6 flex flex-col justify-between shadow-xs group">
-            <img
-              src="https://images.unsplash.com/photo-1498084393753-b411b2d26b34?q=80&w=800&auto=format&fit=crop"
-              alt="Glacier Melting"
-              className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-black/30"></div>
-
-            {/* Top Glass Badge */}
-            <div className="relative z-10 flex justify-end">
-              <div className="w-9 h-9 rounded-full bg-white/20 backdrop-blur-md border border-white/40 text-white flex items-center justify-center font-bold shadow-md cursor-pointer hover:bg-white/30 transition-colors">
-                <ArrowUpRight size={16} />
-              </div>
-            </div>
-
-            {/* Bottom Content */}
-            <div className="relative z-10 space-y-3">
-              <h4 className="text-2xl font-bold text-white tracking-tight leading-tight">
-                Glacier<br />Melting
-              </h4>
-              <p className="text-[11px] text-white/80 line-clamp-3 leading-relaxed font-normal">
-                Detecting rapid ice melt surges and tracking resulting downstream flood level inundations.
-              </p>
-              <Link
-                to="/victims"
-                className="w-full bg-white/95 hover:bg-white text-[#0F172A] py-2.5 rounded-full text-[10px] font-bold tracking-wider uppercase transition-all flex items-center justify-center gap-1 shadow-sm block text-center"
-              >
-                <span>EXPLORE PROBLEM</span>
-                <span className="text-xs">›</span>
-              </Link>
-            </div>
-          </div>
-
-          {/* ── CARD 3: Forest Clearance ────────────────────────────────────── */}
-          <div className="relative rounded-[32px] overflow-hidden min-h-[460px] p-6 flex flex-col justify-between shadow-xs group">
-            <img
-              src="https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?q=80&w=800&auto=format&fit=crop"
-              alt="Forest Clearance"
-              className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-black/30"></div>
-
-            {/* Top Glass Badge */}
-            <div className="relative z-10 flex justify-end">
-              <div className="w-9 h-9 rounded-full bg-white/20 backdrop-blur-md border border-white/40 text-white flex items-center justify-center font-bold shadow-md cursor-pointer hover:bg-white/30 transition-colors">
-                <ArrowUpRight size={16} />
-              </div>
-            </div>
-
-            {/* Bottom Content */}
-            <div className="relative z-10 space-y-3">
-              <h4 className="text-2xl font-bold text-white tracking-tight leading-tight">
-                Forest<br />Clearance
-              </h4>
-              <p className="text-[11px] text-white/80 line-clamp-3 leading-relaxed font-normal">
-                Protecting watershed basins and preventing devastating runoff that accelerates catastrophic flooding.
-              </p>
-              <Link
-                to="/technology"
-                className="w-full bg-white/95 hover:bg-white text-[#0F172A] py-2.5 rounded-full text-[10px] font-bold tracking-wider uppercase transition-all flex items-center justify-center gap-1 shadow-sm block text-center"
-              >
-                <span>EXPLORE PROBLEM</span>
-                <span className="text-xs">›</span>
-              </Link>
-            </div>
-          </div>
-
-          {/* ── CARD 4: GHG Emissions ───────────────────────────────────────── */}
-          <div className="relative rounded-[32px] overflow-hidden min-h-[460px] p-6 flex flex-col justify-between shadow-xs group">
-            <img
-              src="https://images.unsplash.com/photo-1519681393784-d120267933ba?q=80&w=800&auto=format&fit=crop"
-              alt="GHG Emissions"
-              className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-black/30"></div>
-
-            {/* Top Glass Badge */}
-            <div className="relative z-10 flex justify-end">
-              <div className="w-9 h-9 rounded-full bg-white/20 backdrop-blur-md border border-white/40 text-white flex items-center justify-center font-bold shadow-md cursor-pointer hover:bg-white/30 transition-colors">
-                <ArrowUpRight size={16} />
-              </div>
-            </div>
-
-            {/* Bottom Content */}
-            <div className="relative z-10 space-y-3">
-              <h4 className="text-2xl font-bold text-white tracking-tight leading-tight">
-                GHG<br />Emissions
-              </h4>
-              <p className="text-[11px] text-white/80 line-clamp-3 leading-relaxed font-normal">
-                Developing zero-emission all-electric amphibious autonomous robots to replace fossil fuel emergency craft.
-              </p>
-              <Link
-                to="/our-story"
-                className="w-full bg-white/95 hover:bg-white text-[#0F172A] py-2.5 rounded-full text-[10px] font-bold tracking-wider uppercase transition-all flex items-center justify-center gap-1 shadow-sm block text-center"
-              >
-                <span>EXPLORE PROBLEM</span>
-                <span className="text-xs">›</span>
-              </Link>
-            </div>
-          </div>
-
-        </section>
-
-        {/* =================================================================== */}
-        {/* 6. NEWSLETTER / SUBSCRIPTION BANNER (Reference Section 6)          */}
-        {/* =================================================================== */}
-        <section className="bg-white rounded-[36px] p-8 sm:p-12 lg:p-16 border border-[#E5E0D8] shadow-xs">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-8">
-            
-            {/* Left Content */}
-            <div className="space-y-4 max-w-xl">
-              <span className="inline-block text-[11px] font-mono uppercase tracking-wider text-[#64748B] border border-[#E5E0D8] px-3.5 py-1 rounded-full">
-                newsletter
-              </span>
-              <h3 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-[#0F172A] tracking-tight leading-tight">
-                Subscribe to our newsletter to get the latest updates on missions projects &amp; initiatives.
-              </h3>
-            </div>
-
-            {/* Right Form */}
-            <div className="w-full lg:max-w-md">
-              <form
-                onSubmit={handleNewsletter}
-                className="bg-[#F6F4F0] rounded-full p-1.5 pl-5 sm:pl-6 flex items-center justify-between border border-[#E5E0D8] shadow-xs"
-              >
+              <form onSubmit={handleSubscribe} className="flex gap-2">
                 <input
                   type="email"
-                  value={newsletterEmail}
-                  onChange={(e) => setNewsletterEmail(e.target.value)}
-                  placeholder="Email address |"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  placeholder="Enter your email"
                   required
-                  className="bg-transparent text-xs sm:text-sm text-[#0F172A] placeholder:text-[#94A3B8] outline-none flex-grow pr-2"
+                  className="bg-white/20 border border-white/30 text-white placeholder:text-white/60 text-xs rounded-full px-4 py-2.5 outline-none flex-1 min-w-0"
                 />
                 <button
                   type="submit"
-                  className="bg-[#0F172A] hover:bg-[#1E293B] text-white text-xs sm:text-sm font-semibold px-5 sm:px-6 py-2.5 sm:py-3 rounded-full transition-all flex items-center gap-1.5 active:scale-95 shadow-sm whitespace-nowrap"
+                  className="bg-white text-[#f97316] font-bold text-xs px-5 py-2.5 rounded-full hover:bg-orange-50 active:scale-95 transition-all whitespace-nowrap"
                 >
-                  <span>{newsletterSubscribed ? 'Subscribed!' : 'Subscribe'}</span>
-                  <ArrowRight size={14} />
+                  {subscribed ? 'Sent ✓' : 'Stay updated'}
                 </button>
               </form>
             </div>
-
           </div>
-        </section>
+        </div>
+      </section>
 
-      </main>
-
-      {/* ── FOOTER (Matching Reference) ───────────────────────────────────── */}
-      <footer className="max-w-[1380px] mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 border-t border-[#E5E0D8]/80 text-[#64748B] text-xs font-medium">
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-6">
-          
-          {/* Copyright */}
-          <div>
-            © 2026, All Right Reserved
-          </div>
-
-          {/* Center Logo */}
-          <Link to="/" className="flex items-center gap-2 text-sm font-bold text-[#0F172A] hover:opacity-80 transition-opacity">
-            <svg className="w-4 h-4 text-[#0F172A]" viewBox="0 0 24 24" fill="currentColor">
-              <circle cx="12" cy="12" r="2.5" />
-              <path d="M12 2a1.5 1.5 0 0 1 1.5 1.5v3a1.5 1.5 0 0 1-3 0v-3A1.5 1.5 0 0 1 12 2zm0 14a1.5 1.5 0 0 1 1.5 1.5v3a1.5 1.5 0 0 1-3 0v-3A1.5 1.5 0 0 1 12 16zm10-4a1.5 1.5 0 0 1-1.5 1.5h-3a1.5 1.5 0 0 1 0-3h3A1.5 1.5 0 0 1 22 12zM8 12a1.5 1.5 0 0 1-1.5 1.5h-3a1.5 1.5 0 0 1 0-3h3A1.5 1.5 0 0 1 8 12zm11.07-7.07a1.5 1.5 0 0 1 0 2.12l-2.12 2.12a1.5 1.5 0 1 1-2.12-2.12l2.12-2.12a1.5 1.5 0 0 1 2.12 0zm-9.9 9.9a1.5 1.5 0 0 1 0 2.12l-2.12 2.12a1.5 1.5 0 0 1-2.12-2.12l2.12-2.12a1.5 1.5 0 0 1 2.12 0zm0-9.9a1.5 1.5 0 0 1 2.12 0l2.12 2.12a1.5 1.5 0 0 1-2.12 2.12L7.05 7.05a1.5 1.5 0 0 1 0-2.12zm9.9 9.9a1.5 1.5 0 0 1 0 2.12l-2.12 2.12a1.5 1.5 0 0 1-2.12-2.12l2.12-2.12a1.5 1.5 0 0 1 2.12 0z" />
-            </svg>
-            <span>FloodScout</span>
+      {/* ── FOOTER ───────────────────────────────────────────────────────── */}
+      <footer className="border-t border-white/5 py-10">
+        <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-6">
+          <Link to="/" className="flex items-center gap-2.5">
+            <FloodScoutLogo />
+            <span className="font-bold text-white tracking-tight">FLOODSCOUT</span>
           </Link>
 
-          {/* Social / Page Links (Pill Style) */}
-          <div className="flex items-center gap-2">
-            <Link
-              to="/dashboard"
-              className="px-3.5 py-1.5 rounded-full border border-[#E5E0D8] bg-white text-[11px] font-semibold text-[#0F172A] hover:bg-[#0F172A] hover:text-white transition-colors shadow-xs"
-            >
-              Dashboard
-            </Link>
-            <Link
-              to="/technology"
-              className="px-3.5 py-1.5 rounded-full border border-[#E5E0D8] bg-white text-[11px] font-medium text-[#64748B] hover:text-[#0F172A] transition-colors shadow-xs"
-            >
-              Technology
-            </Link>
-            <Link
-              to="/contact"
-              className="px-3.5 py-1.5 rounded-full border border-[#E5E0D8] bg-white text-[11px] font-medium text-[#64748B] hover:text-[#0F172A] transition-colors shadow-xs"
-            >
-              Contact
-            </Link>
+          <div className="text-slate-600 text-xs font-mono text-center">
+            © 2026 FloodScout Group · Ayer Tawar, Perak · All rights reserved
           </div>
 
+          <div className="flex items-center gap-3">
+            {[
+              { to: '/dashboard', label: 'Robot Console' },
+              { to: '/operations', label: 'Operations' },
+              { to: '/technology', label: 'Technology' },
+              { to: '/contact', label: 'Contact' },
+            ].map(l => (
+              <Link
+                key={l.to}
+                to={l.to}
+                className="text-slate-600 hover:text-slate-300 text-xs transition-colors"
+              >
+                {l.label}
+              </Link>
+            ))}
+          </div>
         </div>
       </footer>
 

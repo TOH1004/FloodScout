@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   ArrowUp, ArrowDown, ArrowLeft, ArrowRight,
-  User, BatteryCharging, Waves, Radar, Maximize2
+  User, BatteryCharging, Waves, Radar, Maximize2, Minimize2,
+  ChevronDown, X, Columns, RotateCcw, GripVertical, GripHorizontal
 } from 'lucide-react';
 import { useDetectionApi } from '../hooks/useDetectionApi';
 import { useObstacleSensor } from '../hooks/useObstacleSensor';
@@ -82,8 +84,8 @@ function MapZoomButtons() {
   );
 }
 
-// ─── Map Tile Providers ───────────────────────────────────────────────────────
-export type MapTileType = 'google-hybrid' | 'esri-dark' | 'google-streets' | 'google-sat' | 'osm' | 'carto';
+// ─── Map Tile Providers (Google Map, Google Hybrid, Carto, OSM) ─────────────
+export type MapTileType = 'google-hybrid' | 'google-map' | 'carto' | 'osm';
 
 interface MapTileConfig {
   name: string;
@@ -95,46 +97,49 @@ interface MapTileConfig {
 
 const MAP_TILE_CONFIGS: Record<MapTileType, MapTileConfig> = {
   'google-hybrid': {
-    name: 'Google Satellite Hybrid',
+    name: 'Google Hybrid',
     badge: 'GOOGLE HYBRID',
     url: 'https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
     subdomains: ['0', '1', '2', '3'],
     maxZoom: 20,
   },
-  'esri-dark': {
-    name: 'Tactical Dark (Esri)',
-    badge: 'TACTICAL DARK',
-    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
-    maxZoom: 16,
-  },
-  'google-streets': {
-    name: 'Google Streets',
-    badge: 'GOOGLE STREETS',
+  'google-map': {
+    name: 'Google Map',
+    badge: 'GOOGLE MAP',
     url: 'https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
     subdomains: ['0', '1', '2', '3'],
     maxZoom: 20,
   },
-  'google-sat': {
-    name: 'Google Satellite',
-    badge: 'GOOGLE SATELLITE',
-    url: 'https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
-    subdomains: ['0', '1', '2', '3'],
-    maxZoom: 20,
-  },
-  'osm': {
-    name: 'OpenStreetMap',
-    badge: 'OPENSTREETMAP',
-    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-    maxZoom: 19,
-  },
   'carto': {
-    name: 'Carto Dark',
-    badge: 'CARTO DARK',
+    name: 'Carto',
+    badge: 'CARTO',
     url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
     subdomains: ['a', 'b', 'c', 'd'],
     maxZoom: 19,
   },
+  'osm': {
+    name: 'OSM',
+    badge: 'OSM',
+    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    maxZoom: 19,
+  },
 };
+
+export type DockId = 'camera' | 'target' | 'sensor' | 'panTilt' | 'map' | 'log';
+
+interface DockConfig {
+  id: DockId;
+  label: string;
+}
+
+const AVAILABLE_DOCKS: DockConfig[] = [
+  { id: 'camera', label: 'Live Reconnaissance (Camera Feed)' },
+  { id: 'target', label: 'Target Information (Victim Detection)' },
+  { id: 'sensor', label: 'Front Range Sonar (HC-SR04)' },
+  { id: 'panTilt', label: 'Camera Arm (Pan/Tilt Servos)' },
+  { id: 'map', label: 'Tactical Map' },
+  { id: 'log', label: 'Victims & Detection Log' },
+];
 
 interface LogEntry {
   id: string;
@@ -144,6 +149,8 @@ interface LogEntry {
 }
 
 export default function Dashboard() {
+  const navigate = useNavigate();
+
   const {
     robotOnline,
     emergencyStop,
@@ -160,9 +167,108 @@ export default function Dashboard() {
   const panTilt = usePanTilt();
   const obstacleSensor = useObstacleSensor();
 
+  // Switch default from ESP32 direct to XIAO if direct was set
+  useEffect(() => {
+    if (detectionApi.feedMode === 'direct') {
+      detectionApi.setFeedMode('ai');
+    }
+  }, [detectionApi]);
+
+  // Real-time clock in MYT (Malaysian Time)
+  const [currentTimeMyt, setCurrentTimeMyt] = useState<string>('08:44:38 MYT');
+  useEffect(() => {
+    const updateTime = () => {
+      const now = new Date();
+      const options: Intl.DateTimeFormatOptions = {
+        timeZone: 'Asia/Kuala_Lumpur',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+      };
+      const formatted = new Intl.DateTimeFormat('en-GB', options).format(now);
+      setCurrentTimeMyt(`${formatted} MYT`);
+    };
+    updateTime();
+    const interval = setInterval(updateTime, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   // Map Tile Selector
   const [mapTileSource, setMapTileSource] = useState<MapTileType>('google-hybrid');
   const [showMapMenu, setShowMapMenu] = useState<boolean>(false);
+
+  // ─── View Dock Management State ─────────────────────────────────────────────
+  const [visibleDocks, setVisibleDocks] = useState<Record<DockId, boolean>>({
+    camera: true,
+    target: true,
+    sensor: true,
+    panTilt: true,
+    map: true,
+    log: true,
+  });
+  const [showDocksMenu, setShowDocksMenu] = useState<boolean>(false);
+  const [maximizedDock, setMaximizedDock] = useState<DockId | null>(null);
+
+  // Resizable layout split percentages
+  const [topRowHeight, setTopRowHeight] = useState<number>(56); // % height
+  const [cameraColWidth, setCameraColWidth] = useState<number>(58); // % width
+  const [bottomSplit1, setBottomSplit1] = useState<number>(28); // Camera arm %
+  const [bottomSplit2, setBottomSplit2] = useState<number>(70); // Tactical map boundary %
+
+  // Splitter dragging ref
+  const draggingSplitterRef = useRef<'horizontal' | 'topVertical' | 'bottom1' | 'bottom2' | null>(null);
+
+  const toggleDock = (id: DockId) => {
+    setVisibleDocks((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const resetAllDocks = () => {
+    setVisibleDocks({
+      camera: true,
+      target: true,
+      sensor: true,
+      panTilt: true,
+      map: true,
+      log: true,
+    });
+    setMaximizedDock(null);
+    setTopRowHeight(56);
+    setCameraColWidth(58);
+    setBottomSplit1(28);
+    setBottomSplit2(70);
+  };
+
+  // Dragging event listeners for resizing components
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!draggingSplitterRef.current) return;
+      if (draggingSplitterRef.current === 'horizontal') {
+        const pct = Math.max(30, Math.min(80, (e.clientY / window.innerHeight) * 100));
+        setTopRowHeight(pct);
+      } else if (draggingSplitterRef.current === 'topVertical') {
+        const pct = Math.max(30, Math.min(80, (e.clientX / window.innerWidth) * 100));
+        setCameraColWidth(pct);
+      } else if (draggingSplitterRef.current === 'bottom1') {
+        const pct = Math.max(18, Math.min(45, (e.clientX / window.innerWidth) * 100));
+        setBottomSplit1(pct);
+      } else if (draggingSplitterRef.current === 'bottom2') {
+        const pct = Math.max(45, Math.min(85, (e.clientX / window.innerWidth) * 100));
+        setBottomSplit2(pct);
+      }
+    };
+
+    const handleMouseUp = () => {
+      draggingSplitterRef.current = null;
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, []);
 
   // Sensor subviews: 'bar' (linear meter + sparkline), 'radar' (60° acoustic radar sector arc), 'thresholds' (auto-brake sliders)
   const [sensorViewMode, setSensorViewMode] = useState<'bar' | 'radar' | 'thresholds'>('bar');
@@ -194,7 +300,6 @@ export default function Dashboard() {
   // Target confirmation state
   const [isTargetConfirmed, setIsTargetConfirmed] = useState<boolean>(true);
   const [isFalseAlarm, setIsFalseAlarm] = useState<boolean>(false);
-  const [activeStage, setActiveStage] = useState<string>('6 Localise');
 
   // Follow Target Auto-tracking toggle
   const [followTarget, setFollowTarget] = useState<boolean>(false);
@@ -301,7 +406,6 @@ export default function Dashboard() {
   const handleConfirmVictim = useCallback(() => {
     setIsTargetConfirmed(true);
     setIsFalseAlarm(false);
-    setActiveStage('6 Localise');
 
     addVictim({
       status: 'Verified',
@@ -359,21 +463,11 @@ export default function Dashboard() {
     return () => window.removeEventListener('click', handleOutside);
   }, [showMapMenu]);
 
-  // Mission Stages list
-  const missionStages = [
-    '1 Deploy',
-    '2 Navigate',
-    '3 Scan',
-    '4 Detect',
-    '5 Confirm',
-    '6 Localise',
-  ];
-
   return (
     <div className="h-screen w-screen overflow-y-auto lg:overflow-hidden bg-[#0b1118] text-slate-100 flex flex-col p-2.5 gap-2.5 font-sans select-none">
 
       {/* ─── TOP HEADER BAR ─── */}
-      <header className="h-[52px] bg-[#0c1219] border border-[#172332] rounded-2xl px-3.5 flex items-center justify-between shrink-0 shadow-sm">
+      <header className="h-[52px] bg-[#0c1219] border border-[#172332] rounded-2xl px-3.5 flex items-center justify-between shrink-0 shadow-sm z-30">
         {/* Left: Brand Identity */}
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl bg-cyan-500/15 border border-cyan-400/40 flex items-center justify-center text-cyan-400 shadow-sm">
@@ -389,57 +483,184 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Center: Mission Stages */}
-        <div className="hidden md:flex items-center gap-1.5">
-          {missionStages.map((stage) => {
-            const isActive = stage === activeStage;
-            return (
-              <button
-                key={stage}
-                onClick={() => setActiveStage(stage)}
-                className={`text-xs px-3 py-1 rounded-md transition-all cursor-pointer font-semibold ${
-                  isActive
-                    ? 'bg-[#f97316] text-black font-extrabold shadow-[0_0_12px_rgba(249,115,22,0.4)]'
-                    : 'text-cyan-400 bg-cyan-950/20 border border-cyan-800/40 hover:border-cyan-400/70 hover:text-cyan-300'
-                }`}
+        {/* Center: [Robot console] [Operations] & [Docks ▾] */}
+        <div className="flex items-center gap-2">
+          {/* Page Switcher */}
+          <div className="flex items-center bg-[#101b27] p-1 rounded-xl border border-[#1b2b3c]">
+            <button
+              className="px-3.5 py-1 rounded-lg text-xs font-bold bg-cyan-500 text-slate-950 shadow-sm cursor-pointer"
+            >
+              Robot console
+            </button>
+            <button
+              onClick={() => navigate('/operations')}
+              className="px-3.5 py-1 rounded-lg text-xs font-bold text-slate-300 hover:text-white cursor-pointer transition-colors"
+            >
+              Operations
+            </button>
+          </div>
+
+          {/* Docks Visibility Dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setShowDocksMenu(!showDocksMenu)}
+              className="flex items-center gap-1.5 px-3 py-1 bg-[#101b27] hover:bg-[#18283a] text-cyan-400 border border-[#1b2b3c] rounded-xl text-xs font-mono font-bold cursor-pointer transition-colors shadow-sm"
+              title="Toggle dock panels visibility and layout"
+            >
+              <Columns size={13} />
+              <span>Docks</span>
+              <ChevronDown size={12} />
+            </button>
+
+            {showDocksMenu && (
+              <div
+                className="absolute left-0 top-full mt-1.5 w-64 bg-[#0c141e] border border-cyan-700/60 rounded-xl p-2.5 shadow-2xl z-[3000] font-mono text-xs space-y-2"
+                onClick={(e) => e.stopPropagation()}
               >
-                {stage}
-              </button>
-            );
-          })}
+                <div className="flex items-center justify-between pb-1.5 border-b border-white/10">
+                  <span className="font-bold text-white text-[11px] uppercase tracking-wider">VIEW DOCKS</span>
+                  <button
+                    onClick={resetAllDocks}
+                    className="text-[10px] text-cyan-400 hover:text-cyan-300 flex items-center gap-1 cursor-pointer"
+                    title="Reset all docks to default visible"
+                  >
+                    <RotateCcw size={10} /> Reset
+                  </button>
+                </div>
+
+                {/* Dock Checkboxes */}
+                <div className="space-y-1">
+                  {AVAILABLE_DOCKS.map((dock) => {
+                    const isVisible = visibleDocks[dock.id];
+                    return (
+                      <button
+                        key={dock.id}
+                        onClick={() => toggleDock(dock.id)}
+                        className={`w-full px-2 py-1.5 rounded-lg flex items-center justify-between transition-colors cursor-pointer text-left ${
+                          isVisible ? 'bg-[#152334] text-white' : 'text-slate-400 hover:bg-[#101a26]'
+                        }`}
+                      >
+                        <span className="text-[11px] truncate">{dock.label}</span>
+                        <div
+                          className={`w-4 h-4 rounded flex items-center justify-center text-[10px] font-bold ${
+                            isVisible ? 'bg-cyan-500 text-slate-950' : 'border border-slate-600 text-transparent'
+                          }`}
+                        >
+                          ✓
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Quick Presets */}
+                <div className="pt-2 border-t border-white/10 space-y-1">
+                  <div className="text-[10px] text-slate-500 uppercase font-bold">Layout Presets</div>
+                  <div className="grid grid-cols-2 gap-1 text-[10px]">
+                    <button
+                      onClick={() => {
+                        resetAllDocks();
+                        setShowDocksMenu(false);
+                      }}
+                      className="px-2 py-1 bg-[#152334] hover:bg-[#1e324a] text-cyan-300 rounded text-center cursor-pointer"
+                    >
+                      Default
+                    </button>
+                    <button
+                      onClick={() => {
+                        setVisibleDocks({
+                          camera: true,
+                          target: false,
+                          sensor: true,
+                          panTilt: false,
+                          map: true,
+                          log: false,
+                        });
+                        setTopRowHeight(65);
+                        setShowDocksMenu(false);
+                      }}
+                      className="px-2 py-1 bg-[#152334] hover:bg-[#1e324a] text-cyan-300 rounded text-center cursor-pointer"
+                    >
+                      Camera Focus
+                    </button>
+                    <button
+                      onClick={() => {
+                        setVisibleDocks({
+                          camera: true,
+                          target: false,
+                          sensor: false,
+                          panTilt: false,
+                          map: true,
+                          log: true,
+                        });
+                        setTopRowHeight(40);
+                        setShowDocksMenu(false);
+                      }}
+                      className="px-2 py-1 bg-[#152334] hover:bg-[#1e324a] text-cyan-300 rounded text-center cursor-pointer"
+                    >
+                      Map Focus
+                    </button>
+                    <button
+                      onClick={() => {
+                        setVisibleDocks({
+                          camera: true,
+                          target: true,
+                          sensor: true,
+                          panTilt: true,
+                          map: true,
+                          log: true,
+                        });
+                        setTopRowHeight(50);
+                        setCameraColWidth(50);
+                        setShowDocksMenu(false);
+                      }}
+                      className="px-2 py-1 bg-[#152334] hover:bg-[#1e324a] text-cyan-300 rounded text-center cursor-pointer"
+                    >
+                      Quad Split
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Right: Telemetry & E-STOP */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 text-xs font-mono">
+        {/* Right: Telemetry, Time & E-STOP */}
+        <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-1.5 text-xs font-mono">
             {/* LINK */}
-            <div className="flex items-center gap-1.5 bg-[#101b27] border border-[#1b2b3c] px-2.5 py-1 rounded-lg">
+            <div className="flex items-center gap-1 bg-[#101b27] border border-[#1b2b3c] px-2 py-1 rounded-lg">
               <span className={`w-2 h-2 rounded-full ${robotOnline ? 'bg-emerald-400' : 'bg-emerald-400'} animate-pulse shadow-[0_0_6px_#34d399]`} />
               <span className="text-emerald-400 font-bold">LINK 82%</span>
             </div>
 
             {/* GPS FIX */}
-            <div className="flex items-center gap-1.5 bg-[#101b27] border border-[#1b2b3c] px-2.5 py-1 rounded-lg">
+            <div className="flex items-center gap-1 bg-[#101b27] border border-[#1b2b3c] px-2 py-1 rounded-lg">
               <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_6px_#34d399]" />
               <span className="text-emerald-400 font-bold">GPS FIX</span>
             </div>
 
             {/* BATTERY */}
-            <div className="flex items-center gap-1.5 bg-[#101b27] border border-[#1b2b3c] px-2.5 py-1 rounded-lg text-cyan-300">
+            <div className="flex items-center gap-1 bg-[#101b27] border border-[#1b2b3c] px-2 py-1 rounded-lg text-cyan-300">
               <BatteryCharging size={13} className="text-cyan-400" />
               <span className="font-bold">BAT {batteryLevel}%</span>
             </div>
 
             {/* MISSION TIMER */}
-            <div className="bg-[#101b27] border border-[#1b2b3c] px-2.5 py-1 rounded-lg text-slate-300 font-bold">
+            <div className="bg-[#101b27] border border-[#1b2b3c] px-2 py-1 rounded-lg text-slate-300 font-bold">
               {formatElapsedTime(elapsedSeconds)}
+            </div>
+
+            {/* REAL-TIME CLOCK IN RIGHT CORNER */}
+            <div className="bg-[#101b27] border border-[#1b2b3c] px-2.5 py-1 rounded-lg text-slate-200 font-bold">
+              {currentTimeMyt}
             </div>
           </div>
 
           {/* E-STOP Button */}
           <button
             onClick={() => emergencyStop()}
-            className="bg-[#d32f2f] hover:bg-red-600 text-white font-black text-xs px-4 py-1.5 rounded-lg tracking-wider shadow-lg active:scale-95 transition-all cursor-pointer uppercase"
+            className="bg-[#d32f2f] hover:bg-red-600 text-white font-black text-xs px-3.5 py-1.5 rounded-lg tracking-wider shadow-lg active:scale-95 transition-all cursor-pointer uppercase"
           >
             E-STOP
           </button>
@@ -447,10 +668,32 @@ export default function Dashboard() {
       </header>
 
       {/* ─── TOP SECTION: LIVE FEED (LEFT) & TARGET + SONAR (RIGHT) ─── */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-2.5 flex-1 min-h-0">
-
-        {/* ── LIVE FEED PANEL (~60% / 7 cols) ── */}
-        <section className="lg:col-span-7 bg-[#0e1722] border border-[#192738] rounded-2xl p-3 flex flex-col min-h-0 shadow-sm">
+      {(visibleDocks.camera || visibleDocks.target || visibleDocks.sensor) &&
+        (!maximizedDock || ['camera', 'target', 'sensor'].includes(maximizedDock)) && (
+        <div
+          style={{
+            height:
+              maximizedDock
+                ? '100%'
+                : visibleDocks.panTilt || visibleDocks.map || visibleDocks.log
+                ? `${topRowHeight}%`
+                : '100%',
+          }}
+          className="flex flex-col lg:flex-row gap-2.5 min-h-[220px] w-full"
+        >
+          {/* ── LIVE FEED PANEL ── */}
+          {visibleDocks.camera && (!maximizedDock || maximizedDock === 'camera') && (
+            <section
+              style={{
+                width:
+                  maximizedDock === 'camera'
+                    ? '100%'
+                    : visibleDocks.target || visibleDocks.sensor
+                    ? `${cameraColWidth}%`
+                    : '100%',
+              }}
+              className="bg-[#0e1722] border border-[#192738] rounded-2xl p-3 flex flex-col min-h-0 shadow-sm relative overflow-hidden"
+            >
           {/* Live Feed Header */}
           <div className="flex items-center justify-between pb-2 mb-2 border-b border-[#1b2b3c]">
             <div className="flex items-center gap-2 font-mono text-xs">
@@ -461,38 +704,48 @@ export default function Dashboard() {
               </span>
             </div>
 
-            {/* Feed Mode Switcher */}
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => detectionApi.setFeedMode('direct')}
-                className={`px-3 py-0.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  detectionApi.feedMode === 'direct'
-                    ? 'bg-[#22d3ee] text-slate-950 font-extrabold shadow-sm'
-                    : 'bg-[#131f2d] text-slate-300 hover:text-white border border-[#1b2b3c]'
-                }`}
-              >
-                ESP32 Cam
-              </button>
-              <button
-                onClick={() => detectionApi.setFeedMode('ai')}
-                className={`px-3 py-0.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  detectionApi.feedMode === 'ai'
-                    ? 'bg-[#22d3ee] text-slate-950 font-extrabold shadow-sm'
-                    : 'bg-[#131f2d] text-slate-300 hover:text-white border border-[#1b2b3c]'
-                }`}
-              >
-                XIAO
-              </button>
-              <button
-                onClick={() => detectionApi.setFeedMode('webcam')}
-                className={`px-3 py-0.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  detectionApi.feedMode === 'webcam'
-                    ? 'bg-[#22d3ee] text-slate-950 font-extrabold shadow-sm'
-                    : 'bg-[#131f2d] text-slate-300 hover:text-white border border-[#1b2b3c]'
-                }`}
-              >
-                Laptop
-              </button>
+            {/* Feed Mode Switcher (ESP32 removed; XIAO and Laptop only) & Dock Controls */}
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => detectionApi.setFeedMode('ai')}
+                  className={`px-3 py-0.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    detectionApi.feedMode === 'ai'
+                      ? 'bg-[#22d3ee] text-slate-950 font-extrabold shadow-sm'
+                      : 'bg-[#131f2d] text-slate-300 hover:text-white border border-[#1b2b3c]'
+                  }`}
+                >
+                  XIAO
+                </button>
+                <button
+                  onClick={() => detectionApi.setFeedMode('webcam')}
+                  className={`px-3 py-0.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    detectionApi.feedMode === 'webcam'
+                      ? 'bg-[#22d3ee] text-slate-950 font-extrabold shadow-sm'
+                      : 'bg-[#131f2d] text-slate-300 hover:text-white border border-[#1b2b3c]'
+                  }`}
+                >
+                  Laptop
+                </button>
+              </div>
+
+              {/* Dock Window Controls */}
+              <div className="flex items-center gap-1 pl-2 border-l border-[#1b2b3c]">
+                <button
+                  onClick={() => setMaximizedDock(maximizedDock === 'camera' ? null : 'camera')}
+                  className="text-slate-400 hover:text-cyan-400 p-0.5 cursor-pointer transition-colors"
+                  title={maximizedDock === 'camera' ? 'Restore layout' : 'Maximize dock'}
+                >
+                  {maximizedDock === 'camera' ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+                </button>
+                <button
+                  onClick={() => toggleDock('camera')}
+                  className="text-slate-400 hover:text-rose-400 p-0.5 cursor-pointer transition-colors"
+                  title="Hide dock"
+                >
+                  <X size={13} />
+                </button>
+              </div>
             </div>
           </div>
 
@@ -589,124 +842,185 @@ export default function Dashboard() {
             </div>
           </div>
         </section>
+        )}
 
-        {/* ── TARGET INFO & FRONT RANGE STACK (~40% / 5 cols) ── */}
-        <div className="lg:col-span-5 flex flex-col gap-2.5 min-h-0">
+        {/* Vertical Splitter Handle: Camera ↔ Target/Sensor */}
+        {!maximizedDock && visibleDocks.camera && (visibleDocks.target || visibleDocks.sensor) && (
+          <div
+            onMouseDown={(e) => {
+              e.preventDefault();
+              draggingSplitterRef.current = 'topVertical';
+            }}
+            className="hidden lg:flex w-1.5 hover:w-2 bg-[#172332] hover:bg-cyan-500/80 cursor-col-resize transition-all rounded-full shrink-0 items-center justify-center select-none group"
+            title="Drag left/right to resize Camera / Target split"
+          >
+            <GripVertical size={10} className="text-slate-600 group-hover:text-slate-950 opacity-0 group-hover:opacity-100 transition-opacity" />
+          </div>
+        )}
 
-          {/* Upper Card: VICTIM #1 CONFIRMED */}
-          <section className="flex-1 bg-[#0e1722] border border-[#192738] rounded-2xl p-3.5 flex flex-col justify-between shadow-sm min-h-0">
-            {/* Card Header */}
-            <div className="flex items-center justify-between pb-2 border-b border-[#1b2b3c]">
-              <div className="flex items-center gap-2 text-emerald-400 font-extrabold text-sm tracking-wide">
-                <User size={16} />
-                <span>{isFalseAlarm ? 'TARGET REJECTED' : 'VICTIM #1 CONFIRMED'}</span>
-              </div>
-              <div className="bg-[#132230] border border-[#1b2b3c] text-white px-2 py-0.5 rounded text-xs font-mono font-bold">
-                CONF 94%
-              </div>
-            </div>
+        {/* ── TARGET INFO & FRONT RANGE STACK ── */}
+        {(visibleDocks.target || visibleDocks.sensor) &&
+          (!maximizedDock || ['target', 'sensor'].includes(maximizedDock)) && (
+          <div
+            style={{
+              width: maximizedDock ? '100%' : visibleDocks.camera ? `${100 - cameraColWidth}%` : '100%',
+            }}
+            className="flex flex-col gap-2.5 min-h-0 flex-1 lg:flex-initial"
+          >
 
-            {/* Distance & Bearing Metrics */}
-            <div className="grid grid-cols-2 gap-4 my-auto py-1">
-              <div>
-                <span className="text-slate-400 text-xs font-sans block">Distance (ultrasonic)</span>
-                <div className="text-white font-extrabold text-3xl font-mono leading-tight mt-0.5">
-                  {liveDistance.toFixed(2)} <span className="text-xl font-normal text-slate-400">m</span>
+            {/* Upper Card: VICTIM #1 CONFIRMED */}
+            {visibleDocks.target && (!maximizedDock || maximizedDock === 'target') && (
+              <section className="flex-1 bg-[#0e1722] border border-[#192738] rounded-2xl p-3.5 flex flex-col justify-between shadow-sm min-h-0 relative">
+                {/* Card Header */}
+                <div className="flex items-center justify-between pb-2 border-b border-[#1b2b3c]">
+                  <div className="flex items-center gap-2 text-emerald-400 font-extrabold text-sm tracking-wide">
+                    <User size={16} />
+                    <span>{isFalseAlarm ? 'TARGET REJECTED' : 'VICTIM #1 CONFIRMED'}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="bg-[#132230] border border-[#1b2b3c] text-white px-2 py-0.5 rounded text-xs font-mono font-bold">
+                      CONF 94%
+                    </div>
+                    {/* Dock Controls */}
+                    <div className="flex items-center gap-1 pl-1 border-l border-[#1b2b3c]">
+                      <button
+                        onClick={() => setMaximizedDock(maximizedDock === 'target' ? null : 'target')}
+                        className="text-slate-400 hover:text-cyan-400 p-0.5 cursor-pointer transition-colors"
+                        title={maximizedDock === 'target' ? 'Restore layout' : 'Maximize dock'}
+                      >
+                        {maximizedDock === 'target' ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+                      </button>
+                      <button
+                        onClick={() => toggleDock('target')}
+                        className="text-slate-400 hover:text-rose-400 p-0.5 cursor-pointer transition-colors"
+                        title="Hide dock"
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <div>
-                <span className="text-slate-400 text-xs font-sans block">Bearing from bow</span>
-                <div className="text-white font-extrabold text-3xl font-mono leading-tight mt-0.5">
-                  {bearingFromBow >= 0 ? `+${bearingFromBow}` : bearingFromBow}°
+
+                {/* Distance & Bearing Metrics */}
+                <div className="grid grid-cols-2 gap-4 my-auto py-1">
+                  <div>
+                    <span className="text-slate-400 text-xs font-sans block">Distance (ultrasonic)</span>
+                    <div className="text-white font-extrabold text-3xl font-mono leading-tight mt-0.5">
+                      {liveDistance.toFixed(2)} <span className="text-xl font-normal text-slate-400">m</span>
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 text-xs font-sans block">Bearing from bow</span>
+                    <div className="text-white font-extrabold text-3xl font-mono leading-tight mt-0.5">
+                      {bearingFromBow >= 0 ? `+${bearingFromBow}` : bearingFromBow}°
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
 
-            {/* Estimated Position */}
-            <div className="text-slate-300 font-mono text-xs pb-2">
-              Est. position {targetLocation[0].toFixed(6)}°N, {targetLocation[1].toFixed(6)}°E
-            </div>
+                {/* Estimated Position */}
+                <div className="text-slate-300 font-mono text-xs pb-2">
+                  Est. position {targetLocation[0].toFixed(6)}°N, {targetLocation[1].toFixed(6)}°E
+                </div>
 
-            {/* Action Buttons Row */}
-            <div className="flex items-center gap-2 pt-1 border-t border-[#1b2b3c]">
-              <button
-                onClick={handleConfirmVictim}
-                className="flex-1 bg-[#f97316] hover:bg-[#ea580c] text-black font-extrabold text-xs py-2 px-3 rounded-lg shadow-md transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1.5"
-              >
-                <span>{isTargetConfirmed ? 'Confirmed ✓' : 'Confirm Victim'}</span>
-              </button>
-              <button
-                onClick={handleFalseAlarm}
-                className="bg-[#131f2d] hover:bg-[#1a2b3d] text-slate-200 border border-[#21354a] font-semibold text-xs py-2 px-3 rounded-lg transition-all active:scale-95 cursor-pointer"
-              >
-                False alarm
-              </button>
-              <button
-                onClick={() => {
-                  setLogEvents((p) => [
-                    {
-                      id: String(Date.now()),
-                      time: new Date().toLocaleTimeString(),
-                      type: 'range',
-                      text: `Navigating toward target at ${targetLocation[0].toFixed(5)}, ${targetLocation[1].toFixed(5)}`,
-                    },
-                    ...p,
-                  ]);
-                }}
-                className="bg-[#131f2d] hover:bg-[#1a2b3d] text-slate-200 border border-[#21354a] font-semibold text-xs py-2 px-3 rounded-lg transition-all active:scale-95 cursor-pointer"
-              >
-                Navigate to
-              </button>
-            </div>
-          </section>
-
-          {/* Lower Card: FRONT RANGE (HC-SR04 · 10 Hz) */}
-          <section className="flex-1 bg-[#0e1722] border border-[#192738] rounded-2xl p-3.5 flex flex-col justify-between shadow-sm min-h-0 relative">
-            {/* Header with Subview Tabs & Expand Button */}
-            <div className="flex items-center justify-between pb-1.5 border-b border-[#1b2b3c]">
-              <div className="flex items-center gap-2">
-                <span className="text-white font-extrabold text-sm tracking-wide">FRONT RANGE</span>
-
-                {/* Subview Selector: Bar | Radar | Brake */}
-                <div className="flex items-center bg-[#101b27] p-0.5 rounded border border-[#1d2f42] text-[10px] font-mono">
+                {/* Action Buttons Row */}
+                <div className="flex items-center gap-2 pt-1 border-t border-[#1b2b3c]">
                   <button
-                    onClick={() => setSensorViewMode('bar')}
-                    className={`px-2 py-0.5 rounded font-bold transition-all cursor-pointer ${
-                      sensorViewMode === 'bar' ? 'bg-[#22d3ee] text-slate-950 shadow-xs' : 'text-slate-400 hover:text-white'
-                    }`}
+                    onClick={handleConfirmVictim}
+                    className="flex-1 bg-[#f97316] hover:bg-[#ea580c] text-black font-extrabold text-xs py-2 px-3 rounded-lg shadow-md transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1.5"
                   >
-                    Bar
+                    <span>{isTargetConfirmed ? 'Confirmed ✓' : 'Confirm Victim'}</span>
                   </button>
                   <button
-                    onClick={() => setSensorViewMode('radar')}
-                    className={`px-2 py-0.5 rounded font-bold transition-all cursor-pointer ${
-                      sensorViewMode === 'radar' ? 'bg-[#22d3ee] text-slate-950 shadow-xs' : 'text-slate-400 hover:text-white'
-                    }`}
+                    onClick={handleFalseAlarm}
+                    className="bg-[#131f2d] hover:bg-[#1a2b3d] text-slate-200 border border-[#21354a] font-semibold text-xs py-2 px-3 rounded-lg transition-all active:scale-95 cursor-pointer"
                   >
-                    Radar
+                    False alarm
                   </button>
                   <button
-                    onClick={() => setSensorViewMode('thresholds')}
-                    className={`px-2 py-0.5 rounded font-bold transition-all cursor-pointer ${
-                      sensorViewMode === 'thresholds' ? 'bg-[#22d3ee] text-slate-950 shadow-xs' : 'text-slate-400 hover:text-white'
-                    }`}
+                    onClick={() => {
+                      setLogEvents((p) => [
+                        {
+                          id: String(Date.now()),
+                          time: new Date().toLocaleTimeString(),
+                          type: 'range',
+                          text: `Navigating toward target at ${targetLocation[0].toFixed(5)}, ${targetLocation[1].toFixed(5)}`,
+                        },
+                        ...p,
+                      ]);
+                    }}
+                    className="bg-[#131f2d] hover:bg-[#1a2b3d] text-slate-200 border border-[#21354a] font-semibold text-xs py-2 px-3 rounded-lg transition-all active:scale-95 cursor-pointer"
                   >
-                    Brake
+                    Navigate to
                   </button>
                 </div>
-              </div>
+              </section>
+            )}
 
-              <div className="flex items-center gap-2 font-mono text-xs text-slate-400">
-                <span>HC-SR04 · 10 Hz</span>
-                <button
-                  onClick={() => setShowFullSensorModal(true)}
-                  className="w-5 h-5 rounded hover:bg-[#1a2b3d] text-cyan-400 border border-[#21354a] flex items-center justify-center cursor-pointer shadow-xs transition-colors"
-                  title="Expand to Full Radar Sector Arc Station"
-                >
-                  <Maximize2 size={11} />
-                </button>
-              </div>
-            </div>
+            {/* Lower Card: FRONT RANGE (HC-SR04 · 10 Hz) */}
+            {visibleDocks.sensor && (!maximizedDock || maximizedDock === 'sensor') && (
+              <section className="flex-1 bg-[#0e1722] border border-[#192738] rounded-2xl p-3.5 flex flex-col justify-between shadow-sm min-h-0 relative">
+                {/* Header with Subview Tabs & Expand Button */}
+                <div className="flex items-center justify-between pb-1.5 border-b border-[#1b2b3c]">
+                  <div className="flex items-center gap-2">
+                    <span className="text-white font-extrabold text-sm tracking-wide">FRONT RANGE</span>
+
+                    {/* Subview Selector: Bar | Radar | Brake */}
+                    <div className="flex items-center bg-[#101b27] p-0.5 rounded border border-[#1d2f42] text-[10px] font-mono">
+                      <button
+                        onClick={() => setSensorViewMode('bar')}
+                        className={`px-2 py-0.5 rounded font-bold transition-all cursor-pointer ${
+                          sensorViewMode === 'bar' ? 'bg-[#22d3ee] text-slate-950 shadow-xs' : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        Bar
+                      </button>
+                      <button
+                        onClick={() => setSensorViewMode('radar')}
+                        className={`px-2 py-0.5 rounded font-bold transition-all cursor-pointer ${
+                          sensorViewMode === 'radar' ? 'bg-[#22d3ee] text-slate-950 shadow-xs' : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        Radar
+                      </button>
+                      <button
+                        onClick={() => setSensorViewMode('thresholds')}
+                        className={`px-2 py-0.5 rounded font-bold transition-all cursor-pointer ${
+                          sensorViewMode === 'thresholds' ? 'bg-[#22d3ee] text-slate-950 shadow-xs' : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        Brake
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 font-mono text-xs text-slate-400">
+                    <span>HC-SR04 · 10 Hz</span>
+                    <button
+                      onClick={() => setShowFullSensorModal(true)}
+                      className="w-5 h-5 rounded hover:bg-[#1a2b3d] text-cyan-400 border border-[#21354a] flex items-center justify-center cursor-pointer shadow-xs transition-colors"
+                      title="Expand to Full Radar Sector Arc Station"
+                    >
+                      <Maximize2 size={11} />
+                    </button>
+                    {/* Dock Controls */}
+                    <div className="flex items-center gap-1 pl-1 border-l border-[#1b2b3c]">
+                      <button
+                        onClick={() => setMaximizedDock(maximizedDock === 'sensor' ? null : 'sensor')}
+                        className="text-slate-400 hover:text-cyan-400 p-0.5 cursor-pointer transition-colors"
+                        title={maximizedDock === 'sensor' ? 'Restore layout' : 'Maximize dock'}
+                      >
+                        {maximizedDock === 'sensor' ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+                      </button>
+                      <button
+                        onClick={() => toggleDock('sensor')}
+                        className="text-slate-400 hover:text-rose-400 p-0.5 cursor-pointer transition-colors"
+                        title="Hide dock"
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
 
             {/* ── SUBVIEW 1: LINEAR BAR + SPARKLINE (DEFAULT) ── */}
             {sensorViewMode === 'bar' && (
@@ -905,20 +1219,80 @@ export default function Dashboard() {
               </div>
             )}
           </section>
+          )}
 
         </div>
+        )}
       </div>
+      )}
+
+      {/* Horizontal Splitter Handle: Top Row ↕ Bottom Row */}
+      {!maximizedDock &&
+        (visibleDocks.camera || visibleDocks.target || visibleDocks.sensor) &&
+        (visibleDocks.panTilt || visibleDocks.map || visibleDocks.log) && (
+          <div
+            onMouseDown={(e) => {
+              e.preventDefault();
+              draggingSplitterRef.current = 'horizontal';
+            }}
+            className="hidden lg:flex h-1.5 hover:h-2 bg-[#172332] hover:bg-cyan-500/80 cursor-row-resize transition-all rounded-full shrink-0 items-center justify-center select-none group"
+            title="Drag up/down to resize Top & Bottom layout"
+          >
+            <GripHorizontal size={12} className="text-slate-600 group-hover:text-slate-950 opacity-0 group-hover:opacity-100 transition-opacity" />
+          </div>
+      )}
 
       {/* ─── BOTTOM SECTION: CAMERA ARM, TACTICAL MAP, VICTIMS & LOG ─── */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-2.5 h-[275px] shrink-0">
+      {(visibleDocks.panTilt || visibleDocks.map || visibleDocks.log) &&
+        (!maximizedDock || ['panTilt', 'map', 'log'].includes(maximizedDock)) && (
+        <div
+          style={{
+            height:
+              maximizedDock
+                ? '100%'
+                : visibleDocks.camera || visibleDocks.target || visibleDocks.sensor
+                ? `${100 - topRowHeight}%`
+                : '100%',
+          }}
+          className="flex flex-col lg:flex-row gap-2.5 min-h-[220px] w-full"
+        >
 
-        {/* ── CAMERA ARM (SG90) (~33% / 4 cols) ── */}
-        <section className="lg:col-span-4 bg-[#0e1722] border border-[#192738] rounded-2xl p-3 flex flex-col justify-between shadow-sm min-h-0">
-          {/* Header */}
-          <div className="flex items-center justify-between pb-1 border-b border-[#1b2b3c]">
-            <span className="text-white font-extrabold text-sm tracking-wide">CAMERA ARM</span>
-            <span className="text-slate-400 font-mono text-xs">2x SG90 · GPIO 18 / 19</span>
-          </div>
+          {/* ── CAMERA ARM (SG90) ── */}
+          {visibleDocks.panTilt && (!maximizedDock || maximizedDock === 'panTilt') && (
+            <section
+              style={{
+                width:
+                  maximizedDock === 'panTilt'
+                    ? '100%'
+                    : visibleDocks.map || visibleDocks.log
+                    ? `${bottomSplit1}%`
+                    : '100%',
+              }}
+              className="bg-[#0e1722] border border-[#192738] rounded-2xl p-3 flex flex-col justify-between shadow-sm min-h-0 relative"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between pb-1 border-b border-[#1b2b3c]">
+                <span className="text-white font-extrabold text-sm tracking-wide">CAMERA ARM</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-400 font-mono text-xs">2x SG90 · GPIO 18 / 19</span>
+                  <div className="flex items-center gap-1 pl-1 border-l border-[#1b2b3c]">
+                    <button
+                      onClick={() => setMaximizedDock(maximizedDock === 'panTilt' ? null : 'panTilt')}
+                      className="text-slate-400 hover:text-cyan-400 p-0.5 cursor-pointer transition-colors"
+                      title={maximizedDock === 'panTilt' ? 'Restore layout' : 'Maximize dock'}
+                    >
+                      {maximizedDock === 'panTilt' ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+                    </button>
+                    <button
+                      onClick={() => toggleDock('panTilt')}
+                      className="text-slate-400 hover:text-rose-400 p-0.5 cursor-pointer transition-colors"
+                      title="Hide dock"
+                    >
+                      <X size={13} />
+                    </button>
+                  </div>
+                </div>
+              </div>
 
           {/* Interactive 2D Grid Visualizer & D-Pad */}
           <div className="flex items-center justify-between gap-3 my-auto py-1">
@@ -1091,12 +1465,40 @@ export default function Dashboard() {
             </button>
           </div>
         </section>
+        )}
 
-        {/* ── TACTICAL MAP (~34% / 4 cols) ── */}
-        <section className="lg:col-span-4 bg-[#0e1722] border border-[#192738] rounded-2xl p-3 flex flex-col justify-between shadow-sm min-h-0 relative overflow-hidden">
-          {/* Header with Interactive Map Provider Selector */}
-          <div className="flex items-center justify-between pb-1 border-b border-[#1b2b3c] z-10 relative">
-            <span className="text-white font-extrabold text-sm tracking-wide">TACTICAL MAP</span>
+        {/* Splitter 1: Camera Arm ↔ Tactical Map */}
+        {!maximizedDock && visibleDocks.panTilt && (visibleDocks.map || visibleDocks.log) && (
+          <div
+            onMouseDown={(e) => {
+              e.preventDefault();
+              draggingSplitterRef.current = 'bottom1';
+            }}
+            className="hidden lg:flex w-1.5 hover:w-2 bg-[#172332] hover:bg-cyan-500/80 cursor-col-resize transition-all rounded-full shrink-0 items-center justify-center select-none group"
+            title="Drag left/right to resize Camera Arm width"
+          >
+            <GripVertical size={10} className="text-slate-600 group-hover:text-slate-950 opacity-0 group-hover:opacity-100 transition-opacity" />
+          </div>
+        )}
+
+        {/* ── TACTICAL MAP DOCK ── */}
+        {visibleDocks.map && (!maximizedDock || maximizedDock === 'map') && (
+          <section
+            style={{
+              width:
+                maximizedDock === 'map'
+                  ? '100%'
+                  : visibleDocks.log
+                  ? `${visibleDocks.panTilt ? Math.max(20, bottomSplit2 - bottomSplit1) : bottomSplit2}%`
+                  : '100%',
+            }}
+            className="bg-[#0e1722] border border-[#192738] rounded-2xl p-3 flex flex-col justify-between shadow-sm min-h-0 relative overflow-hidden"
+          >
+            {/* Header with Interactive Map Provider Selector and Dock Controls */}
+            <div className="flex items-center justify-between pb-1 border-b border-[#1b2b3c] z-10 relative">
+              <span className="text-white font-extrabold text-sm tracking-wide">TACTICAL MAP</span>
+
+              <div className="flex items-center gap-2">
 
             {/* Map Tile Dropdown Switcher */}
             <div className="relative" onClick={(e) => e.stopPropagation()}>
@@ -1137,7 +1539,26 @@ export default function Dashboard() {
                 </div>
               )}
             </div>
+
+            {/* Dock Controls */}
+            <div className="flex items-center gap-1 pl-1 border-l border-[#1b2b3c]">
+              <button
+                onClick={() => setMaximizedDock(maximizedDock === 'map' ? null : 'map')}
+                className="text-slate-400 hover:text-cyan-400 p-0.5 cursor-pointer transition-colors"
+                title={maximizedDock === 'map' ? 'Restore layout' : 'Maximize dock'}
+              >
+                {maximizedDock === 'map' ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+              </button>
+              <button
+                onClick={() => toggleDock('map')}
+                className="text-slate-400 hover:text-rose-400 p-0.5 cursor-pointer transition-colors"
+                title="Hide dock"
+              >
+                <X size={13} />
+              </button>
+            </div>
           </div>
+        </div>
 
           {/* Map View */}
           <div className="relative flex-1 rounded-xl overflow-hidden border border-[#172433] mt-1.5">
@@ -1211,16 +1632,61 @@ export default function Dashboard() {
             </div>
           </div>
         </section>
+        )}
 
-        {/* ── VICTIMS & LOG (~33% / 4 cols) ── */}
-        <section className="lg:col-span-4 bg-[#0e1722] border border-[#192738] rounded-2xl p-3 flex flex-col justify-between shadow-sm min-h-0">
-          {/* Header */}
-          <div className="flex items-center justify-between pb-1 border-b border-[#1b2b3c]">
-            <span className="text-white font-extrabold text-sm tracking-wide">VICTIMS &amp; LOG</span>
-            <span className="text-[#f97316] font-bold text-xs font-mono">
-              {isTargetConfirmed ? '1 confirmed' : '0 confirmed'}
-            </span>
+        {/* Splitter 2: Tactical Map ↔ Victims & Log */}
+        {!maximizedDock && visibleDocks.map && visibleDocks.log && (
+          <div
+            onMouseDown={(e) => {
+              e.preventDefault();
+              draggingSplitterRef.current = 'bottom2';
+            }}
+            className="hidden lg:flex w-1.5 hover:w-2 bg-[#172332] hover:bg-cyan-500/80 cursor-col-resize transition-all rounded-full shrink-0 items-center justify-center select-none group"
+            title="Drag left/right to resize Tactical Map / Victims split"
+          >
+            <GripVertical size={10} className="text-slate-600 group-hover:text-slate-950 opacity-0 group-hover:opacity-100 transition-opacity" />
           </div>
+        )}
+
+        {/* ── VICTIMS & LOG ── */}
+        {visibleDocks.log && (!maximizedDock || maximizedDock === 'log') && (
+          <section
+            style={{
+              width:
+                maximizedDock === 'log'
+                  ? '100%'
+                  : visibleDocks.panTilt || visibleDocks.map
+                  ? `${Math.max(20, 100 - (visibleDocks.map ? bottomSplit2 : (visibleDocks.panTilt ? bottomSplit1 : 0)))}%`
+                  : '100%',
+            }}
+            className="bg-[#0e1722] border border-[#192738] rounded-2xl p-3 flex flex-col justify-between shadow-sm min-h-0 relative"
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between pb-1 border-b border-[#1b2b3c]">
+              <span className="text-white font-extrabold text-sm tracking-wide">VICTIMS &amp; LOG</span>
+              <div className="flex items-center gap-2">
+                <span className="text-[#f97316] font-bold text-xs font-mono">
+                  {isTargetConfirmed ? '1 confirmed' : '0 confirmed'}
+                </span>
+                {/* Dock Controls */}
+                <div className="flex items-center gap-1 pl-1 border-l border-[#1b2b3c]">
+                  <button
+                    onClick={() => setMaximizedDock(maximizedDock === 'log' ? null : 'log')}
+                    className="text-slate-400 hover:text-cyan-400 p-0.5 cursor-pointer transition-colors"
+                    title={maximizedDock === 'log' ? 'Restore layout' : 'Maximize dock'}
+                  >
+                    {maximizedDock === 'log' ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+                  </button>
+                  <button
+                    onClick={() => toggleDock('log')}
+                    className="text-slate-400 hover:text-rose-400 p-0.5 cursor-pointer transition-colors"
+                    title="Hide dock"
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
+              </div>
+            </div>
 
           {/* 3 Counter Metric Cards */}
           <div className="grid grid-cols-3 gap-2 py-1.5 text-center">
@@ -1266,8 +1732,10 @@ export default function Dashboard() {
             })}
           </div>
         </section>
+        )}
 
       </div>
+      )}
 
       {/* ─── FULL SENSOR & RADAR SECTOR ARC MODAL ─── */}
       {showFullSensorModal && (

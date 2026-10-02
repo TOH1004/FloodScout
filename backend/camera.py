@@ -287,17 +287,24 @@ class IPCameraSource(CameraSource):
                         if not chunk:
                             break
                         buf += chunk
-                        a = buf.find(b"\xff\xd8")
-                        b = buf.find(b"\xff\xd9")
-                        if a != -1 and b != -1 and b > a:
-                            jpg = buf[a : b + 2]
-                            buf = buf[b + 2 :]
-                            frame = cv2.imdecode(np.frombuffer(jpg, dtype=np.uint8), cv2.IMREAD_COLOR)
-                            if frame is not None:
-                                with self._lock:
-                                    self._latest_frame = frame
-                                    self._frame_time = time.time()
-                                connected_stream = True
+
+                        # Find the LATEST complete JPEG in buffer to guarantee zero streaming lag
+                        b = buf.rfind(b"\xff\xd9")
+                        if b != -1:
+                            a = buf.rfind(b"\xff\xd8", 0, b)
+                            if a != -1:
+                                jpg = buf[a : b + 2]
+                                buf = buf[b + 2 :] # Discard older backlog frames
+                                frame = cv2.imdecode(np.frombuffer(jpg, dtype=np.uint8), cv2.IMREAD_COLOR)
+                                if frame is not None:
+                                    with self._lock:
+                                        self._latest_frame = frame
+                                        self._frame_time = time.time()
+                                    connected_stream = True
+
+                        # Cap buffer size to avoid stale backlog
+                        if len(buf) > 65536:
+                            buf = buf[-16384:]
             except Exception as e:
                 logger.debug(f"Direct stream {self.stream_url} not accessible ({e}), using /capture fallback")
 

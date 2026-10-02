@@ -45,11 +45,11 @@ export function useMotorTelemetry(): UseMotorTelemetryReturn {
   // Poll ESP32 for live motor metrics
   useEffect(() => {
     let isMounted = true;
-    const esp32Base = getEsp32BaseUrl();
     const backendBase = getBackendBaseUrl();
 
     const fetchMotorData = async () => {
       let gotData = false;
+      const esp32Base = getEsp32BaseUrl();
 
       // Tier 1: Direct ESP32 /api/sensors (contains "motors")
       try {
@@ -150,10 +150,17 @@ export function useMotorTelemetry(): UseMotorTelemetryReturn {
     };
 
     fetchMotorData();
-    const interval = setInterval(fetchMotorData, 250);
+    const interval = setInterval(fetchMotorData, 350);
+
+    const handleUrlChange = () => {
+      fetchMotorData();
+    };
+    window.addEventListener('floodscout_esp32_url_changed', handleUrlChange);
+
     return () => {
       isMounted = false;
       clearInterval(interval);
+      window.removeEventListener('floodscout_esp32_url_changed', handleUrlChange);
     };
   }, []);
 

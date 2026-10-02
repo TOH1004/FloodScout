@@ -12,6 +12,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { useObstacleSensor } from '../hooks/useObstacleSensor';
+import { getEsp32BaseUrl, setEsp32BaseUrl } from '../config/esp32';
 
 export function ObstacleSensorSection() {
   const sensor = useObstacleSensor();
@@ -118,15 +119,41 @@ export function ObstacleSensorSection() {
             <h3 className="font-editorial-serif font-bold text-sm text-[#162347] leading-none flex items-center gap-2">
               <span>Front Obstacle &amp; Proximity Sensor</span>
               {isHardwareConnected ? (
-                <span className="text-[9px] font-mono font-bold bg-emerald-100 text-emerald-900 border border-emerald-300 px-1.5 py-0.2 rounded flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const input = window.prompt(
+                      `Enter ESP32 IP address or URL:\n(e.g., 10.185.112.106 or http://10.185.112.106)`,
+                      getEsp32BaseUrl()
+                    );
+                    if (input && input.trim()) {
+                      setEsp32BaseUrl(input.trim());
+                    }
+                  }}
+                  className="text-[9px] font-mono font-bold bg-emerald-100 text-emerald-900 border border-emerald-300 px-1.5 py-0.5 rounded flex items-center gap-1 cursor-pointer hover:bg-emerald-200 transition-colors"
+                  title="Click to change ESP32 IP address"
+                >
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  LIVE HARDWARE (10.185.112.106)
-                </span>
+                  LIVE HARDWARE ({getEsp32BaseUrl().replace('http://', '')})
+                </button>
               ) : (
-                <span className="text-[9px] font-mono font-bold bg-amber-100 text-amber-900 border border-amber-300 px-1.5 py-0.2 rounded flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const input = window.prompt(
+                      `Enter ESP32 IP address or URL:\n(e.g., 10.185.112.106 or http://10.185.112.106)`,
+                      getEsp32BaseUrl()
+                    );
+                    if (input && input.trim()) {
+                      setEsp32BaseUrl(input.trim());
+                    }
+                  }}
+                  className="text-[9px] font-mono font-bold bg-amber-100 text-amber-900 border border-amber-300 px-1.5 py-0.5 rounded flex items-center gap-1 cursor-pointer hover:bg-amber-200 transition-colors"
+                  title="Click to configure ESP32 IP address"
+                >
                   <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                  CONNECTING SENSOR...
-                </span>
+                  CONNECTING ({getEsp32BaseUrl().replace('http://', '')}) - Set IP
+                </button>
               )}
             </h3>
             <p className="text-[10px] font-mono text-[#162347]/60 mt-0.5">
@@ -204,20 +231,20 @@ export function ObstacleSensorSection() {
             </div>
             <p className="text-[11px] font-sans mt-0.5 opacity-85">
               {status === 'DANGER'
-                ? `Obstacle at ${distanceM.toFixed(2)}m! Collision threshold (<${criticalThresholdM.toFixed(2)}m) breached. ${autoBrakeArmed ? 'Auto-halt thruster interlock active.' : 'Manual avoidance required immediately.'}`
+                ? `Obstacle at ${distanceCm.toFixed(1)} cm! Collision threshold (<${Math.round(criticalThresholdM * 100)} cm) breached. ${autoBrakeArmed ? 'Auto-halt thruster interlock active.' : 'Manual avoidance required immediately.'}`
                 : status === 'CAUTION'
-                ? `Object identified directly in front of vessel at ${distanceM.toFixed(2)}m (${distanceCm} cm). Vessel slowing down.`
-                : `No obstructions detected within ${warningThresholdM.toFixed(2)}m safety zone. Clear water path ahead.`}
+                ? `Object identified directly in front of vessel at ${distanceCm.toFixed(1)} cm (${distanceM.toFixed(2)} m). Vessel slowing down.`
+                : `No obstructions detected within ${Math.round(warningThresholdM * 100)} cm safety zone. Clear water path ahead.`}
             </p>
           </div>
         </div>
 
         <div className="text-right shrink-0 font-mono">
-          <div className="text-2xl font-black font-editorial-serif leading-none tracking-tight">
-            {distanceM.toFixed(2)} <span className="text-xs font-mono font-normal">m</span>
+          <div className="text-3xl font-black font-editorial-serif leading-none tracking-tight">
+            {distanceCm > 0 && distanceCm <= 450 ? distanceCm.toFixed(1) : '> 400'} <span className="text-sm font-mono font-normal">cm</span>
           </div>
           <div className="text-[10px] text-slate-500 font-bold mt-0.5">
-            {distanceCm} cm
+            {distanceM.toFixed(2)} m
           </div>
         </div>
       </div>
@@ -266,8 +293,9 @@ export function ObstacleSensorSection() {
               <path d={dangerArcPath} fill="url(#dangerArcGrad)" stroke="#EF4444" strokeWidth="1.5" strokeOpacity="0.8" />
 
               {/* Distance Concentric Circles */}
-              {[1.0, 2.0, 3.0, 4.0].map((dist) => {
-                const r = (dist / maxRangeM) * maxRadiusPx;
+              {[100, 200, 300, 400].map((distCm) => {
+                const distM = distCm / 100.0;
+                const r = (distM / maxRangeM) * maxRadiusPx;
                 const startAngle = (-30 * Math.PI) / 180;
                 const endAngle = (30 * Math.PI) / 180;
                 const x1 = originX + r * Math.sin(startAngle);
@@ -275,7 +303,7 @@ export function ObstacleSensorSection() {
                 const x2 = originX + r * Math.sin(endAngle);
                 const y2 = originY - r * Math.cos(endAngle);
                 return (
-                  <g key={dist}>
+                  <g key={distCm}>
                     <path
                       d={`M ${x1} ${y1} A ${r} ${r} 0 0 1 ${x2} ${y2}`}
                       fill="none"
@@ -285,7 +313,7 @@ export function ObstacleSensorSection() {
                       strokeOpacity="0.25"
                     />
                     <text x={originX + 8} y={originY - r + 3} fill="#64748B" fontSize="8" fontFamily="monospace">
-                      {dist}m
+                      {distCm} cm
                     </text>
                   </g>
                 );
@@ -342,9 +370,9 @@ export function ObstacleSensorSection() {
 
                   {/* Obstacle Distance Tag */}
                   <g transform={`translate(${originX + 10}, ${originY - obstacleRadiusPx - 4})`}>
-                    <rect x="0" y="-10" width="80" height="20" rx="4" fill="#0F172A" stroke={status === 'DANGER' ? '#EF4444' : '#F59E0B'} strokeWidth="1" />
+                    <rect x="0" y="-10" width="88" height="20" rx="4" fill="#0F172A" stroke={status === 'DANGER' ? '#EF4444' : '#F59E0B'} strokeWidth="1" />
                     <text x="6" y="4" fill="#FFFFFF" fontSize="9" fontWeight="bold" fontFamily="monospace">
-                      🚨 {distanceM.toFixed(2)}m
+                      🚨 {distanceCm > 0 && distanceCm <= 450 ? distanceCm.toFixed(1) : '> 400'} cm
                     </text>
                   </g>
                 </>
@@ -361,13 +389,13 @@ export function ObstacleSensorSection() {
           {/* Sonar Legend Footer */}
           <div className="flex items-center justify-between text-[9px] font-mono text-slate-400 pt-2 border-t border-slate-800/80">
             <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-1.5 rounded-xs bg-rose-500 inline-block" /> Danger Zone (&lt;{criticalThresholdM}m)
+              <span className="w-2.5 h-1.5 rounded-xs bg-rose-500 inline-block" /> Danger Zone (&lt;{Math.round(criticalThresholdM * 100)} cm)
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-1.5 rounded-xs bg-amber-500 inline-block" /> Warning Zone ({warningThresholdM}m)
+              <span className="w-2.5 h-1.5 rounded-xs bg-amber-500 inline-block" /> Warning Zone ({Math.round(warningThresholdM * 100)} cm)
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-1.5 rounded-xs bg-cyan-500 inline-block" /> Safe Clearance (&gt;{warningThresholdM}m)
+              <span className="w-2.5 h-1.5 rounded-xs bg-cyan-500 inline-block" /> Safe Clearance (&gt;{Math.round(warningThresholdM * 100)} cm)
             </span>
           </div>
         </div>
@@ -382,10 +410,10 @@ export function ObstacleSensorSection() {
                 Front Distance
               </span>
               <div className="font-editorial-serif font-black text-2xl text-[#162347] leading-none">
-                {distanceM.toFixed(2)} <span className="text-xs font-mono font-normal">m</span>
+                {distanceCm > 0 && distanceCm <= 450 ? distanceCm.toFixed(1) : '> 400'} <span className="text-xs font-mono font-normal">cm</span>
               </div>
               <span className="text-[10px] font-mono text-slate-500 mt-1 block">
-                {distanceCm} centimeters
+                {distanceM.toFixed(2)} meters
               </span>
             </div>
 
@@ -407,7 +435,7 @@ export function ObstacleSensorSection() {
                 )}
               </div>
               <span className="text-[10px] font-mono text-slate-500 mt-1 block">
-                Within {warningThresholdM}m Cone
+                Within {Math.round(warningThresholdM * 100)} cm Cone
               </span>
             </div>
 
@@ -433,7 +461,7 @@ export function ObstacleSensorSection() {
                 {status === 'DANGER' && autoBrakeArmed ? 'AUTO-HALT ENGAGED' : autoBrakeArmed ? 'ARMED & READY' : 'BYPASS'}
               </div>
               <span className="text-[10px] font-mono text-slate-500 mt-1 block">
-                Threshold: &lt;{criticalThresholdM}m
+                Threshold: &lt;{Math.round(criticalThresholdM * 100)} cm
               </span>
             </div>
           </div>
@@ -478,7 +506,7 @@ export function ObstacleSensorSection() {
         <div className="flex items-center justify-between border-b border-[#E6DFD5] pb-2">
           <div className="flex items-center gap-1.5 font-mono text-xs font-bold uppercase tracking-wider text-[#162347]">
             <Sliders size={14} className="text-[#162347]" />
-            <span>Hardware Calibration &amp; Collision Thresholds</span>
+            <span>Hardware Calibration &amp; Collision Thresholds (cm)</span>
           </div>
 
           <div className="flex items-center gap-2 text-[10px] font-mono">
@@ -497,21 +525,21 @@ export function ObstacleSensorSection() {
             <div className="flex justify-between items-center text-[11px]">
               <span className="font-bold text-amber-800">Caution / Warning Threshold:</span>
               <strong className="text-amber-900 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
-                {warningThresholdM.toFixed(2)} m ({Math.round(warningThresholdM * 100)} cm)
+                {Math.round(warningThresholdM * 100)} cm ({warningThresholdM.toFixed(2)} m)
               </strong>
             </div>
             <input
               type="range"
-              min="0.50"
-              max="2.50"
-              step="0.05"
-              value={warningThresholdM}
-              onChange={(e) => setWarningThresholdM(parseFloat(e.target.value))}
+              min="50"
+              max="250"
+              step="5"
+              value={Math.round(warningThresholdM * 100)}
+              onChange={(e) => setWarningThresholdM(parseInt(e.target.value) / 100)}
               className="w-full accent-amber-600 h-1.5 rounded cursor-pointer bg-[#E6DFD5]"
             />
             <div className="flex justify-between text-[9px] text-slate-400">
-              <span>0.50m (Close)</span>
-              <span>2.50m (Far)</span>
+              <span>50 cm (Close)</span>
+              <span>250 cm (Far)</span>
             </div>
           </div>
 
@@ -520,21 +548,21 @@ export function ObstacleSensorSection() {
             <div className="flex justify-between items-center text-[11px]">
               <span className="font-bold text-rose-800">Emergency Collision / Brake Threshold:</span>
               <strong className="text-rose-900 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">
-                {criticalThresholdM.toFixed(2)} m ({Math.round(criticalThresholdM * 100)} cm)
+                {Math.round(criticalThresholdM * 100)} cm ({criticalThresholdM.toFixed(2)} m)
               </strong>
             </div>
             <input
               type="range"
-              min="0.15"
-              max="1.00"
-              step="0.05"
-              value={criticalThresholdM}
-              onChange={(e) => setCriticalThresholdM(parseFloat(e.target.value))}
+              min="15"
+              max="100"
+              step="5"
+              value={Math.round(criticalThresholdM * 100)}
+              onChange={(e) => setCriticalThresholdM(parseInt(e.target.value) / 100)}
               className="w-full accent-rose-600 h-1.5 rounded cursor-pointer bg-[#E6DFD5]"
             />
             <div className="flex justify-between text-[9px] text-slate-400">
-              <span>0.15m (Critical Stop)</span>
-              <span>1.00m (Early Brake)</span>
+              <span>15 cm (Critical Stop)</span>
+              <span>100 cm (Early Brake)</span>
             </div>
           </div>
 

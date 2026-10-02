@@ -1672,11 +1672,72 @@ function PanelContent({
             {/* Camera Pan/Tilt Servo Control Header */}
             <div className="w-full text-center">
               <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#162347]/70 flex items-center justify-center gap-1.5">
-                <Compass size={12} className="text-[#162347]" /> Camera Pan & Tilt Arm
+                <Compass size={12} className="text-[#162347]" /> Camera Pan &amp; Tilt Arm
               </span>
               <span className="text-[9px] text-slate-500 font-sans block">
                 Aim water-level camera (GPIO 18 Pan • GPIO 19 Tilt)
               </span>
+            </div>
+
+            {/* Inline ESP32 IP Configuration Bar */}
+            <div className="w-full bg-[#FAF7F2] border border-[#E6DFD5] rounded-lg p-2 font-mono text-[10px] space-y-1.5 shadow-2xs">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-[#162347] flex items-center gap-1">
+                  <Wifi size={11} className={panTilt.connected ? "text-emerald-600" : "text-amber-600"} />
+                  ESP32 Controller IP:
+                </span>
+                <span className={`px-1.5 py-0.2 rounded font-bold text-[9px] ${
+                  panTilt.connected
+                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                    : 'bg-rose-100 text-rose-800 border border-rose-300'
+                }`}>
+                  {panTilt.connected ? 'ONLINE' : 'OFFLINE'}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="text"
+                  defaultValue={panTilt.esp32Url.replace(/^https?:\/\//, '')}
+                  key={panTilt.esp32Url}
+                  placeholder="e.g. 10.185.112.76"
+                  className="flex-1 bg-white border border-[#E6DFD5] rounded px-2 py-1 text-[10px] text-[#162347] focus:outline-none focus:ring-1 focus:ring-[#162347]"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      const val = (e.target as HTMLInputElement).value.trim();
+                      if (val) {
+                        panTilt.setEsp32Url(val);
+                        panTilt.fetchStatus();
+                      }
+                    }
+                  }}
+                  id="esp32-arm-ip-input"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const el = document.getElementById('esp32-arm-ip-input') as HTMLInputElement | null;
+                    if (el && el.value.trim()) {
+                      panTilt.setEsp32Url(el.value.trim());
+                      panTilt.fetchStatus();
+                    }
+                  }}
+                  className="px-2 py-1 rounded bg-[#162347] hover:bg-[#243452] text-white font-bold text-[9px] cursor-pointer transition-colors active:scale-95"
+                  title="Apply new IP and recheck ESP32 status"
+                >
+                  SET IP
+                </button>
+                <button
+                  type="button"
+                  onClick={() => panTilt.fetchStatus()}
+                  className="px-2 py-1 rounded bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-[9px] cursor-pointer transition-colors active:scale-95"
+                  title="Ping ESP32 now"
+                >
+                  PING
+                </button>
+              </div>
+              <div className="text-[8.5px] text-slate-500 font-sans">
+                Check phone hotspot connected devices or Arduino serial monitor for the ESP32 IP.
+              </div>
             </div>
 
             {/* D-Pad for Camera Servos */}

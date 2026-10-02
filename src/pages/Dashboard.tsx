@@ -83,7 +83,7 @@ function MapZoomButtons() {
 }
 
 // ─── Map Tile Providers ───────────────────────────────────────────────────────
-export type MapTileType = 'carto' | 'google-hybrid' | 'google-sat' | 'google-streets' | 'osm';
+export type MapTileType = 'google-hybrid' | 'esri-dark' | 'google-streets' | 'google-sat' | 'osm' | 'carto';
 
 interface MapTileConfig {
   name: string;
@@ -94,35 +94,44 @@ interface MapTileConfig {
 }
 
 const MAP_TILE_CONFIGS: Record<MapTileType, MapTileConfig> = {
-  'carto': {
-    name: 'Tactical Dark',
-    badge: 'CARTO DARK',
-    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    subdomains: ['a', 'b', 'c', 'd'],
-    maxZoom: 19,
-  },
   'google-hybrid': {
     name: 'Google Satellite Hybrid',
-    badge: 'HYBRID',
-    url: 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
+    badge: 'GOOGLE HYBRID',
+    url: 'https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
+    subdomains: ['0', '1', '2', '3'],
+    maxZoom: 20,
+  },
+  'esri-dark': {
+    name: 'Tactical Dark (Esri)',
+    badge: 'TACTICAL DARK',
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+    maxZoom: 16,
+  },
+  'google-streets': {
+    name: 'Google Streets',
+    badge: 'GOOGLE STREETS',
+    url: 'https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
+    subdomains: ['0', '1', '2', '3'],
     maxZoom: 20,
   },
   'google-sat': {
     name: 'Google Satellite',
-    badge: 'SATELLITE',
-    url: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
-    maxZoom: 20,
-  },
-  'google-streets': {
-    name: 'Google Streets',
-    badge: 'STREETS',
-    url: 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
+    badge: 'GOOGLE SATELLITE',
+    url: 'https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+    subdomains: ['0', '1', '2', '3'],
     maxZoom: 20,
   },
   'osm': {
     name: 'OpenStreetMap',
-    badge: 'OSM',
+    badge: 'OPENSTREETMAP',
     url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    maxZoom: 19,
+  },
+  'carto': {
+    name: 'Carto Dark',
+    badge: 'CARTO DARK',
+    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    subdomains: ['a', 'b', 'c', 'd'],
     maxZoom: 19,
   },
 };
@@ -152,7 +161,7 @@ export default function Dashboard() {
   const obstacleSensor = useObstacleSensor();
 
   // Map Tile Selector
-  const [mapTileSource, setMapTileSource] = useState<MapTileType>('carto');
+  const [mapTileSource, setMapTileSource] = useState<MapTileType>('google-hybrid');
   const [showMapMenu, setShowMapMenu] = useState<boolean>(false);
 
   // Sensor subviews: 'bar' (linear meter + sparkline), 'radar' (60° acoustic radar sector arc), 'thresholds' (auto-brake sliders)

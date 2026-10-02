@@ -5,6 +5,7 @@ export type PanelId =
   | 'sensors'
   | 'victims'
   | 'status'
+  | 'controls'
   | 'log';
 
 export type LayoutNode =

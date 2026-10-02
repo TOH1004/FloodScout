@@ -28,6 +28,8 @@ export default {
         editorial: ['Cinzel', 'Playfair Display', 'Cormorant Garamond', 'Georgia', 'serif'],
         cormorant: ['Cormorant Garamond', 'Georgia', 'serif'],
         mono: ['JetBrains Mono', 'monospace'],
+        comic: ['"Comic Sans MS"', '"Comic Neue"', 'cursive', 'sans-serif'],
+        story: ['"Comic Sans MS"', '"Comic Neue"', 'cursive', 'sans-serif'],
       }
     },
   },

@@ -101,7 +101,7 @@ export async function sendPanTiltCommand(command: string, customBaseUrl?: string
       return { success: true, message: text, command: endpoint, connected: true };
     }
   } catch (error: unknown) {
-    // Fallback: try Vite proxy /esp32-api to bypass browser CORS / mixed-content
+    // Fallback 1: try Vite proxy /esp32-api to bypass browser CORS / mixed-content
     try {
       const fbUrl = `/esp32-api/pan-tilt/${endpoint}`;
       const fbRes = await fetch(fbUrl, {
@@ -118,7 +118,29 @@ export async function sendPanTiltCommand(command: string, customBaseUrl?: string
         }
       }
     } catch {
-      // Fallback failed, proceed to normal error handling
+      // Fallback 1 failed, try Fallback 2 (Backend proxy)
+    }
+
+    // Fallback 2: try Backend proxy /api/pan-tilt/:command
+    try {
+      const backendUrl = `${getBackendBaseUrl()}/api/pan-tilt/${endpoint}`;
+      if (url !== backendUrl) {
+        const bRes = await fetch(backendUrl, {
+          method: 'GET',
+          headers: { Accept: 'application/json, text/plain, */*' },
+          signal: AbortSignal.timeout(2000),
+        });
+        if (bRes.ok) {
+          const bText = await bRes.text();
+          try {
+            return JSON.parse(bText);
+          } catch {
+            return { success: true, message: bText, command: endpoint, connected: true };
+          }
+        }
+      }
+    } catch {
+      // Fallback 2 failed, proceed to normal error handling
     }
 
     const err = error as Error;
@@ -189,6 +211,25 @@ export async function fetchPanTiltStatus(customBaseUrl?: string): Promise<PanTil
     } catch {
       // ignore
     }
+
+    // Try Backend proxy fallback
+    try {
+      const backendUrl = `${getBackendBaseUrl()}/api/pan-tilt/status`;
+      if (url !== backendUrl) {
+        const bRes = await fetch(backendUrl, {
+          method: 'GET',
+          headers: { Accept: 'application/json, text/plain, */*' },
+          signal: AbortSignal.timeout(2000),
+        });
+        if (bRes.ok) {
+          const bText = await bRes.text();
+          return JSON.parse(bText);
+        }
+      }
+    } catch {
+      // ignore
+    }
+
     throw err;
   }
 }

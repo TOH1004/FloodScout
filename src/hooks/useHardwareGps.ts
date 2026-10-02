@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { getBackendBaseUrl } from './useDetectionApi';
+import { getEsp32BaseUrl } from '../config/esp32';
 
 export interface HardwareGpsState {
   connected: boolean;
@@ -47,7 +48,7 @@ export function useHardwareGps(onGpsFix?: (coords: [number, number], telemetry: 
     let pollInterval: any = null;
 
     const backendBase = getBackendBaseUrl();
-    const esp32Base = (localStorage.getItem('floodscout_esp32_url') || 'http://10.185.112.106').replace(/\/+$/, '');
+    const esp32Base = getEsp32BaseUrl();
     const wsUrl = backendBase.replace(/^http/, 'ws') + '/ws/gps';
 
     // Fast polling fallback (checks ESP32 directly and backend proxy)

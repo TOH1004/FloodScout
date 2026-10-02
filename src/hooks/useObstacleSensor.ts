@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { getBackendBaseUrl } from './useDetectionApi';
+import { getEsp32BaseUrl } from '../config/esp32';
 
 export type ObstacleStatus = 'CLEAR' | 'CAUTION' | 'DANGER' | 'OFFLINE';
 
@@ -104,7 +105,7 @@ export function useObstacleSensor(): ObstacleSensorState {
   useEffect(() => {
     let isMounted = true;
     const backendBase = getBackendBaseUrl();
-    const esp32Base = (localStorage.getItem('floodscout_esp32_url') || 'http://10.185.112.106').replace(/\/+$/, '');
+    const esp32Base = getEsp32BaseUrl();
 
     const pollHardware = async () => {
       let gotReading = false;

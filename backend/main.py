@@ -228,12 +228,13 @@ def esp32_sensor_wifi_loop():
                 if data.get("success"):
                     dist_cm = data.get("distance_cm")
                     gps_data = data.get("gps", {})
+                    motor_data = data.get("motors", {})
 
                     if dist_cm is not None:
                         _on_hardware_distance(float(dist_cm))
 
-                    if state.gps_reader and gps_data:
-                        state.gps_reader.update_from_wifi(gps_data, dist_cm)
+                    if state.gps_reader:
+                        state.gps_reader.update_from_wifi(gps_data, dist_cm, motor_data)
         except Exception:
             pass
         time.sleep(0.8)
@@ -1056,6 +1057,23 @@ def proxy_esp32_sensors():
             },
             headers={"Access-Control-Allow-Origin": "*"}
         )
+
+@app.get("/api/motors")
+@app.get("/api/sensor/motors")
+def get_motor_telemetry():
+    """Retrieve real-time BLDC dual motor telemetry from ESP32 or serial bridge."""
+    if state.gps_reader:
+        return state.gps_reader.get_motor_status()
+    return {
+        "success": True,
+        "motors": {
+            "state": "STOP",
+            "direction": "STOP",
+            "rc_connected": False,
+            "left": {"us": 1500, "percent": 0, "dir": "STOP", "status": "STOP [1500us]"},
+            "right": {"us": 1500, "percent": 0, "dir": "STOP", "status": "STOP [1500us]"}
+        }
+    }
 
 @app.get("/api/sensor/obstacle")
 @app.get("/sensor/obstacle")

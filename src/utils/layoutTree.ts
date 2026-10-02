@@ -1,4 +1,4 @@
-export type PanelId = 'camera' | 'map' | 'navigation' | 'victims' | 'status' | 'controls' | 'log';
+export type PanelId = 'camera' | 'map' | 'navigation' | 'victims' | 'status' | 'controls' | 'log' | 'sensors';
 
 export type LayoutNode =
   | { type: 'panel'; id: PanelId }
@@ -125,4 +125,91 @@ export function hasPanel(node: LayoutNode | null, id: PanelId): boolean {
 export function getFirstPanelId(node: LayoutNode): PanelId {
   if (node.type === 'panel') return node.id;
   return getFirstPanelId(node.children[0]);
+}
+
+/** Collect all leaf panel IDs currently rendered in the tree */
+export function getLeafPanels(node: LayoutNode | null): PanelId[] {
+  if (!node) return [];
+  if (node.type === 'panel') return [node.id];
+  return node.children.flatMap(getLeafPanels);
+}
+
+/**
+ * Smart dock panel insertion:
+ * - 0 active: Single full-screen panel.
+ * - 1 active: Splits horizontally 50% / 50% (1/2 first section on left, 1/2 second section on right).
+ * - 2 active: First section stays 1/2 on left, right side splits vertically into 1/4 top (second) and 1/4 bottom (third).
+ * - 3 active: First section on left splits vertically as well, creating a balanced 2x2 grid (1/4 each).
+ * - 4+ active: Inserts at bottom-right or uses insertNode.
+ */
+export function addDockPanel(root: LayoutNode | null, newPanelId: PanelId): LayoutNode {
+  const newNode: LayoutNode = { type: 'panel', id: newPanelId };
+  if (!root) return newNode;
+
+  const leaves = getLeafPanels(root);
+
+  // Case 1: Only 1 section active -> split 50% / 50% horizontally (1/2 left, 1/2 right)
+  if (leaves.length === 1) {
+    return {
+      type: 'group',
+      id: generateGroupId(),
+      direction: 'horizontal',
+      children: [root, newNode],
+    };
+  }
+
+  // Case 2: 2 sections active -> 1/2 (First section on left), 1/4 (Second section) on right top, 1/4 (Third section) on right bottom
+  if (leaves.length === 2) {
+    if (root.type === 'group' && root.direction === 'horizontal' && root.children.length === 2) {
+      const firstChild = root.children[0];
+      const secondChild = root.children[1];
+      return {
+        type: 'group',
+        id: generateGroupId(),
+        direction: 'horizontal',
+        children: [
+          firstChild, // 1/2 of screen on left
+          {
+            type: 'group',
+            id: generateGroupId(),
+            direction: 'vertical',
+            children: [
+              secondChild, // 1/4 on right top
+              newNode,     // 1/4 on right bottom
+            ],
+          },
+        ],
+      };
+    }
+    // Fallback if not a simple horizontal group
+    return insertNode(root, leaves[1], newPanelId, 'bottom') || root;
+  }
+
+  // Case 3: 3 sections active -> split the left side vertically as well (2x2 grid, 1/4 each)
+  if (leaves.length === 3) {
+    if (root.type === 'group' && root.direction === 'horizontal' && root.children.length === 2) {
+      const leftChild = root.children[0];
+      const rightChild = root.children[1];
+      if (leftChild.type === 'panel') {
+        return {
+          type: 'group',
+          id: generateGroupId(),
+          direction: 'horizontal',
+          children: [
+            {
+              type: 'group',
+              id: generateGroupId(),
+              direction: 'vertical',
+              children: [leftChild, newNode],
+            },
+            rightChild,
+          ],
+        };
+      }
+    }
+  }
+
+  // Fallback for 4+ panels
+  const lastLeaf = leaves[leaves.length - 1];
+  return insertNode(root, lastLeaf, newPanelId, 'bottom') || root;
 }

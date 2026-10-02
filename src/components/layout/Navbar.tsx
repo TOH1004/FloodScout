@@ -31,7 +31,7 @@ export default function Navbar({ onOpenDeploy }: NavbarProps) {
             to="/" 
             className="inline-block hover:opacity-90 transition-opacity"
           >
-            <h1 className="font-script text-5xl sm:text-6xl md:text-7xl text-[#162347] leading-none tracking-normal font-normal">
+            <h1 className="font-script text-4xl sm:text-5xl md:text-6xl text-[#162347] leading-none tracking-tight font-bold">
               FloodScout
             </h1>
             <span className="block text-[10px] font-editorial-serif tracking-[0.35em] text-[#162347]/70 uppercase mt-1">
@@ -50,7 +50,7 @@ export default function Navbar({ onOpenDeploy }: NavbarProps) {
         </div>
       ) : (
         <div className="md:hidden py-4 px-4 flex justify-between items-center relative">
-          <Link to="/" className="font-script text-3xl text-[#162347]">FloodScout</Link>
+          <Link to="/" className="font-script text-2xl font-bold tracking-tight text-[#162347]">FloodScout</Link>
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             className="text-[#162347] p-2"

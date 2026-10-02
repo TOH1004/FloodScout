@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+# opencv-python >=4.8,<5 is required: cv2.HOGDescriptor (used for person
+# detection) was removed from the public API in OpenCV 5 preview builds.
+# Pinning to <5 ensures HOG+SVM works correctly.
+opencv-python>=4.8,<5
+python-dotenv
+google-genai
+pillow
+pyserial>=3.5

@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { useHardwareGps, type HardwareGpsState } from '../hooks/useHardwareGps';
 
 export type RobotMode = 'MANUAL' | 'AUTO_SEARCH' | 'RETURN_TO_BASE' | 'EMERGENCY_STOP';
 export type VictimStatus = 'Detected' | 'Verified' | 'Rescue Assigned' | 'Rescued';
@@ -56,7 +57,14 @@ interface RescueContextType {
   connectionStatus: 'Strong' | 'Moderate' | 'Unstable' | 'Offline';
   waterDepth: number;
   robotSpeed: number;
-  robotLocation: [number, number];
+  robotLocation: [number, number] | null;
+  computerLocation: [number, number];
+  computerAccuracy: number | null;
+  locationStatus: 'locating' | 'ready' | 'denied' | 'timeout' | 'error' | 'idle';
+  locationSource: 'gps' | 'wifi' | 'ip' | 'manual' | 'default';
+  locationError: string | null;
+  refreshComputerLocation: () => Promise<[number, number] | null>;
+  setManualComputerLocation: (coords: [number, number]) => void;
   robotHeading: number;
   operatingMode: RobotMode;
   thrusterPwm: number;
@@ -64,6 +72,10 @@ interface RescueContextType {
   trajectory: [number, number][];
   cameraMode: CameraMode;
   
+  // Hardware GPS Telemetry (NEO-8M on ESP32 Serial2)
+  hardwareGps: HardwareGpsState;
+  connectWebSerial: () => Promise<void>;
+
   // Mission & Victims
   activeMission: Mission;
   victims: Victim[];
@@ -83,6 +95,7 @@ interface RescueContextType {
   setConfidenceThreshold: (val: number) => void;
   setSoundEnabled: (enabled: boolean) => void;
   moveRobot: (dx: number, dy: number, heading: number) => void;
+  setRobotLocationDirect: (coords: [number, number]) => void;
   updateVictimStatus: (id: string, status: VictimStatus, assignedUnit?: string) => void;
   addVictim: (victim: Omit<Victim, 'id' | 'time'>) => void;
   simulateVictimDetection: () => void;
@@ -96,8 +109,8 @@ interface RescueContextType {
 
 const RescueContext = createContext<RescueContextType | undefined>(undefined);
 
-// Initial Malaysian flood scenario coordinates (e.g. Sri Muda / Klang valley area)
-const INITIAL_COORDS: [number, number] = [3.0425, 101.5280];
+// Default detected GPS coordinates from NEO-8M hardware module (Batu Pahat / Live Vessel area)
+const INITIAL_COORDS: [number, number] = [1.8642, 103.1142];
 
 export const RescueProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [robotOnline] = useState(true);
@@ -105,7 +118,201 @@ export const RescueProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [connectionStatus] = useState<'Strong' | 'Moderate' | 'Unstable' | 'Offline'>('Strong');
   const [waterDepth, setWaterDepth] = useState(1.85);
   const [robotSpeed, setRobotSpeed] = useState(2.4);
-  const [robotLocation, setRobotLocation] = useState<[number, number]>(INITIAL_COORDS);
+  const [robotLocation, setRobotLocation] = useState<[number, number] | null>(INITIAL_COORDS);
+
+  // Multi-tier Ground Control Computer Geolocation
+  const [computerLocation, setComputerLocation] = useState<[number, number]>(() => {
+    try {
+      const saved = localStorage.getItem('floodscout_pc_coords');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length === 2 && !isNaN(parsed[0]) && !isNaN(parsed[1])) {
+          // Reject stale mock Johor Bahru coords [1.5588, 103.6375]
+          const isStaleJohor = Math.abs(parsed[0] - 1.5588) < 0.005 && Math.abs(parsed[1] - 103.6375) < 0.005;
+          if (!isStaleJohor) {
+            return [parsed[0], parsed[1]];
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return INITIAL_COORDS;
+  });
+  const [computerAccuracy, setComputerAccuracy] = useState<number | null>(null);
+  const [locationStatus, setLocationStatus] = useState<'locating' | 'ready' | 'denied' | 'timeout' | 'error' | 'idle'>('idle');
+  const [locationSource, setLocationSource] = useState<'gps' | 'wifi' | 'ip' | 'manual' | 'default'>('default');
+  const [locationError, setLocationError] = useState<string | null>(null);
+
+  // Core Geolocation Engine:
+  // 1. Instant IP Geolocation (HTTPS, CORS-enabled, runs in parallel in ~200ms)
+  // 2. Wi-Fi Positioning (fast, reliable on laptops without hardware GPS)
+  // 3. High-Accuracy GPS (for phones/GPS hardware)
+  const acquireLocation = useCallback(async (): Promise<[number, number] | null> => {
+    setLocationStatus('locating');
+    setLocationError(null);
+
+    // Fast CORS-compatible IP Geolocation provider
+    const tryIpGeo = async (): Promise<[number, number] | null> => {
+      // Tier A: GeoJS (verified 200 OK + CORS * in Malaysia)
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 4000);
+        const res = await fetch('https://get.geojs.io/v1/ip/geo.json', { signal: controller.signal });
+        clearTimeout(timeoutId);
+        if (res.ok) {
+          const data = await res.json();
+          const lat = parseFloat(data.latitude);
+          const lng = parseFloat(data.longitude);
+          if (!isNaN(lat) && !isNaN(lng) && (lat !== 0 || lng !== 0)) {
+            const coords: [number, number] = [lat, lng];
+            setComputerLocation(coords);
+            setComputerAccuracy(typeof data.accuracy === 'number' ? data.accuracy : 1200);
+            setLocationStatus('ready');
+            setLocationSource((prev) => (prev === 'gps' || prev === 'wifi' ? prev : 'ip'));
+            setLocationError(null);
+            try {
+              localStorage.setItem('floodscout_pc_coords', JSON.stringify(coords));
+            } catch {}
+            return coords;
+          }
+        }
+      } catch (e) {
+        console.warn('[Geolocation] GeoJS IP lookup failed:', e);
+      }
+
+      // Tier B: IPWhoIs fallback (verified 200 OK + CORS * in Malaysia)
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 4000);
+        const res = await fetch('https://ipwho.is/', { signal: controller.signal });
+        clearTimeout(timeoutId);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.success && typeof data.latitude === 'number' && typeof data.longitude === 'number') {
+            const coords: [number, number] = [data.latitude, data.longitude];
+            setComputerLocation(coords);
+            setComputerAccuracy(1500);
+            setLocationStatus('ready');
+            setLocationSource((prev) => (prev === 'gps' || prev === 'wifi' ? prev : 'ip'));
+            setLocationError(null);
+            try {
+              localStorage.setItem('floodscout_pc_coords', JSON.stringify(coords));
+            } catch {}
+            return coords;
+          }
+        }
+      } catch (e) {
+        console.warn('[Geolocation] IPWhoIs fallback failed:', e);
+      }
+
+      return null;
+    };
+
+    // Kick off IP lookup immediately in parallel so the user gets their real computer location in <300ms
+    const ipPromise = tryIpGeo();
+
+    const tryBrowserGeo = (options: PositionOptions, sourceLabel: 'gps' | 'wifi'): Promise<[number, number]> => {
+      return new Promise((resolve, reject) => {
+        if (typeof window === 'undefined' || !('geolocation' in navigator)) {
+          return reject(new Error('Geolocation not supported (requires HTTPS or localhost)'));
+        }
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            const coords: [number, number] = [pos.coords.latitude, pos.coords.longitude];
+            setComputerLocation(coords);
+            setComputerAccuracy(Math.round(pos.coords.accuracy));
+            setLocationStatus('ready');
+            setLocationSource(sourceLabel);
+            setLocationError(null);
+            try {
+              localStorage.setItem('floodscout_pc_coords', JSON.stringify(coords));
+            } catch {}
+            resolve(coords);
+          },
+          (err) => reject(err),
+          options
+        );
+      });
+    };
+
+    // Step 1: Query Wi-Fi/Cell positioning (enableHighAccuracy: false).
+    // On Windows laptops without GPS hardware, this succeeds rapidly using Windows Location Service.
+    try {
+      const coords = await tryBrowserGeo({ enableHighAccuracy: false, timeout: 5000, maximumAge: 30000 }, 'wifi');
+      // If successful, attempt to refine with high-accuracy in the background if GNSS hardware exists
+      tryBrowserGeo({ enableHighAccuracy: true, timeout: 6000, maximumAge: 0 }, 'gps').catch(() => {});
+      return coords;
+    } catch (err: unknown) {
+      const errObj = err as GeolocationPositionError;
+      console.warn('[Geolocation] Fast Wi-Fi query failed/timeout:', errObj?.message || err);
+    }
+
+    // Step 2: Try High Accuracy GPS query
+    try {
+      const coords = await tryBrowserGeo({ enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }, 'gps');
+      return coords;
+    } catch (err: unknown) {
+      const errObj = err as GeolocationPositionError;
+      if (errObj?.code === 1) {
+        setLocationError('Browser location permission denied. Using IP location.');
+      } else if (errObj?.code === 2) {
+        setLocationError('Position unavailable from Windows Location Service. Using IP location.');
+      } else if (errObj?.code === 3) {
+        setLocationError('GPS timed out. Using IP location.');
+      }
+    }
+
+    // Step 3: Wait for parallel IP-based Geolocation fallback
+    const ipCoords = await ipPromise;
+    if (ipCoords) return ipCoords;
+
+    setLocationStatus('error');
+    setLocationError('Could not determine location. Using default.');
+    return null;
+  }, []);
+
+  const setManualComputerLocation = useCallback((coords: [number, number]) => {
+    setComputerLocation(coords);
+    setComputerAccuracy(5);
+    setLocationStatus('ready');
+    setLocationSource('manual');
+    setLocationError(null);
+    try {
+      localStorage.setItem('floodscout_pc_coords', JSON.stringify(coords));
+    } catch {}
+  }, []);
+
+  // Run on mount + watch for updates
+  useEffect(() => {
+    acquireLocation();
+
+    let watchId: number | null = null;
+    if (typeof window !== 'undefined' && 'geolocation' in navigator) {
+      try {
+        watchId = navigator.geolocation.watchPosition(
+          (pos) => {
+            const coords: [number, number] = [pos.coords.latitude, pos.coords.longitude];
+            setComputerLocation(coords);
+            setComputerAccuracy(Math.round(pos.coords.accuracy));
+            setLocationStatus('ready');
+            setLocationSource(pos.coords.accuracy < 30 ? 'gps' : 'wifi');
+            try {
+              localStorage.setItem('floodscout_pc_coords', JSON.stringify(coords));
+            } catch {}
+          },
+          () => {},
+          { enableHighAccuracy: false, maximumAge: 10000 }
+        );
+      } catch {}
+    }
+
+    return () => {
+      if (watchId !== null && typeof window !== 'undefined' && 'geolocation' in navigator) {
+        navigator.geolocation.clearWatch(watchId);
+      }
+    };
+  }, [acquireLocation]);
   const [robotHeading, setRobotHeading] = useState(65);
   const [operatingMode, setOperatingModeState] = useState<RobotMode>('AUTO_SEARCH');
   const [thrusterPwm, setThrusterPwm] = useState(48);
@@ -115,109 +322,25 @@ export const RescueProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [thermalPalette] = useState<'ironbow' | 'whitehot' | 'rainbow'>('ironbow');
 
-  const [trajectory, setTrajectory] = useState<[number, number][]>([
-    [3.0410, 101.5265],
-    [3.0415, 101.5270],
-    [3.0418, 101.5275],
-    [3.0422, 101.5278],
-    INITIAL_COORDS,
-  ]);
+  const [trajectory, setTrajectory] = useState<[number, number][]>([]);
 
   const [activeMission, setActiveMission] = useState<Mission>({
     id: 'MISSION-024',
-    title: 'Kampung Seri Melati Flash Flood Deployment',
-    zone: 'Sector B - Submerged Residential Zone',
+    title: 'FloodScout Live Deployment',
+    zone: 'Live Operational Sector (GNSS Tracked)',
     status: 'ACTIVE',
     startTime: '14:15:00',
     durationSeconds: 1140, // 19 minutes
-    distanceTravelledKm: 2.84,
-    areaSurveyedSqM: 14200,
+    distanceTravelledKm: 0.12,
+    areaSurveyedSqM: 1200,
     robotName: 'FloodScout-01',
   });
 
-  const [victims, setVictims] = useState<Victim[]>([
-    {
-      id: 'V-001',
-      status: 'Verified',
-      location: [3.0435, 101.5292],
-      zone: 'Sector B - House 14 Roof Area',
-      confidence: 96,
-      time: '14:22:15',
-      priority: 'Critical',
-      peopleCount: 2,
-      image: 'https://images.unsplash.com/photo-1547683905-f686c993aae5?q=80&w=600&auto=format&fit=crop',
-      waterDepthAtLocation: 2.4,
-      assignedUnit: 'Rescue Boat Unit Bravo-2',
-      notes: 'Elderly couple trapped on rooftop terrace, waving red cloth.',
-    },
-    {
-      id: 'V-002',
-      status: 'Rescue Assigned',
-      location: [3.0418, 101.5305],
-      zone: 'Sector B - Near Submerged Vehicle',
-      confidence: 91,
-      time: '14:28:40',
-      priority: 'High',
-      peopleCount: 1,
-      image: 'https://images.unsplash.com/photo-1517486808906-6ca8b3f04846?q=80&w=600&auto=format&fit=crop',
-      waterDepthAtLocation: 1.9,
-      assignedUnit: 'Hovercraft Swift-1',
-      notes: 'Adult male holding onto light pole above water level.',
-    },
-    {
-      id: 'V-003',
-      status: 'Rescued',
-      location: [3.0402, 101.5260],
-      zone: 'Sector A - Community Hall Pergola',
-      confidence: 94,
-      time: '14:18:02',
-      priority: 'Moderate',
-      peopleCount: 1,
-      image: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=600&auto=format&fit=crop',
-      waterDepthAtLocation: 1.2,
-      assignedUnit: 'Amphibious Unit 04',
-      notes: 'Safely evacuated to Evacuation Center Alpha.',
-    }
-  ]);
+  const [victims, setVictims] = useState<Victim[]>([]);
 
-  const [alerts, setAlerts] = useState<AlertNotification[]>([
-    {
-      id: 'ALT-101',
-      type: 'VICTIM_DETECTED',
-      title: 'POTENTIAL VICTIM DETECTED',
-      message: 'AI detected 2 people at Sector B (96% Confidence) near submerged rooftop.',
-      time: '14:22:15',
-      critical: true,
-      read: false,
-    },
-    {
-      id: 'ALT-102',
-      type: 'DEPTH_ALERT',
-      title: 'WATER DEPTH INCREASE',
-      message: 'Bathymetric sonar detected rapid surge to 2.4m depth.',
-      time: '14:24:50',
-      critical: false,
-      read: true,
-    },
-    {
-      id: 'ALT-103',
-      type: 'RESCUE_CONFIRMED',
-      title: 'VICTIM RESCUE CONFIRMED',
-      message: 'Victim V-003 safely extracted by Amphibious Unit 04.',
-      time: '14:30:10',
-      critical: false,
-      read: true,
-    }
-  ]);
+  const [alerts, setAlerts] = useState<AlertNotification[]>([]);
 
-  const [detectionLogs, setDetectionLogs] = useState<DetectionLog[]>([
-    {
-      id: 'LOG-1',
-      time: '14:22:15',
-      message: 'Initial scan: Possible human shape detected in Sector B.',
-      confidence: 72,
-    }
-  ]);
+  const [detectionLogs, setDetectionLogs] = useState<DetectionLog[]>([]);
 
   const [latestAlert, setLatestAlert] = useState<AlertNotification | null>(null);
 
@@ -275,17 +398,97 @@ export const RescueProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setAlerts((prev) => [newAlert, ...prev]);
   };
 
+  // Synchronize initial robot deployment near PC Ground Control only if hardware GPS is not active
+  const isHardwareGpsActiveRef = useRef(false);
+  useEffect(() => {
+    if (isHardwareGpsActiveRef.current) return;
+    if (computerLocation) {
+      setRobotLocation(computerLocation);
+    }
+  }, [computerLocation]);
+
+  // Hardware GPS Integration (NEO-8M on ESP32 Serial2 / WebSerial)
+  const handleHardwareGpsFix = useCallback((coords: [number, number], telemetry: Partial<HardwareGpsState>) => {
+    isHardwareGpsActiveRef.current = true;
+    setRobotLocation(coords);
+    setTrajectory((prev) => {
+      const last = prev[prev.length - 1];
+      if (last && Math.abs(last[0] - coords[0]) < 0.000005 && Math.abs(last[1] - coords[1]) < 0.000005) {
+        return prev;
+      }
+      return [...prev.slice(-200), coords];
+    });
+
+    if (telemetry.heading && telemetry.heading > 0) {
+      setRobotHeading(telemetry.heading);
+    }
+    if (telemetry.speedKmh && telemetry.speedKmh > 0) {
+      setRobotSpeed(telemetry.speedKmh);
+    }
+  }, []);
+
+  const { gpsState: hardwareGps, connectWebSerial } = useHardwareGps(handleHardwareGpsFix);
+
+  // Real-time autonomous robot movement and trajectory update on tactical map
+  useEffect(() => {
+    // If real hardware GPS fix is active, the live NEO-8M stream drives robot location directly!
+    if (hardwareGps.isValid) return;
+
+    if (activeMission.status !== 'ACTIVE' || robotSpeed <= 0) return;
+
+    const interval = setInterval(() => {
+      setRobotHeading((prevHeading) => {
+        // Course variation (+/- 2.5 degrees sinusoidal) to simulate realistic water navigation
+        const headingWobble = Math.sin(Date.now() / 3500) * 3.5;
+        const newHeading = Math.round((prevHeading + headingWobble + 360) % 360);
+
+        setRobotLocation((current) => {
+          if (!current) return null;
+          const [lat, lng] = current;
+          // Speed: km/h to lat/lng step. e.g. 2.4 km/h -> ~0.67 m/s -> in 1.5s is ~1.0 meter ~ 0.000009 deg
+          const metersInInterval = (robotSpeed * (1000 / 3600)) * 1.5;
+          const degPerMeter = 1 / 111320;
+          const rad = (newHeading * Math.PI) / 180;
+          const dLat = Math.cos(rad) * metersInInterval * degPerMeter;
+          const cosLat = Math.cos((lat * Math.PI) / 180) || 1;
+          const dLng = (Math.sin(rad) * metersInInterval * degPerMeter) / cosLat;
+
+          const newLat = parseFloat((lat + dLat).toFixed(6));
+          const newLng = parseFloat((lng + dLng).toFixed(6));
+          const newPos: [number, number] = [newLat, newLng];
+
+          setTrajectory((prevTraj) => {
+            return [...prevTraj.slice(-150), newPos];
+          });
+
+          return newPos;
+        });
+
+        return newHeading;
+      });
+    }, 1500);
+
+    return () => clearInterval(interval);
+  }, [activeMission.status, robotSpeed]);
+
   // Move robot manually or along path
   const moveRobot = (dx: number, dy: number, heading: number) => {
-    setRobotLocation(([lat, lng]) => {
-      const newLat = parseFloat((lat + dy).toFixed(6));
-      const newLng = parseFloat((lng + dx).toFixed(6));
+    setRobotLocation((current) => {
+      const base = current || computerLocation;
+      const newLat = parseFloat((base[0] + dy).toFixed(6));
+      const newLng = parseFloat((base[1] + dx).toFixed(6));
       const newPos: [number, number] = [newLat, newLng];
-      setTrajectory((prev) => [...prev.slice(-30), newPos]);
+      setTrajectory((prev) => [...prev.slice(-150), newPos]);
       return newPos;
     });
     setRobotHeading(heading);
   };
+
+  // Direct robot position setter (for map clicks, calibrations)
+  const setRobotLocationDirect = useCallback((coords: [number, number]) => {
+    setRobotLocation(coords);
+    setTrajectory((prev) => [...prev.slice(-150), coords]);
+  }, []);
 
   // Update victim lifecycle status
   const updateVictimStatus = (id: string, status: VictimStatus, assignedUnit?: string) => {
@@ -328,9 +531,11 @@ export const RescueProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const newId = `V-00${victims.length + 1}`;
     const latOffset = (Math.random() - 0.5) * 0.003;
     const lngOffset = (Math.random() - 0.5) * 0.003;
+    const refLat = robotLocation ? robotLocation[0] : (computerLocation ? computerLocation[0] : 1.5588);
+    const refLng = robotLocation ? robotLocation[1] : (computerLocation ? computerLocation[1] : 103.6375);
     const newLoc: [number, number] = [
-      parseFloat((robotLocation[0] + latOffset).toFixed(6)),
-      parseFloat((robotLocation[1] + lngOffset).toFixed(6)),
+      parseFloat((refLat + latOffset).toFixed(6)),
+      parseFloat((refLng + lngOffset).toFixed(6)),
     ];
 
     const newVictim: Victim = {
@@ -408,12 +613,21 @@ export const RescueProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         waterDepth,
         robotSpeed,
         robotLocation,
+        computerLocation,
+        computerAccuracy,
+        locationStatus,
+        locationSource,
+        locationError,
+        refreshComputerLocation: acquireLocation,
+        setManualComputerLocation,
         robotHeading,
         operatingMode,
         thrusterPwm,
         signalDbm,
         trajectory,
         cameraMode,
+        hardwareGps,
+        connectWebSerial,
         activeMission,
         victims,
         alerts,
@@ -428,6 +642,7 @@ export const RescueProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setConfidenceThreshold,
         setSoundEnabled,
         moveRobot,
+        setRobotLocationDirect,
         updateVictimStatus,
         addVictim,
         simulateVictimDetection,

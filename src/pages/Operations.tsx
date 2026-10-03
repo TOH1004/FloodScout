@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import {
   Waves, Check, Plus, ChevronDown, CloudRain
 } from 'lucide-react';
@@ -125,7 +125,7 @@ export default function Operations() {
   const [activeTab, setActiveTab] = useState<'console' | 'operations'>('operations');
 
   // Real-time clock in MYT (Malaysian Time)
-  const [currentTimeMyt, setCurrentTimeMyt] = useState<string>('08:44 MYT');
+  const [currentTimeMyt, setCurrentTimeMyt] = useState<string>('08:44:38 MYT');
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
@@ -133,6 +133,7 @@ export default function Operations() {
         timeZone: 'Asia/Kuala_Lumpur',
         hour: '2-digit',
         minute: '2-digit',
+        second: '2-digit',
         hour12: false,
       };
       const formatted = new Intl.DateTimeFormat('en-GB', options).format(now);
@@ -422,57 +423,44 @@ export default function Operations() {
   return (
     <div className="min-h-screen bg-[#070b11] text-slate-100 flex flex-col font-sans select-none overflow-x-hidden">
       {/* ─── Top Command Header ──────────────────────────────────────────────── */}
-      <header className="h-14 px-4 bg-[#0a0f17] border-b border-[#151f2e] flex items-center justify-between shrink-0 z-40">
-        {/* Brand Left */}
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500 to-sky-700 flex items-center justify-center shadow-lg shadow-cyan-900/30">
-            <Waves className="w-5 h-5 text-slate-950" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-extrabold text-white tracking-wider text-sm">FLOODSCOUT COMMAND</span>
-            </div>
-            <p className="text-[11px] font-mono text-cyan-400">
-              Ayer Tawar flood response · Operation day 2
-            </p>
-          </div>
+      <header className="h-14 mx-2.5 mt-2.5 px-4 bg-[#0c1219] border border-[#172332] rounded-2xl flex items-center justify-between shrink-0 z-40 shadow-sm">
+        {/* Brand Left - Logo Only */}
+        <div className="flex items-center">
+          <Link to="/" className="flex items-center hover:opacity-85 transition-opacity" title="Return to Home">
+            <img
+              src="/logo-icon.png"
+              alt="FloodScout"
+              className="w-8 h-8 rounded-lg object-contain shadow-sm shrink-0"
+            />
+          </Link>
         </div>
 
         {/* Center Tab Switcher: [Robot console] | [Operations] */}
-        <div className="flex items-center bg-[#0e1623] p-1 rounded-lg border border-[#1b293d]">
+        <div className="flex items-center bg-[#101b27] p-1 rounded-xl border border-[#1b2b3c]">
           <button
             onClick={() => {
               setActiveTab('console');
               navigate('/dashboard');
             }}
-            className={`px-4 py-1.5 rounded text-xs font-bold transition-all cursor-pointer ${
-              activeTab === 'console'
-                ? 'bg-cyan-500 text-slate-950 shadow'
-                : 'text-slate-400 hover:text-white'
-            }`}
+            className="px-3.5 py-1 rounded-lg text-xs font-bold text-slate-300 hover:text-white cursor-pointer transition-colors"
           >
             Robot console
           </button>
           <button
             onClick={() => setActiveTab('operations')}
-            className={`px-4 py-1.5 rounded text-xs font-bold transition-all cursor-pointer ${
-              activeTab === 'operations'
-                ? 'bg-cyan-500 text-slate-950 shadow'
-                : 'text-slate-400 hover:text-white'
-            }`}
+            className="px-3.5 py-1 rounded-lg text-xs font-bold bg-cyan-500 text-slate-950 shadow-sm cursor-pointer"
           >
             Operations
           </button>
         </div>
 
-        {/* Right Info: Weather & Real-time Clock */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 px-3 py-1 rounded bg-[#0e1623] border border-[#1b293d] text-xs font-mono text-amber-300">
-            <CloudRain size={14} className="text-amber-400" />
-            <span>Heavy Rain 2 h · <span className="text-cyan-400 font-bold">+0.3 m</span></span>
+        {/* Right Info: Weather & Real-time Clock (with seconds) */}
+        <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-[#101b27] border border-[#1b2b3c] text-xs font-mono text-amber-400">
+            <CloudRain size={13} />
+            <span>Heavy Rain 2 h · +0.3 m</span>
           </div>
-
-          <div className="px-3 py-1 rounded bg-[#0e1623] border border-[#1b293d] text-xs font-mono font-bold text-slate-200">
+          <div className="px-3 py-1 rounded-xl bg-[#101b27] border border-[#1b2b3c] text-xs font-mono font-bold text-white tracking-wide">
             {currentTimeMyt}
           </div>
         </div>

@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import {
   ArrowUp, ArrowDown, ArrowLeft, ArrowRight,
   User, BatteryCharging, Waves, Radar, Maximize2, Minimize2,
-  ChevronDown, X, Columns, RotateCcw, GripVertical, GripHorizontal
+  ChevronDown, X, Columns, RotateCcw, GripVertical, GripHorizontal,
+  CloudRain, Navigation, Cpu, Radio, ShieldAlert
 } from 'lucide-react';
 import { useDetectionApi } from '../hooks/useDetectionApi';
 import { useObstacleSensor } from '../hooks/useObstacleSensor';
@@ -136,7 +137,7 @@ const AVAILABLE_DOCKS: DockConfig[] = [
   { id: 'camera', label: 'Live Reconnaissance (Camera Feed)' },
   { id: 'target', label: 'Target Information (Victim Detection)' },
   { id: 'sensor', label: 'Front Range Sonar (HC-SR04)' },
-  { id: 'panTilt', label: 'Camera Arm (Pan/Tilt Servos)' },
+  { id: 'panTilt', label: 'Hardware & Camera Arm (Servos, Telemetry, E-STOP)' },
   { id: 'map', label: 'Tactical Map' },
   { id: 'log', label: 'Victims & Detection Log' },
 ];
@@ -467,20 +468,16 @@ export default function Dashboard() {
     <div className="h-screen w-screen overflow-y-auto lg:overflow-hidden bg-[#0b1118] text-slate-100 flex flex-col p-2.5 gap-2.5 font-sans select-none">
 
       {/* ─── TOP HEADER BAR ─── */}
-      <header className="h-[52px] bg-[#0c1219] border border-[#172332] rounded-2xl px-3.5 flex items-center justify-between shrink-0 shadow-sm z-30">
-        {/* Left: Brand Identity */}
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-cyan-500/15 border border-cyan-400/40 flex items-center justify-center text-cyan-400 shadow-sm">
-            <Waves size={18} />
-          </div>
-          <div>
-            <h1 className="text-white font-extrabold text-sm tracking-wider uppercase leading-none">
-              FLOODSCOUT USV-01
-            </h1>
-            <p className="text-cyan-400/75 text-[10px] font-mono mt-0.5 leading-none">
-              Flood victim search · Ground control
-            </p>
-          </div>
+      <header className="h-14 bg-[#0c1219] border border-[#172332] rounded-2xl px-4 flex items-center justify-between shrink-0 shadow-sm z-30">
+        {/* Left: Brand Identity - Logo Only */}
+        <div className="flex items-center">
+          <Link to="/" className="flex items-center hover:opacity-85 transition-opacity" title="Return to Home">
+            <img
+              src="/logo-icon.png"
+              alt="FloodScout"
+              className="w-8 h-8 rounded-lg object-contain shadow-sm shrink-0"
+            />
+          </Link>
         </div>
 
         {/* Center: [Robot console] [Operations] & [Docks ▾] */}
@@ -625,45 +622,15 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Right: Telemetry, Time & E-STOP */}
+        {/* Right Info: Weather & Real-time Clock (with seconds) */}
         <div className="flex items-center gap-2.5">
-          <div className="flex items-center gap-1.5 text-xs font-mono">
-            {/* LINK */}
-            <div className="flex items-center gap-1 bg-[#101b27] border border-[#1b2b3c] px-2 py-1 rounded-lg">
-              <span className={`w-2 h-2 rounded-full ${robotOnline ? 'bg-emerald-400' : 'bg-emerald-400'} animate-pulse shadow-[0_0_6px_#34d399]`} />
-              <span className="text-emerald-400 font-bold">LINK 82%</span>
-            </div>
-
-            {/* GPS FIX */}
-            <div className="flex items-center gap-1 bg-[#101b27] border border-[#1b2b3c] px-2 py-1 rounded-lg">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_6px_#34d399]" />
-              <span className="text-emerald-400 font-bold">GPS FIX</span>
-            </div>
-
-            {/* BATTERY */}
-            <div className="flex items-center gap-1 bg-[#101b27] border border-[#1b2b3c] px-2 py-1 rounded-lg text-cyan-300">
-              <BatteryCharging size={13} className="text-cyan-400" />
-              <span className="font-bold">BAT {batteryLevel}%</span>
-            </div>
-
-            {/* MISSION TIMER */}
-            <div className="bg-[#101b27] border border-[#1b2b3c] px-2 py-1 rounded-lg text-slate-300 font-bold">
-              {formatElapsedTime(elapsedSeconds)}
-            </div>
-
-            {/* REAL-TIME CLOCK IN RIGHT CORNER */}
-            <div className="bg-[#101b27] border border-[#1b2b3c] px-2.5 py-1 rounded-lg text-slate-200 font-bold">
-              {currentTimeMyt}
-            </div>
+          <div className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-[#101b27] border border-[#1b2b3c] text-xs font-mono text-amber-400">
+            <CloudRain size={13} />
+            <span>Heavy Rain 2 h · +0.3 m</span>
           </div>
-
-          {/* E-STOP Button */}
-          <button
-            onClick={() => emergencyStop()}
-            className="bg-[#d32f2f] hover:bg-red-600 text-white font-black text-xs px-3.5 py-1.5 rounded-lg tracking-wider shadow-lg active:scale-95 transition-all cursor-pointer uppercase"
-          >
-            E-STOP
-          </button>
+          <div className="px-3 py-1 rounded-xl bg-[#101b27] border border-[#1b2b3c] text-xs font-mono font-bold text-white tracking-wide">
+            {currentTimeMyt}
+          </div>
         </div>
       </header>
 
@@ -1271,10 +1238,15 @@ export default function Dashboard() {
               className="bg-[#0e1722] border border-[#192738] rounded-2xl p-3 flex flex-col justify-between shadow-sm min-h-0 relative"
             >
               {/* Header */}
-              <div className="flex items-center justify-between pb-1 border-b border-[#1b2b3c]">
-                <span className="text-white font-extrabold text-sm tracking-wide">CAMERA ARM</span>
+              <div className="flex items-center justify-between pb-1.5 border-b border-[#1b2b3c]">
                 <div className="flex items-center gap-2">
-                  <span className="text-slate-400 font-mono text-xs">2x SG90 · GPIO 18 / 19</span>
+                  <span className="text-white font-extrabold text-sm tracking-wide">HARDWARE & CAMERA ARM</span>
+                  <span className="text-cyan-400 font-mono text-[10px] bg-cyan-950/70 border border-cyan-800/40 px-1.5 py-0.5 rounded">
+                    ESP32 · SG90 · GPS
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-400 font-mono text-xs hidden sm:inline">GPIO 18 / 19</span>
                   <div className="flex items-center gap-1 pl-1 border-l border-[#1b2b3c]">
                     <button
                       onClick={() => setMaximizedDock(maximizedDock === 'panTilt' ? null : 'panTilt')}
@@ -1291,6 +1263,67 @@ export default function Dashboard() {
                       <X size={13} />
                     </button>
                   </div>
+                </div>
+              </div>
+
+              {/* Hardware Telemetry Strip (Moved from Top Bar) */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 py-1.5 border-b border-[#162332] text-xs font-mono">
+                {/* Telemetry Link */}
+                <div className="flex items-center gap-1.5 bg-[#0b121a] border border-[#1b2b3c] px-2 py-1 rounded-lg">
+                  <span className={`w-2 h-2 rounded-full ${robotOnline ? 'bg-emerald-400 shadow-[0_0_6px_#34d399]' : 'bg-rose-500'} animate-pulse shrink-0`} />
+                  <div className="min-w-0">
+                    <div className="text-[9px] text-slate-500 uppercase leading-none font-semibold">Mesh RF</div>
+                    <div className="text-emerald-400 font-bold text-[11px] leading-tight truncate">LINK 82%</div>
+                  </div>
+                </div>
+
+                {/* GPS Satellite Lock */}
+                <div className="flex items-center gap-1.5 bg-[#0b121a] border border-[#1b2b3c] px-2 py-1 rounded-lg">
+                  <Navigation size={12} className="text-emerald-400 shrink-0" />
+                  <div className="min-w-0">
+                    <div className="text-[9px] text-slate-500 uppercase leading-none font-semibold">NEO-6M GPS</div>
+                    <div className="text-emerald-400 font-bold text-[11px] leading-tight truncate">GPS FIX (3D)</div>
+                  </div>
+                </div>
+
+                {/* Battery Level */}
+                <div className="flex items-center gap-1.5 bg-[#0b121a] border border-[#1b2b3c] px-2 py-1 rounded-lg">
+                  <BatteryCharging size={13} className="text-cyan-400 shrink-0" />
+                  <div className="min-w-0">
+                    <div className="text-[9px] text-slate-500 uppercase leading-none font-semibold">12.4V LiPo</div>
+                    <div className="text-cyan-300 font-bold text-[11px] leading-tight truncate">BAT {batteryLevel}%</div>
+                  </div>
+                </div>
+
+                {/* Mission Elapsed Time & E-STOP */}
+                <div className="flex items-center justify-between gap-1.5 bg-[#0b121a] border border-[#1b2b3c] px-2 py-1 rounded-lg">
+                  <div className="min-w-0">
+                    <div className="text-[9px] text-slate-500 uppercase leading-none font-semibold">MISSION</div>
+                    <div className="text-slate-200 font-bold text-[11px] leading-tight truncate">{formatElapsedTime(elapsedSeconds)}</div>
+                  </div>
+                  <button
+                    onClick={() => emergencyStop()}
+                    className="bg-[#d32f2f] hover:bg-red-600 text-white font-black text-[10px] px-2 py-1 rounded shadow-md active:scale-95 transition-all cursor-pointer uppercase shrink-0"
+                    title="Emergency Thruster Kill Switch"
+                  >
+                    E-STOP
+                  </button>
+                </div>
+              </div>
+
+              {/* Hardware System Diagnostics Badges */}
+              <div className="flex flex-wrap items-center gap-2 py-1 text-[10px] font-mono text-slate-400 border-b border-[#162332]/60">
+                <div className="flex items-center gap-1 bg-[#0b121a]/80 px-2 py-0.5 rounded border border-[#162433]">
+                  <Cpu size={10} className="text-cyan-400" />
+                  <span>MCU: <strong className="text-slate-200">ESP32-WROOM</strong></span>
+                </div>
+                <div className="flex items-center gap-1 bg-[#0b121a]/80 px-2 py-0.5 rounded border border-[#162433]">
+                  <Radio size={10} className="text-emerald-400" />
+                  <span>Servo: <strong className="text-cyan-400">GPIO 18 / 19 (PWM)</strong></span>
+                </div>
+                <div className="flex items-center gap-1 bg-[#0b121a]/80 px-2 py-0.5 rounded border border-[#162433]">
+                  <Waves size={10} className="text-cyan-400" />
+                  <span>Thruster ESC: <strong className="text-emerald-400">Armed</strong></span>
                 </div>
               </div>
 

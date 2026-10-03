@@ -14,9 +14,13 @@ import {
   Waves,
   Menu,
   X,
+  Cpu,
+  Activity,
+  Crosshair,
 } from 'lucide-react';
 
 import FloodScoutLogo from '../components/common/FloodScoutLogo';
+import ModelViewer3D from '../components/common/ModelViewer3D';
 
 
 const USVIllustration = () => (
@@ -78,37 +82,13 @@ const USVIllustration = () => (
   </svg>
 );
 
-const techSpecs = [
-  {
-    category: 'EDGE COMPUTER VISION & SENSING',
-    items: [
-      { name: 'YOLOv8 Edge AI Person Detection', desc: 'Custom trained model detects half-submerged human bodies, life vests, and waving gestures', spec: '96.4% Accuracy' },
-      { name: 'Dual Optical & FLIR Thermal Sensors', desc: 'High-definition 1080p 60fps RGB optical feed with zero-lux thermal night vision infrared', spec: '150m Range' },
-      { name: 'Bathymetric Ultrasonic Sonar', desc: 'Real-time underwater depth mapping to prevent rescue boats from grounding on submerged obstacles', spec: '0.3m – 30.0m' },
-    ]
-  },
-  {
-    category: 'HULL & PROPULSION ENGINEERING',
-    items: [
-      { name: 'Dual Encapsulated Brushless Thrusters', desc: 'High-torque weedless ducted thrusters providing 4.5 knots forward thrust in turbulent floodwaters', spec: '8.3 km/h Max' },
-      { name: 'Ultra-Shallow Draft Carbon Composite Hull', desc: 'IP68 fully sealed waterproof casing capable of navigating through 15cm shallow floodwaters', spec: '0.15m Draft' },
-      { name: 'Hot-Swappable LiFePO4 Power System', desc: '4S high-density battery pack providing 4.2 hours of continuous autonomous search and rescue', spec: '4.2 Hours' },
-    ]
-  },
-  {
-    category: 'TELEMETRY & MESH COMMUNICATIONS',
-    items: [
-      { name: '5.8 GHz COFDM Encrypted Video Link', desc: 'Ultra-low latency (18ms) encrypted digital video stream directly to operator laptop dashboard', spec: '3.5 km LOS' },
-      { name: 'LoRa 433 MHz Emergency Telemetry', desc: 'Long-range low-bandwidth backup telemetry for remote disaster zones with collapsed cellular networks', spec: '12 km Range' },
-      { name: 'Multi-Constellation GNSS Geotagging', desc: 'GPS + GLONASS + Galileo RTK positioning with centimeter-level victim coordinate tagging', spec: '±0.5m Precision' },
-    ]
-  }
-];
+
 
 export default function Home() {
   const [email, setEmail] = useState('');
   const [subscribed, setSubscribed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [heroPreviewTab, setHeroPreviewTab] = useState<'3d' | 'recon'>('3d');
 
   useEffect(() => {
     const handleScroll = () => {
@@ -144,21 +124,23 @@ export default function Home() {
   ];
 
   const parts = [
-    { label: 'Camera', value: 'XIAO ESP32-S3 Sense — 2MP OV2640, Wi-Fi, AI inference onboard' },
-    { label: 'Controller', value: 'NodeMCU ESP32 — dual-core, BLE + Wi-Fi, GPIO bus for servo & ESC' },
-    { label: 'Propulsion', value: 'Dual BLDC thrusters — bidirectional ESCs, ±20° yaw authority' },
-    { label: 'Navigation', value: 'GY-NEO8M GPS — 10 Hz fix, 2.5 m CEP, NMEA serial to ESP32' },
-    { label: 'Sonar', value: 'HC-SR04 ultrasonic — 2 cm–4 m, 10 Hz, front obstacle & proximity' },
-    { label: 'Gimbal', value: '2× SG90 servo — 180° pan, 90° tilt, PWM via GPIO 18 / 19' },
-    { label: 'Radio', value: 'HotRC CT-6A + F-06A — 2.4 GHz RC with 6-channel failsafe override' },
+    { label: 'Camera', value: 'Seeed Studio XIAO ESP32-S3 Sense — live RGB video streamed over Wi-Fi to the operator laptop' },
+    { label: 'Propulsion Controller', value: 'NodeMCU ESP32 #1 — receives HotRC steering and throttle input and controls both bidirectional ESCs' },
+    { label: 'Camera / Sensor Controller', value: 'NodeMCU ESP32 #2 — controls the pan/tilt servos and interfaces with the GPS and ultrasonic sensor' },
+    { label: 'Propulsion', value: 'Dual BLDC underwater thrusters — independent bidirectional 30 A ESC control for differential steering' },
+    { label: 'Navigation', value: 'GY-NEO8M GPS — provides the robot’s outdoor coordinates' },
+    { label: 'Distance Sensing', value: 'HC-SR04 ultrasonic sensor — front-facing short-range distance measurement' },
+    { label: 'Gimbal', value: '2 × SG90 servos — pan and tilt camera movement controlled by NodeMCU ESP32 #2' },
+    { label: 'Radio Control', value: 'HotRC CT-6A + F-06A — 2.4 GHz manual steering and throttle control' },
+    { label: 'AI Processing', value: 'Lightweight YOLO-family person detection runs on the operator laptop' },
   ];
 
   const navItems = [
     { label: 'Our Story', id: 'our-story' },
-    { label: 'Technology', id: 'technology' },
     { label: 'Mission', id: 'mission' },
+    { label: 'Technology', id: 'technology' },
     { label: 'Hardware', id: 'hardware' },
-    { label: 'Contact', id: 'contact' },
+    { label: 'Command Interface', id: 'command-interface' },
   ];
 
   return (
@@ -226,10 +208,7 @@ export default function Home() {
 
         {/* Left: Headline */}
         <div className="space-y-8">
-          <div className="inline-flex items-center gap-2 bg-[#22d3ee]/10 border border-[#22d3ee]/30 text-[#22d3ee] text-xs font-mono px-4 py-1.5 rounded-full">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#22d3ee] animate-pulse" />
-            FloodScout USV-01 · Ayer Tawar, Perak
-          </div>
+
 
           <h1 className="text-5xl sm:text-6xl lg:text-[68px] font-extrabold leading-[1.0] tracking-tight">
             Find people<br />
@@ -258,53 +237,64 @@ export default function Home() {
             </Link>
           </div>
 
-          {/* Stat pills */}
-          <div className="flex flex-wrap gap-3 pt-2">
-            {[
-              { label: 'Detection accuracy', value: '94%' },
-              { label: 'Range (HC-SR04)', value: '4 m' },
-              { label: 'Video latency', value: '<120 ms' },
-            ].map(s => (
-              <div key={s.label} className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-center">
-                <div className="text-[#22d3ee] font-extrabold text-lg font-mono">{s.value}</div>
-                <div className="text-slate-500 text-[11px] uppercase tracking-wide">{s.label}</div>
-              </div>
-            ))}
-          </div>
+
         </div>
 
-        {/* Right: USV preview card */}
+        {/* Right: USV preview card with 3D Vessel View & AI Recon */}
         <div className="relative">
           <div className="bg-[#0e1722] border border-[#1b2b3c] rounded-3xl p-6 shadow-2xl relative overflow-hidden">
-            {/* Header bar */}
+            {/* Header bar with toggle */}
             <div className="flex items-center justify-between mb-4 pb-3 border-b border-white/5">
               <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse shadow-[0_0_6px_#f43f5e]" />
-                <span className="text-xs font-bold text-slate-200 tracking-wide">LIVE RECONNAISSANCE · USV-01</span>
+                <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse shadow-[0_0_6px_#22d3ee]" />
+                <span className="text-xs font-bold text-slate-200 tracking-wide">USV-01 · 3D TWIN & RECON</span>
               </div>
-              <div className="flex items-center gap-3 text-[10px] font-mono">
-                <span className="text-emerald-400 flex items-center gap-1"><Wifi size={10}/> LINK</span>
-                <span className="text-cyan-400 flex items-center gap-1"><Battery size={10}/> 82%</span>
-                <span className="text-slate-400">GPS FIX</span>
+              <div className="flex items-center bg-[#09121c] p-0.5 rounded-lg border border-white/10 text-[10px] font-mono">
+                <button
+                  onClick={() => setHeroPreviewTab('3d')}
+                  className={`px-2.5 py-1 rounded transition-colors cursor-pointer ${
+                    heroPreviewTab === '3d'
+                      ? 'bg-[#22d3ee] text-slate-950 font-bold shadow'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  3D Model
+                </button>
+                <button
+                  onClick={() => setHeroPreviewTab('recon')}
+                  className={`px-2.5 py-1 rounded transition-colors cursor-pointer ${
+                    heroPreviewTab === 'recon'
+                      ? 'bg-[#22d3ee] text-slate-950 font-bold shadow'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  AI Vision
+                </button>
               </div>
             </div>
 
-            {/* USV illustration */}
-            <div className="relative h-48 rounded-2xl overflow-hidden bg-gradient-to-b from-[#0a1929] to-[#071220]">
-              <USVIllustration />
-              <div className="absolute top-3 right-3 bg-[#f97316] text-white text-[10px] font-bold px-2.5 py-1 rounded-lg shadow-lg animate-pulse">
-                PERSON DETECTED · 94%
+            {/* Preview content */}
+            {heroPreviewTab === '3d' ? (
+              <div className="h-64 rounded-2xl overflow-hidden">
+                <ModelViewer3D className="w-full h-full min-h-[256px]" autoRotateSpeed={1.5} showControls={true} />
               </div>
-              <div className="absolute bottom-3 left-3 bg-black/60 backdrop-blur-sm text-[10px] font-mono text-slate-300 px-2.5 py-1.5 rounded-lg border border-white/10">
-                4.2988°N · 100.7642°E · 2.45 m
+            ) : (
+              <div className="relative h-64 rounded-2xl overflow-hidden bg-gradient-to-b from-[#0a1929] to-[#071220]">
+                <USVIllustration />
+                <div className="absolute top-3 right-3 bg-[#f97316] text-white text-[10px] font-bold px-2.5 py-1 rounded-lg shadow-lg animate-pulse">
+                  PERSON DETECTED · 94%
+                </div>
+                <div className="absolute bottom-3 left-3 bg-black/60 backdrop-blur-sm text-[10px] font-mono text-slate-300 px-2.5 py-1.5 rounded-lg border border-white/10">
+                  4.2988°N · 100.7642°E · 2.45 m
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Status bar */}
             <div className="flex items-center justify-between mt-4 text-[11px] font-mono">
               <span className="text-emerald-400">● Robot online</span>
-              <span className="text-[#22d3ee]">OpenCV HOG+SVM · tracking</span>
-              <span className="text-slate-500">5.9 FPS</span>
+              <span className="text-[#22d3ee]">{heroPreviewTab === '3d' ? 'Interactive 3D GLTF' : 'OpenCV HOG+SVM · tracking'}</span>
+              <span className="text-slate-500">{heroPreviewTab === '3d' ? '60 FPS' : '5.9 FPS'}</span>
             </div>
           </div>
 
@@ -313,132 +303,199 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ── TICKER STATS BAR ─────────────────────────────────────────────── */}
-      <div className="border-y border-white/5 bg-white/[0.02] py-5 overflow-hidden">
-        <div className="flex items-center gap-16">
-          <div className="flex items-center gap-16 whitespace-nowrap px-8">
-            {[
-              { label: 'SECTORS COVERED', value: '12' },
-              { label: 'VICTIMS LOCATED', value: '7' },
-              { label: 'MISSION TIME', value: '00:06:57' },
-              { label: 'SONAR RANGE', value: '4.0 m' },
-              { label: 'AI CONFIDENCE', value: '94%' },
-              { label: 'RESCUE TEAMS', value: '5 + 1 USV' },
-              { label: 'WATER DEPTH', value: '1.6 m rising' },
-              { label: 'GPS FIX', value: '3D · 8 sats' },
-            ].map((s, i) => (
-              <div key={i} className="flex items-center gap-3">
-                <span className="text-slate-600 font-mono text-[10px] uppercase tracking-widest">{s.label}</span>
-                <span className="text-white font-extrabold font-mono text-sm">{s.value}</span>
-                {i < 7 && <span className="text-white/10 text-lg">·</span>}
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
 
-      {/* ── PROBLEM STATEMENT ────────────────────────────────────────────── */}
-      <section className="max-w-7xl mx-auto px-6 py-28">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
-          <div>
-            <span className="text-[11px] font-mono uppercase tracking-widest text-slate-500 border border-white/10 px-3.5 py-1.5 rounded-full inline-block mb-8">
-              Why it matters
-            </span>
-            <h2 className="text-4xl sm:text-5xl font-extrabold leading-tight tracking-tight">
-              When streets become rivers, every minute of{' '}
-              <span className="text-[#22d3ee]">searching counts.</span>
-            </h2>
-          </div>
-          <div className="space-y-6">
-            <p className="text-slate-400 text-lg leading-relaxed">
-              During the 2021 Batu Pahat flood, rescue teams spent hours wading through waist-deep water searching street by street. By the time victims were found, hypothermia had set in.
-            </p>
-            <p className="text-slate-400 text-base leading-relaxed">
-              FloodScout deploys in 90 seconds. It navigates to GPS waypoints autonomously, streams AI-enhanced video to operators on dry land, and transmits exact victim coordinates — cutting search time from hours to minutes.
-            </p>
-            <div className="grid grid-cols-2 gap-4 pt-4">
-              {[
-                { icon: '⏱', stat: '< 2 min', label: 'From launch to first contact' },
-                { icon: '📡', stat: '400 m', label: 'Max operational radius' },
-                { icon: '🤖', stat: '94%', label: 'Victim detection accuracy' },
-                { icon: '⚡', stat: '90 s', label: 'Deployment time' },
-              ].map(c => (
-                <div key={c.label} className="bg-white/[0.03] border border-white/10 rounded-2xl p-4">
-                  <div className="text-2xl mb-1">{c.icon}</div>
-                  <div className="text-[#22d3ee] font-extrabold text-xl font-mono">{c.stat}</div>
-                  <div className="text-slate-500 text-xs mt-0.5 leading-snug">{c.label}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
+
+
 
       {/* ── OUR STORY ─────────────────────────────────────────────────────── */}
       <section id="our-story" className="border-t border-white/5 py-24">
         <div className="max-w-7xl mx-auto px-6">
-          {/* Header */}
-          <div className="text-center mb-16">
-            <span className="text-[11px] font-mono uppercase tracking-widest text-slate-500 border border-white/10 px-3.5 py-1.5 rounded-full inline-block mb-5">
-              Heritage &amp; Life-Saving Vision
-            </span>
-            <h2 className="text-4xl sm:text-5xl font-extrabold tracking-tight">
-              Our Story
-            </h2>
-            <p className="text-slate-500 text-xs mt-3 tracking-[0.3em] uppercase font-mono">
-              Autonomous Robotics for Extreme Flood Disaster Response
-            </p>
-            <div className="w-16 h-px bg-white/10 mx-auto mt-4" />
-          </div>
-
-          {/* Narrative + images */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center mb-16">
-            {/* Left: text */}
-            <div className="space-y-5 text-slate-400 text-base leading-relaxed">
-              <p>
-                <span className="text-6xl font-extrabold text-white float-left mr-4 leading-[0.85]">B</span>
-                orn from the devastating monsoon flash floods across Southeast Asia, FloodScout was created by a dedicated team of robotics engineers and disaster response pioneers. We witnessed firsthand how conventional aerial drones are blinded by corrugated roofs, awnings, and tree canopies, while human responders are put in grave danger by swift currents and submerged hazards.
-              </p>
-              <p className="clear-left">
-                FloodScout redefines flood search-and-rescue by shifting the perspective directly to the water level. Operating at water level, our autonomous IP68 composite amphibious hull navigates inundated streets, scans submerged porches, and peers directly under eaves.
-              </p>
-              <p>
-                Equipped with custom edge AI YOLOv8 computer vision, bathymetric sonar depth mapping, and mesh RF telemetry, FloodScout automatically flags trapped human silhouettes, logs GPS coordinates, and alerts frontline rescue boats in sub-second time.
-              </p>
-              <button
-                onClick={() => scrollTo('technology')}
-                className="inline-flex items-center gap-2 mt-2 bg-[#22d3ee]/10 hover:bg-[#22d3ee]/20 border border-[#22d3ee]/30 text-[#22d3ee] font-semibold px-6 py-3 rounded-full text-sm transition-all"
-              >
-                Discover Our Technology <ArrowRight size={14} />
-              </button>
-            </div>
-
-            {/* Right: dual images */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="aspect-[3/4] overflow-hidden rounded-2xl border border-white/10 shadow-xl">
-                <img
-                  src="https://images.unsplash.com/photo-1547683905-f686c993aae5?q=80&w=600&auto=format&fit=crop"
-                  alt="Flood Rescue Operations"
-                  className="w-full h-full object-cover hover:scale-105 transition-transform duration-700"
-                />
+          {/* Top row: Story text + Cross-Section Flooded Street Card */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-start mb-16">
+            {/* Left: Headline & story */}
+            <div className="lg:col-span-6 space-y-6">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="w-5 h-0.5 bg-[#22d3ee] inline-block" />
+                <span className="text-[11px] font-mono uppercase tracking-[0.25em] text-[#22d3ee] font-bold">
+                  OUR STORY
+                </span>
               </div>
-              <div className="aspect-[3/4] overflow-hidden rounded-2xl border border-white/10 shadow-xl mt-8">
-                <img
-                  src="https://images.unsplash.com/photo-1581092160607-ee22621dd758?q=80&w=600&auto=format&fit=crop"
-                  alt="Engineering Team"
-                  className="w-full h-full object-cover hover:scale-105 transition-transform duration-700"
-                />
+
+              <h2 className="text-4xl sm:text-5xl lg:text-[54px] font-extrabold tracking-tight leading-[1.08] text-white">
+                Rescue starts at<br />
+                <span className="text-[#22d3ee]">water level.</span>
+              </h2>
+
+              <div className="space-y-5 text-slate-400 text-sm sm:text-base leading-relaxed pt-2">
+                <p>
+                  FloodScout was born from the monsoon flash floods across Southeast Asia. We saw drones fly over flooded neighbourhoods and miss the people sheltering beneath roofs, awnings and trees — while rescuers waded into fast currents to search by hand.
+                </p>
+                <p>
+                  So we moved the camera down to where people actually are.
+                </p>
               </div>
             </div>
+
+            {/* Right: Cross-Section Flooded Street Card */}
+            <div className="lg:col-span-6 bg-[#0b1622] border border-[#1b2b3c] rounded-2xl p-5 sm:p-6 shadow-2xl">
+              {/* Card Header & Legend */}
+              <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-white/5 text-[10px] font-mono tracking-wider">
+                <span className="text-slate-400 uppercase font-semibold">CROSS-SECTION · FLOODED STREET</span>
+                <div className="flex items-center gap-4">
+                  <span className="flex items-center gap-1.5 text-red-400 font-semibold">
+                    <span className="w-3 h-0.5 bg-red-400 inline-block" />
+                    Aerial view
+                  </span>
+                  <span className="flex items-center gap-1.5 text-[#22d3ee] font-semibold">
+                    <span className="w-3 h-0.5 bg-[#22d3ee] inline-block" />
+                    Water-level view
+                  </span>
+                </div>
+              </div>
+
+              {/* Graphic Diagram */}
+              <div className="my-4 overflow-hidden rounded-xl bg-[#07111c] border border-white/5">
+                <svg viewBox="0 0 640 330" className="w-full h-auto block" fill="none">
+                  {/* Sky background */}
+                  <rect width="640" height="330" fill="#07111c" />
+
+                  {/* Tree on left */}
+                  <rect x="88" y="160" width="16" height="75" fill="#1b2a38" rx="2" />
+                  <circle cx="96" cy="140" r="48" fill="#0f291e" />
+                  <circle cx="96" cy="140" r="40" fill="#16382b" />
+                  <circle cx="90" cy="132" r="26" fill="#1e4d3a" />
+
+                  {/* House wall & structure */}
+                  <rect x="290" y="110" width="250" height="125" fill="#152230" stroke="#1e3247" strokeWidth="1.5" />
+                  {/* Window */}
+                  <rect x="360" y="135" width="46" height="50" rx="3" fill="#0e1823" stroke="#263d55" strokeWidth="1.5" />
+                  <line x1="383" y1="135" x2="383" y2="185" stroke="#263d55" strokeWidth="1" />
+                  <line x1="360" y1="160" x2="406" y2="160" stroke="#263d55" strokeWidth="1" />
+
+                  {/* Pitched Roof */}
+                  <polygon points="270,110 415,38 560,110" fill="#1d2e3f" stroke="#2a425a" strokeWidth="2" />
+
+                  {/* Porch overhang extending over the water */}
+                  <polygon points="180,140 290,110 290,125 180,148" fill="#192837" stroke="#263d55" strokeWidth="1" />
+                  <rect x="186" y="148" width="6" height="87" fill="#1f3347" />
+
+                  {/* Person Sheltering under the porch */}
+                  <rect x="215" y="152" width="38" height="66" rx="4" fill="#facc15" fillOpacity="0.08" stroke="#facc15" strokeWidth="1.5" />
+                  {/* Label above person */}
+                  <rect x="198" y="132" width="72" height="15" rx="3" fill="#162533" stroke="#eab308" strokeWidth="0.8" />
+                  <text x="234" y="143" fill="#facc15" fontSize="8" fontFamily="monospace" fontWeight="bold" textAnchor="middle">Person sheltering</text>
+                  {/* Person silhouette */}
+                  <circle cx="234" cy="164" r="5" fill="#facc15" />
+                  <path d="M226 182 C226 172 242 172 242 182 L242 208 L226 208 Z" fill="#facc15" />
+
+                  {/* Drone up in sky */}
+                  <g transform="translate(420, 28)">
+                    <rect x="-14" y="8" width="28" height="8" rx="2" fill="#94a3b8" />
+                    <line x1="-30" y1="12" x2="30" y2="12" stroke="#64748b" strokeWidth="2" />
+                    <circle cx="0" cy="12" r="3" fill="#38bdf8" />
+                    <ellipse cx="-30" cy="8" rx="10" ry="2" fill="#cbd5e1" opacity="0.7" />
+                    <ellipse cx="30" cy="8" rx="10" ry="2" fill="#cbd5e1" opacity="0.7" />
+                    <text x="38" y="15" fill="#f87171" fontSize="9" fontFamily="monospace" fontWeight="bold">Drone: view blocked</text>
+                  </g>
+
+                  {/* Drone aerial cone (blocked by roof) */}
+                  <polygon points="420,44 330,110 510,110" fill="#ef4444" fillOpacity="0.06" />
+                  <line x1="420" y1="44" x2="330" y2="110" stroke="#f87171" strokeWidth="1.2" strokeDasharray="3 3" />
+                  <line x1="420" y1="44" x2="510" y2="110" stroke="#f87171" strokeWidth="1.2" strokeDasharray="3 3" />
+                  <line x1="330" y1="110" x2="245" y2="170" stroke="#ef4444" strokeWidth="1.2" strokeDasharray="3 3" opacity="0.4" />
+                  <text x="355" y="128" fill="#ef4444" fontSize="16" fontWeight="bold" fontFamily="sans-serif">✕</text>
+
+                  {/* Floodwater Body */}
+                  <path d="M0 235 Q160 231 320 235 T640 235 L640 330 L0 330 Z" fill="#082032" fillOpacity="0.9" />
+                  <path d="M0 235 Q160 231 320 235 T640 235" stroke="#0ea5e9" strokeWidth="2" fill="none" opacity="0.6" />
+                  <path d="M0 240 Q140 237 280 240 T640 240" stroke="#22d3ee" strokeWidth="1" fill="none" opacity="0.3" strokeDasharray="6 4" />
+
+                  {/* FloodScout Camera at water level */}
+                  <g transform="translate(65, 233)">
+                    <rect x="-24" y="-4" width="48" height="12" rx="4" fill="#0c4a6e" stroke="#0284c7" strokeWidth="1" />
+                    <circle cx="0" cy="0" r="7" fill="#06121e" stroke="#22d3ee" strokeWidth="2.5" />
+                    <circle cx="0" cy="0" r="3" fill="#22d3ee" />
+
+                    <text x="0" y="32" fill="#22d3ee" fontSize="11" fontFamily="monospace" fontWeight="bold">FloodScout camera</text>
+                    <text x="0" y="47" fill="#94a3b8" fontSize="8.5" fontFamily="monospace">sees under eaves, porches &amp; canopy</text>
+                  </g>
+
+                  {/* Camera sightline shooting under porch directly to person */}
+                  <polygon points="72,233 215,158 215,208" fill="#22d3ee" fillOpacity="0.08" />
+                  <line x1="72" y1="233" x2="215" y2="183" stroke="#22d3ee" strokeWidth="2" />
+                  <line x1="72" y1="233" x2="215" y2="158" stroke="#22d3ee" strokeWidth="1" strokeDasharray="4 3" opacity="0.6" />
+                  <line x1="72" y1="233" x2="215" y2="208" stroke="#22d3ee" strokeWidth="1" strokeDasharray="4 3" opacity="0.6" />
+                </svg>
+              </div>
+
+              {/* Caption */}
+              <p className="text-slate-400 text-xs sm:text-sm leading-relaxed mt-4">
+                Drones see rooftops. People shelter under them. A camera at water level sees what aerial search misses.
+              </p>
+            </div>
           </div>
 
-          {/* 6-step banner */}
-          <div className="bg-[#0e1722] border border-[#1b2b3c] rounded-3xl p-12 text-center">
-            <span className="text-[11px] font-mono uppercase tracking-widest text-slate-500 mb-4 block">Operational Protocol</span>
-            <h3 className="text-2xl font-extrabold text-white mb-4">The 6-Step Operational Cycle</h3>
-            <p className="text-slate-400 max-w-2xl mx-auto text-sm leading-relaxed">
-              "Deploy into raging torrents, Monitor real-time bathymetry, Detect trapped victims with edge AI, Locate with precision GPS, Assess triage urgency, and Rescue with frontline coordination."
-            </p>
+          {/* 3-Column: Problem · Approach · Result */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pt-8 mb-12">
+            {/* 01 */}
+            <div className="border-t-2 border-red-500/80 pt-6">
+              <span className="text-[11px] font-mono font-bold tracking-wider text-red-400 block mb-2">01 · THE PROBLEM</span>
+              <h3 className="text-xl font-bold text-white mb-3">Search is slow and dangerous</h3>
+              <p className="text-slate-400 text-sm leading-relaxed">
+                Aerial drones are blinded by corrugated roofs and tree cover. Responders on foot face swift currents and submerged hazards.
+              </p>
+            </div>
+
+            {/* 02 */}
+            <div className="border-t-2 border-[#22d3ee] pt-6">
+              <span className="text-[11px] font-mono font-bold tracking-wider text-[#22d3ee] block mb-2">02 · OUR APPROACH</span>
+              <h3 className="text-xl font-bold text-white mb-3">Look from the water, not the sky</h3>
+              <p className="text-slate-400 text-sm leading-relaxed">
+                A compact hull travels down inundated streets, scanning porches and peering under eaves where people take refuge.
+              </p>
+            </div>
+
+            {/* 03 */}
+            <div className="border-t-2 border-orange-500/80 pt-6">
+              <span className="text-[11px] font-mono font-bold tracking-wider text-[#f97316] block mb-2">03 · THE RESULT</span>
+              <h3 className="text-xl font-bold text-white mb-3">Crews go straight to people</h3>
+              <p className="text-slate-400 text-sm leading-relaxed">
+                On-board AI flags human silhouettes, logs GPS coordinates and alerts the nearest rescue boat automatically.
+              </p>
+            </div>
+          </div>
+
+          {/* Metrics bar */}
+          <div className="bg-[#0b1622] border border-[#1b2b3c] rounded-2xl p-6 sm:p-8 grid grid-cols-2 md:grid-cols-4 gap-6 mb-8">
+            <div className="md:border-r md:border-white/10 md:pr-6">
+              <div className="text-white font-extrabold font-mono text-3xl sm:text-4xl">&lt;120 <span className="text-lg font-normal text-slate-400">s</span></div>
+              <div className="text-xs text-slate-400 font-mono mt-1">from case to water</div>
+            </div>
+
+            <div className="md:border-r md:border-white/10 md:pr-6">
+              <div className="text-white font-extrabold font-mono text-3xl sm:text-4xl">15 <span className="text-lg font-normal text-slate-400">cm</span></div>
+              <div className="text-xs text-slate-400 font-mono mt-1">hull draft for shallow streets</div>
+            </div>
+
+            <div className="md:border-r md:border-white/10 md:pr-6">
+              <div className="text-white font-extrabold font-mono text-3xl sm:text-4xl">&lt;1 <span className="text-lg font-normal text-slate-400">s</span></div>
+              <div className="text-xs text-slate-400 font-mono mt-1">detection to alert</div>
+            </div>
+
+            <div>
+              <div className="text-[#f97316] font-extrabold font-mono text-3xl sm:text-4xl">Remote</div>
+              <div className="text-xs text-slate-400 font-mono mt-1">operated from the bank, crew stays dry</div>
+            </div>
+          </div>
+
+          {/* Action button */}
+          <div>
+            <button
+              onClick={() => scrollTo('technology')}
+              className="inline-flex items-center gap-2 bg-[#091522] hover:bg-[#0f2136] border border-[#22d3ee]/40 text-[#22d3ee] font-semibold px-6 py-3 rounded-full text-sm transition-all shadow-lg hover:border-[#22d3ee]"
+            >
+              Discover our technology <span className="text-base">↓</span>
+            </button>
           </div>
         </div>
       </section>
@@ -448,9 +505,12 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-6">
           <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-14 gap-4">
             <div>
-              <span className="text-[11px] font-mono uppercase tracking-widest text-slate-500 border border-white/10 px-3.5 py-1.5 rounded-full inline-block mb-5">
-                Mission flow
-              </span>
+              <div className="flex items-center gap-2 mb-4">
+                <span className="w-5 h-0.5 bg-[#22d3ee] inline-block" />
+                <span className="text-[11px] font-mono uppercase tracking-[0.25em] text-[#22d3ee] font-bold">
+                  MISSION FLOW
+                </span>
+              </div>
               <h2 className="text-4xl sm:text-5xl font-extrabold tracking-tight">
                 From launch to location<br />in six steps.
               </h2>
@@ -484,51 +544,235 @@ export default function Home() {
       <section id="technology" className="border-t border-white/5 py-24">
         <div className="max-w-7xl mx-auto px-6">
           {/* Header */}
-          <div className="text-center mb-16">
-            <span className="text-[11px] font-mono uppercase tracking-widest text-slate-500 border border-white/10 px-3.5 py-1.5 rounded-full inline-block mb-5">
-              Engineering &amp; Hardware Architecture
-            </span>
-            <h2 className="text-4xl sm:text-5xl font-extrabold tracking-tight">
-              Rescue Technology
-            </h2>
-            <p className="text-slate-500 text-xs mt-3 tracking-[0.3em] uppercase font-mono">
-              Autonomous Water-Level Systems &amp; AI Vision
-            </p>
-            <div className="w-16 h-px bg-white/10 mx-auto mt-4" />
+          <div className="mb-12">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="w-5 h-0.5 bg-[#22d3ee] inline-block" />
+              <span className="text-[11px] font-mono uppercase tracking-[0.25em] text-[#22d3ee] font-bold">
+                RESCUE TECHNOLOGY
+              </span>
+            </div>
+
+            <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
+              <h2 className="text-4xl sm:text-5xl lg:text-[54px] font-extrabold tracking-tight leading-[1.08] text-white">
+                Four systems.<br />
+                One search loop.
+              </h2>
+              <p className="text-slate-400 text-sm sm:text-base leading-relaxed max-w-lg lg:mb-1">
+                Live video streams over Wi-Fi to the operator laptop for YOLO-assisted person detection, while dual NodeMCU ESP32 controllers coordinate camera pan/tilt, ultrasonic sensing, GPS, and differential BLDC thrust.
+              </p>
+            </div>
           </div>
 
-          {/* Hero image */}
-          <div className="w-full aspect-[21/9] overflow-hidden rounded-2xl border border-white/10 mb-16 shadow-2xl">
-            <img
-              src="https://images.unsplash.com/photo-1581092160607-ee22621dd758?q=80&w=1600&auto=format&fit=crop"
-              alt="Rescue Robotics Hardware Engineering"
-              className="w-full h-full object-cover"
-            />
-          </div>
+          {/* System Architecture Diagram Card */}
+          <div className="bg-[#0a131e] border border-[#1b2b3c] rounded-2xl p-6 sm:p-8 mb-12 shadow-2xl">
+            {/* Diagram Header */}
+            <div className="flex items-center justify-between pb-6 border-b border-white/5 text-[11px] font-mono">
+              <span className="text-slate-400 uppercase tracking-widest font-semibold">SYSTEM ARCHITECTURE</span>
+              <span className="text-slate-500">PWM 50 Hz · UART 115200 baud</span>
+            </div>
 
-          {/* Spec sections */}
-          <div className="space-y-16 max-w-5xl mx-auto">
-            {techSpecs.map((section, idx) => (
-              <div key={idx} className="border-t border-white/5 pt-10">
-                <h3 className="text-[11px] font-mono uppercase tracking-widest text-slate-500 text-center mb-10">
-                  {section.category}
-                </h3>
-                <div className="space-y-0">
-                  {section.items.map((item, i) => (
-                    <div
-                      key={i}
-                      className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-2 border-b border-white/5 py-5 last:border-0 hover:bg-white/[0.02] transition-colors rounded-lg px-3 -mx-3"
-                    >
-                      <div className="pr-4">
-                        <h4 className="text-white font-semibold text-sm">{item.name}</h4>
-                        <p className="text-slate-500 text-xs mt-1 leading-relaxed">{item.desc}</p>
-                      </div>
-                      <span className="text-[#22d3ee] font-bold font-mono text-sm shrink-0">{item.spec}</span>
-                    </div>
-                  ))}
+            {/* Architecture Node Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center py-6 sm:py-8">
+              {/* Left Column: SENSE cards */}
+              <div className="lg:col-span-3 space-y-3.5">
+                <div className="bg-[#0e1b29] border border-white/10 rounded-xl p-4 relative group hover:border-[#22d3ee]/40 transition-colors">
+                  <span className="text-[9px] font-mono uppercase tracking-wider text-slate-400 block mb-1">SENSE · VISION</span>
+                  <h4 className="text-sm font-bold text-white">Camera</h4>
+                  <p className="text-xs text-slate-200 font-mono mt-0.5">Seeed Studio XIAO ESP32-S3 Sense</p>
+                  <p className="text-[10px] text-slate-400 font-mono mt-0.5">Live RGB video streamed over Wi-Fi</p>
+                </div>
+
+                <div className="bg-[#0e1b29] border border-white/10 rounded-xl p-4 relative group hover:border-[#22d3ee]/40 transition-colors">
+                  <span className="text-[9px] font-mono uppercase tracking-wider text-slate-400 block mb-1">SENSE · RANGE</span>
+                  <h4 className="text-sm font-bold text-white">HC-SR04 Ultrasonic Sensor</h4>
+                  <p className="text-xs text-slate-400 font-mono mt-0.5">Front-facing short-range distance measurement</p>
+                </div>
+
+                <div className="bg-[#0e1b29] border border-white/10 rounded-xl p-4 relative group hover:border-[#22d3ee]/40 transition-colors">
+                  <span className="text-[9px] font-mono uppercase tracking-wider text-slate-400 block mb-1">SENSE · POSITION</span>
+                  <h4 className="text-sm font-bold text-white">GY-NEO8M GPS</h4>
+                  <p className="text-xs text-slate-400 font-mono mt-0.5">Provides the robot’s outdoor coordinates</p>
                 </div>
               </div>
-            ))}
+
+              {/* Center Column: VISION / AI Core Node */}
+              <div className="lg:col-span-5 flex justify-center">
+                <div className="w-full bg-[#0c2231] border-2 border-[#22d3ee] rounded-2xl p-6 shadow-2xl shadow-cyan-950/60 relative">
+                  <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#22d3ee] block mb-1">
+                    VISION / AI
+                  </span>
+                  <h3 className="text-xl font-bold text-white">Laptop-Based Person Detection</h3>
+                  <p className="text-xs text-slate-300 mt-2 leading-relaxed">
+                    Live camera stream processed using a lightweight YOLO-family model
+                  </p>
+                  <div className="flex items-center gap-2 mt-4">
+                    <span className="bg-[#22d3ee] text-[#060d14] font-bold text-[10px] font-mono px-2.5 py-0.5 rounded">
+                      Wi-Fi Stream
+                    </span>
+                    <span className="border border-[#22d3ee] text-[#22d3ee] font-semibold text-[10px] font-mono px-2.5 py-0.5 rounded">
+                      YOLO Detection
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Column: CONTROL & MOVE nodes */}
+              <div className="lg:col-span-4 space-y-3.5">
+                {/* CONTROL · CAMERA */}
+                <div className="bg-[#0b1c2b] border border-[#22d3ee]/40 rounded-xl p-4 relative group hover:border-[#22d3ee] transition-colors">
+                  <span className="text-[9px] font-mono uppercase tracking-wider text-[#22d3ee] block mb-1 font-semibold">CONTROL · CAMERA</span>
+                  <h4 className="text-sm font-bold text-white">NodeMCU ESP32 #2</h4>
+                  <p className="text-xs text-slate-400 font-mono mt-0.5">
+                    Web-controlled pan/tilt camera and sensor interface
+                  </p>
+                </div>
+
+                {/* CONTROL · PROPULSION */}
+                <div className="bg-[#0b1c2b] border border-[#22d3ee]/40 rounded-xl p-4 relative group hover:border-[#22d3ee] transition-colors">
+                  <span className="text-[9px] font-mono uppercase tracking-wider text-[#22d3ee] block mb-1 font-semibold">CONTROL · PROPULSION</span>
+                  <h4 className="text-sm font-bold text-white">NodeMCU ESP32 #1</h4>
+                  <p className="text-xs text-slate-400 font-mono mt-0.5">
+                    Processes RC steering and throttle commands
+                  </p>
+                </div>
+
+                {/* MOVE */}
+                <div className="bg-[#171419] border border-orange-500/40 rounded-xl p-4 relative group hover:border-orange-500 transition-colors">
+                  <span className="text-[9px] font-mono uppercase tracking-wider text-orange-400 block mb-1 font-semibold">MOVE</span>
+                  <h4 className="text-sm font-bold text-white">Twin BLDC Thrusters</h4>
+                  <p className="text-xs text-slate-400 font-mono mt-0.5">
+                    Two bidirectional 30 A ESCs enable differential steering
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 4 Core Subsystem Cards in 2x2 Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Card 1: AI-Assisted Victim Detection */}
+            <div className="bg-[#0b1622] border border-white/10 rounded-2xl p-6 shadow-xl hover:border-cyan-500/30 transition-colors">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-9 h-9 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-[#22d3ee]">
+                  <Eye size={18} />
+                </div>
+                <h3 className="text-lg font-bold text-white">AI-Assisted Victim Detection</h3>
+              </div>
+              <p className="text-slate-400 text-xs sm:text-sm leading-relaxed mb-6">
+                The XIAO ESP32-S3 Sense streams live video from FloodScout to the operator laptop over Wi-Fi. A lightweight YOLO-family object-detection model running on the laptop identifies visible human presence and highlights potential victims for operator review.
+              </p>
+              <div className="space-y-2.5 text-xs font-mono border-t border-white/5 pt-4">
+                <div className="flex justify-between items-baseline">
+                  <span className="text-slate-500">Camera</span>
+                  <span className="text-slate-200 font-semibold">Seeed Studio XIAO ESP32-S3 Sense</span>
+                </div>
+                <div className="flex justify-between items-baseline">
+                  <span className="text-slate-500">AI Processing</span>
+                  <span className="text-slate-200 font-semibold">Operator laptop</span>
+                </div>
+                <div className="flex justify-between items-baseline">
+                  <span className="text-slate-500">Detection</span>
+                  <span className="text-slate-200 font-semibold">Visible person detection</span>
+                </div>
+                <div className="flex justify-between items-baseline">
+                  <span className="text-slate-500">Output</span>
+                  <span className="text-[#22d3ee] font-bold">Bounding box + confidence score</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Card 2: Front-Facing Distance Sensing */}
+            <div className="bg-[#0b1622] border border-white/10 rounded-2xl p-6 shadow-xl hover:border-cyan-500/30 transition-colors">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-9 h-9 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-[#22d3ee]">
+                  <Waves size={18} />
+                </div>
+                <h3 className="text-lg font-bold text-white">Front-Facing Distance Sensing</h3>
+              </div>
+              <p className="text-slate-400 text-xs sm:text-sm leading-relaxed mb-6">
+                A HC-SR04 ultrasonic sensor mounted at the front of FloodScout provides approximate short-range distance information to objects or targets in the inspection direction. The measurement supports close-range navigation and operator awareness.
+              </p>
+              <div className="space-y-2.5 text-xs font-mono border-t border-white/5 pt-4">
+                <div className="flex justify-between items-baseline">
+                  <span className="text-slate-500">Sensor</span>
+                  <span className="text-slate-200 font-semibold">HC-SR04</span>
+                </div>
+                <div className="flex justify-between items-baseline">
+                  <span className="text-slate-500">Function</span>
+                  <span className="text-slate-200 font-semibold">Front-facing distance measurement</span>
+                </div>
+                <div className="flex justify-between items-baseline">
+                  <span className="text-slate-500">Controller</span>
+                  <span className="text-slate-200 font-semibold">NodeMCU ESP32 #2</span>
+                </div>
+                <div className="flex justify-between items-baseline">
+                  <span className="text-slate-500">Output</span>
+                  <span className="text-[#22d3ee] font-bold">Live distance reading</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Card 3: GPS Position Information */}
+            <div className="bg-[#0b1622] border border-white/10 rounded-2xl p-6 shadow-xl hover:border-cyan-500/30 transition-colors">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-9 h-9 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-[#22d3ee]">
+                  <Navigation size={18} />
+                </div>
+                <h3 className="text-lg font-bold text-white">GPS Position Information</h3>
+              </div>
+              <p className="text-slate-400 text-xs sm:text-sm leading-relaxed mb-6">
+                A GY-NEO8M GPS module provides FloodScout’s outdoor coordinates. The position is used as supporting location information when the operator identifies a possible victim location.
+              </p>
+              <div className="space-y-2.5 text-xs font-mono border-t border-white/5 pt-4">
+                <div className="flex justify-between items-baseline">
+                  <span className="text-slate-500">Module</span>
+                  <span className="text-slate-200 font-semibold">GY-NEO8M</span>
+                </div>
+                <div className="flex justify-between items-baseline">
+                  <span className="text-slate-500">Interface</span>
+                  <span className="text-slate-200 font-semibold">UART</span>
+                </div>
+                <div className="flex justify-between items-baseline">
+                  <span className="text-slate-500">Controller</span>
+                  <span className="text-slate-200 font-semibold">NodeMCU ESP32 #2</span>
+                </div>
+                <div className="flex justify-between items-baseline">
+                  <span className="text-slate-500">Purpose</span>
+                  <span className="text-[#22d3ee] font-semibold text-right max-w-[210px]">Robot position / search reference</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Card 4: Differential BLDC Propulsion */}
+            <div className="bg-[#0b1622] border border-white/10 rounded-2xl p-6 shadow-xl hover:border-orange-500/30 transition-colors">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-9 h-9 rounded-xl bg-orange-500/10 border border-orange-500/30 flex items-center justify-center text-[#f97316]">
+                  <Waves size={18} />
+                </div>
+                <h3 className="text-lg font-bold text-white">Differential BLDC Propulsion</h3>
+              </div>
+              <p className="text-slate-400 text-xs sm:text-sm leading-relaxed mb-6">
+                FloodScout uses two ducted BLDC underwater thrusters, each driven by an independent bidirectional ESC. NodeMCU ESP32 #1 converts steering and throttle commands from the HotRC receiver into independent left and right motor commands.
+              </p>
+              <div className="space-y-2.5 text-xs font-mono border-t border-white/5 pt-4">
+                <div className="flex justify-between items-baseline">
+                  <span className="text-slate-500">Motors</span>
+                  <span className="text-slate-200 font-semibold">Twin ducted BLDC thrusters</span>
+                </div>
+                <div className="flex justify-between items-baseline">
+                  <span className="text-slate-500">ESCs</span>
+                  <span className="text-slate-200 font-semibold">2 × bidirectional 30 A</span>
+                </div>
+                <div className="flex justify-between items-baseline">
+                  <span className="text-slate-500">Control</span>
+                  <span className="text-slate-200 font-semibold">HotRC CT-6A + F-06A receiver</span>
+                </div>
+                <div className="flex justify-between items-baseline">
+                  <span className="text-slate-500">Steering</span>
+                  <span className="text-[#f97316] font-bold">Differential thrust</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -538,32 +782,24 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
 
-            {/* Left: illustration / dark card */}
-            <div className="bg-[#0e1722] border border-[#1b2b3c] rounded-3xl p-8 shadow-2xl relative overflow-hidden min-h-[340px] flex items-center justify-center">
-              <div className="w-full max-w-xs mx-auto">
-                <USVIllustration />
-              </div>
-              {/* Bottom left badge */}
-              <div className="absolute bottom-5 left-5 bg-[#22d3ee]/10 border border-[#22d3ee]/30 rounded-xl px-4 py-2.5 text-[#22d3ee] font-mono text-xs">
-                <div className="font-bold">USV-01 · v2.1</div>
-                <div className="text-[#22d3ee]/60 text-[10px] mt-0.5">Water-Level Rescue Robot</div>
-              </div>
-              {/* Top right badge */}
-              <div className="absolute top-5 right-5 bg-emerald-400/10 border border-emerald-400/30 rounded-full px-3 py-1 text-emerald-400 text-[10px] font-mono font-bold">
-                ● OPERATIONAL
-              </div>
+            {/* Left: 3D interactive model stage */}
+            <div className="w-full">
+              <ModelViewer3D className="w-full h-[460px] min-h-[460px]" autoRotateSpeed={1.0} showControls={true} />
             </div>
 
             {/* Right: parts list */}
             <div>
-              <span className="text-[11px] font-mono uppercase tracking-widest text-slate-500 border border-white/10 px-3.5 py-1.5 rounded-full inline-block mb-8">
-                Open hardware
-              </span>
+              <div className="flex items-center gap-2 mb-4">
+                <span className="w-5 h-0.5 bg-[#22d3ee] inline-block" />
+                <span className="text-[11px] font-mono uppercase tracking-[0.25em] text-[#22d3ee] font-bold">
+                  OPEN HARDWARE
+                </span>
+              </div>
               <h2 className="text-4xl sm:text-5xl font-extrabold tracking-tight mb-6">
                 Built from parts any<br />team can source.
               </h2>
               <p className="text-slate-400 text-base leading-relaxed mb-8">
-                Every component is available on Shopee or Lazada. Total BOM cost under RM 700. The software is fully open and runs on free-tier cloud.
+                Every major component is commercially available, and the final prototype remains within the RM700 hardware budget. The control system is split across dedicated modules for propulsion, sensing, camera positioning and vision processing. The control and AI software runs locally on the operator system and onboard microcontrollers.
               </p>
 
               <div className="space-y-3">
@@ -585,12 +821,15 @@ export default function Home() {
       </section>
 
       {/* ── DUAL DASHBOARD PREVIEW ───────────────────────────────────────── */}
-      <section className="border-t border-white/5 py-24">
+      <section id="command-interface" className="border-t border-white/5 py-24">
         <div className="max-w-7xl mx-auto px-6">
           <div className="text-center mb-14">
-            <span className="text-[11px] font-mono uppercase tracking-widest text-slate-500 border border-white/10 px-3.5 py-1.5 rounded-full inline-block mb-6">
-              Command interface
-            </span>
+            <div className="flex items-center justify-center gap-2 mb-4">
+              <span className="w-5 h-0.5 bg-[#22d3ee] inline-block" />
+              <span className="text-[11px] font-mono uppercase tracking-[0.25em] text-[#22d3ee] font-bold">
+                COMMAND INTERFACE
+              </span>
+            </div>
             <h2 className="text-4xl sm:text-5xl font-extrabold tracking-tight">
               One view for the pilot.<br />
               <span className="text-slate-400">One for the commander.</span>

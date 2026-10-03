@@ -45,9 +45,9 @@ export default function Technology() {
       </div>
 
       {/* Hero Showcase Image */}
-      <div className="w-full aspect-[21/9] overflow-hidden border border-[#E6DFD5] shadow-md mb-20">
+      <div className="w-full aspect-[21/9] overflow-hidden rounded-xl border border-[#E6DFD5] shadow-md mb-20">
         <img
-          src="https://images.unsplash.com/photo-1581092160607-ee22621dd758?q=80&w=1600&auto=format&fit=crop"
+          src="/images/robotics_maker_lab.jpg"
           alt="Rescue Robotics Hardware Engineering"
           className="w-full h-full object-cover"
         />

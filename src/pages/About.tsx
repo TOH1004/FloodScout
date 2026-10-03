@@ -40,17 +40,17 @@ export default function About() {
         </div>
 
         <div className="grid grid-cols-2 gap-4">
-          <div className="aspect-[3/4] overflow-hidden border border-[#E6DFD5] shadow-md bg-white">
+          <div className="aspect-[3/4] overflow-hidden rounded-xl border border-[#E6DFD5] shadow-md bg-white">
             <img
-              src="https://images.unsplash.com/photo-1547683905-f686c993aae5?q=80&w=600&auto=format&fit=crop"
+              src="/images/flood_rescue_deployment.jpg"
               alt="Flood Rescue Operations"
               className="w-full h-full object-cover img-zoom"
             />
           </div>
-          <div className="aspect-[3/4] overflow-hidden border border-[#E6DFD5] shadow-md bg-white mt-8">
+          <div className="aspect-[3/4] overflow-hidden rounded-xl border border-[#E6DFD5] shadow-md bg-white mt-8">
             <img
-              src="https://images.unsplash.com/photo-1581092160607-ee22621dd758?q=80&w=600&auto=format&fit=crop"
-              alt="Command Station"
+              src="/images/robotics_maker_lab.jpg"
+              alt="Command Station & Hardware Integration"
               className="w-full h-full object-cover img-zoom"
             />
           </div>

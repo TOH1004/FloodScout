@@ -247,7 +247,7 @@ class IPCameraSource(CameraSource):
         self.stream_url = stream_url
         self.camera_index = 0
         parsed = urllib.parse.urlparse(stream_url)
-        self.host = parsed.hostname or "10.185.112.149"
+        self.host = parsed.hostname or "10.133.81.149"
         self.capture_url = f"http://{self.host}/capture"
         self._lock = threading.Lock()
         self._latest_frame: Optional[np.ndarray] = None

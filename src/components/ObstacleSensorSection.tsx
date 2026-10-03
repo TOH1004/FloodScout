@@ -123,7 +123,7 @@ export function ObstacleSensorSection() {
                   type="button"
                   onClick={() => {
                     const input = window.prompt(
-                      `Enter ESP32 IP address or URL:\n(e.g., 10.185.112.106 or http://10.185.112.106)`,
+                      `Enter ESP32 IP address or URL:\n(e.g., 10.133.81.149 or http://10.133.81.149)`,
                       getEsp32BaseUrl()
                     );
                     if (input && input.trim()) {
@@ -141,7 +141,7 @@ export function ObstacleSensorSection() {
                   type="button"
                   onClick={() => {
                     const input = window.prompt(
-                      `Enter ESP32 IP address or URL:\n(e.g., 10.185.112.106 or http://10.185.112.106)`,
+                      `Enter ESP32 IP address or URL:\n(e.g., 10.133.81.149 or http://10.133.81.149)`,
                       getEsp32BaseUrl()
                     );
                     if (input && input.trim()) {

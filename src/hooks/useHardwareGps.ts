@@ -73,7 +73,7 @@ export function useHardwareGps(onGpsFix?: (coords: [number, number], telemetry: 
               altitude: gps.altitude_m ?? 0,
               speedKmh: 0,
               heading: 0,
-              port: 'Wi-Fi (10.185.112.106)',
+              port: `Wi-Fi (${getEsp32BaseUrl().replace(/^https?:\/\//, '')})`,
               statusMessage: isValid
                 ? `Live Hardware GPS 3D Fix (${gps.satellites ?? 0} Sats)`
                 : `Acquiring lock (${gps.satellites ?? 0} Sats visible)...`,
@@ -110,7 +110,7 @@ export function useHardwareGps(onGpsFix?: (coords: [number, number], telemetry: 
                 altitude: gps.altitude_m ?? 0,
                 speedKmh: 0,
                 heading: 0,
-                port: 'Wi-Fi (10.185.112.106)',
+                port: `Wi-Fi (${getEsp32BaseUrl().replace(/^https?:\/\//, '')})`,
                 statusMessage: isValid
                   ? `Live Hardware GPS 3D Fix (${gps.satellites ?? 0} Sats)`
                   : `Acquiring lock (${gps.satellites ?? 0} Sats visible)...`,

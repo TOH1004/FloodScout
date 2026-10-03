@@ -216,7 +216,7 @@ def esp32_sensor_wifi_loop():
     logger.info("ESP32 Wi-Fi Sensor poller active.")
     while state.running:
         try:
-            esp32_url = (ESP32_PAN_TILT_URL or os.getenv("ESP32_PAN_TILT_URL") or os.getenv("ESP32_BASE_URL") or "http://10.185.112.106").rstrip("/")
+            esp32_url = (ESP32_PAN_TILT_URL or os.getenv("ESP32_PAN_TILT_URL") or os.getenv("ESP32_BASE_URL") or "http://10.133.81.149").rstrip("/")
             target_url = f"{esp32_url}/api/sensors"
             req = urllib.request.Request(
                 target_url,
@@ -652,7 +652,7 @@ def _persist_env_key(key: str, value: str):
 
 
 class CameraUrlPayload(BaseModel):
-    url: str = Field(..., description="Wi-Fi / IP camera stream URL (e.g. http://10.185.112.106:81/stream) or 'usb' for USB webcam")
+    url: str = Field(..., description="Wi-Fi / IP camera stream URL (e.g. http://10.133.81.149:81/stream) or 'usb' for USB webcam")
 
 
 @app.post("/camera/url")
@@ -962,7 +962,7 @@ async def incident_websocket(websocket: WebSocket):
 
 
 # ─── ESP32 Wi-Fi Pan/Tilt Proxy (Enables mobile HTTPS clients to control ESP32) ───
-ESP32_PAN_TILT_URL = (os.getenv("ESP32_PAN_TILT_URL") or "http://10.185.112.106").rstrip("/")
+ESP32_PAN_TILT_URL = (os.getenv("ESP32_PAN_TILT_URL") or "http://10.133.81.149").rstrip("/")
 
 @app.api_route("/api/esp32/config", methods=["GET", "POST"])
 def configure_esp32_url(ip: Optional[str] = Query(None), target: Optional[str] = Query(None)):

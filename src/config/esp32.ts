@@ -7,7 +7,7 @@
  *             VITE_ESP32_PAN_TILT_URL=http://10.185.112.106
  */
 
-export const DEFAULT_ESP32_IP = '10.185.112.106';
+export const DEFAULT_ESP32_IP = '10.133.81.106';
 
 const STORAGE_KEY = 'floodscout_esp32_url';
 
@@ -20,11 +20,6 @@ export function getEsp32BaseUrl(): string {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved && saved.trim()) {
       let cleaned = saved.trim();
-      // Guard: 10.185.112.149 is the separate Camera board, not the pan/tilt & sensor board
-      if (cleaned.includes('10.185.112.149')) {
-        cleaned = `http://${DEFAULT_ESP32_IP}`;
-        try { localStorage.setItem(STORAGE_KEY, cleaned); } catch {}
-      }
       if (!cleaned.startsWith('http://') && !cleaned.startsWith('https://')) {
         cleaned = `http://${cleaned}`;
       }

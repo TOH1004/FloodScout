@@ -7,7 +7,7 @@
  * - Dynamic IP / URL configuration stored in localStorage and synchronized with the backend.
  */
 
-export const DEFAULT_CAMERA_IP = '10.185.112.149';
+export const DEFAULT_CAMERA_IP = '10.133.81.149';
 export const DEFAULT_CAMERA_STREAM_PATH = ':81/stream';
 
 const STORAGE_URL_KEY = 'floodscout_camera_stream_url';
@@ -16,10 +16,10 @@ const STORAGE_MODE_KEY = 'floodscout_camera_feed_mode'; // 'ai' | 'direct'
 /**
  * Normalizes a raw camera IP or URL to a complete, valid stream URL.
  * Examples:
- * - "10.185.112.106" -> "http://10.185.112.106:81/stream"
- * - "http://10.185.112.106" -> "http://10.185.112.106:81/stream"
- * - "http://10.185.112.106/stream" -> "http://10.185.112.106/stream"
- * - "http://10.185.112.106:81/stream" -> "http://10.185.112.106:81/stream"
+ * - "10.133.81.149" -> "http://10.133.81.149:81/stream"
+ * - "http://10.133.81.149" -> "http://10.133.81.149:81/stream"
+ * - "http://10.133.81.149/stream" -> "http://10.133.81.149/stream"
+ * - "http://10.133.81.149:81/stream" -> "http://10.133.81.149:81/stream"
  */
 export function normalizeCameraStreamUrl(raw: string): string {
   let cleaned = (raw || '').trim();

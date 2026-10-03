@@ -219,7 +219,7 @@ export const WifiCameraModal: React.FC<WifiCameraModalProps> = ({
                   setInputUrl(e.target.value);
                   setTestStatus('idle');
                 }}
-                placeholder="http://10.185.112.106:81/stream"
+                placeholder="http://10.133.81.149:81/stream"
                 className="flex-1 bg-slate-950 border border-slate-700 focus:border-sky-500 rounded-lg px-3 py-2 text-xs font-mono text-white placeholder-slate-500 outline-none transition-colors"
               />
               <button
@@ -263,13 +263,13 @@ export const WifiCameraModal: React.FC<WifiCameraModalProps> = ({
               </div>
               <ul className="list-disc list-inside space-y-0.5 text-slate-400 text-[10.5px]">
                 <li>
-                  <strong className="text-slate-200">Arduino Serial Monitor (115200 baud):</strong> Press the RST button on the camera board &rarr; look for <code className="text-amber-300 bg-black/40 px-1 py-0.5 rounded">Camera Ready! Use &apos;http://10.185.112.X&apos;</code>
+                  <strong className="text-slate-200">Arduino Serial Monitor (115200 baud):</strong> Press the RST button on the camera board &rarr; look for <code className="text-amber-300 bg-black/40 px-1 py-0.5 rounded">Camera Ready! Use &apos;http://10.133.81.149&apos;</code>
                 </li>
                 <li>
-                  <strong className="text-slate-200">vivo V30 Hotspot Settings:</strong> Open Personal Hotspot &rarr; Connected Devices
+                  <strong className="text-slate-200">Local Wi-Fi / Hotspot Settings:</strong> Open Wi-Fi Router / Hotspot &rarr; Connected Devices
                 </li>
                 <li className="text-amber-400">
-                  ⚠️ Note: <code className="bg-black/40 px-1 py-0.5 rounded">10.185.112.238</code> is your computer, not the camera.
+                  ⚠️ Note: Make sure your computer is connected to the same Wi-Fi network as the camera.
                 </li>
               </ul>
             </div>
@@ -355,7 +355,7 @@ export const WifiCameraModal: React.FC<WifiCameraModalProps> = ({
               className="rounded bg-slate-900 border-slate-700 text-sky-500 focus:ring-0 cursor-pointer"
             />
             <label htmlFor="syncPanTilt" className="cursor-pointer select-none">
-              Also synchronize Pan & Tilt Actuator to this IP ({extractCameraHost(inputUrl) || '10.185.112.106'})
+              Also synchronize Pan & Tilt Actuator to this IP ({extractCameraHost(inputUrl) || '10.133.81.149'})
             </label>
           </div>
         </div>

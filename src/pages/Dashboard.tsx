@@ -15,7 +15,6 @@ import { IncidentModal } from '../components/IncidentModal';
 import { CameraSettingsPanel } from '../components/CameraSettingsPanel';
 import { WifiCameraModal } from '../components/WifiCameraModal';
 import { extractCameraHost } from '../config/camera';
-import { MotorTelemetryCard } from '../components/MotorTelemetryCard';
 import { useMotorTelemetry } from '../hooks/useMotorTelemetry';
 import {
   DndContext,
@@ -404,6 +403,20 @@ function PanelContent({
   const [showWifiModal, setShowWifiModal] = useState(false);
   const [directFeedError, setDirectFeedError] = useState(false);
   const [inlineCameraIpInput, setInlineCameraIpInput] = useState('');
+  // Freeze the GPS position the moment a person is first detected so the marker stays fixed
+  const [frozenDetectionLocation, setFrozenDetectionLocation] = useState<[number, number] | null>(null);
+  const prevPersonDetected = useRef(false);
+  useEffect(() => {
+    const detected = Boolean(detectionStatus.personDetected || (detectionStatus.personCount && detectionStatus.personCount > 0));
+    if (detected && !prevPersonDetected.current && robotLocation) {
+      // Snapshot robot position at the first moment a person is seen
+      setFrozenDetectionLocation([robotLocation[0], robotLocation[1]]);
+    }
+    if (!detected && prevPersonDetected.current) {
+      // Keep the frozen pin visible — do NOT clear it so the last detection stays on the map
+    }
+    prevPersonDetected.current = detected;
+  }, [detectionStatus.personDetected, detectionStatus.personCount, robotLocation]);
 
   // Reset stream error when URL or mode changes so the new feed can attempt connection
   useEffect(() => {
@@ -415,9 +428,9 @@ function PanelContent({
   const baseLocation: [number, number] = (!isComputerJohorMock && computerLocation) || robotLocation || [1.8642, 103.1142];
 
   const getPersonGps = (personId: number, _base: [number, number]): [number, number] | null => {
-    // When robot detects a person, anchor victim coordinates directly to live robot vessel position
-    if (!robotLocation) return null;
-    const anchor = robotLocation;
+    // Use frozenDetectionLocation so the marker is anchored at the detection spot, not live robot
+    const anchor = frozenDetectionLocation || robotLocation;
+    if (!anchor) return null;
     if (personId <= 1) {
       return [
         parseFloat(anchor[0].toFixed(6)),
@@ -622,7 +635,7 @@ function PanelContent({
                       type="text"
                       defaultValue={cameraStreamUrl}
                       onChange={(e) => setInlineCameraIpInput(e.target.value)}
-                      placeholder="http://10.185.112.106:81/stream"
+                      placeholder="http://10.133.81.149:81/stream"
                       className="flex-1 bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-xs font-mono text-white outline-none focus:border-sky-400"
                     />
                     <button
@@ -1085,7 +1098,7 @@ function PanelContent({
                   PC GPS:
                 </span>
                 <span className="font-bold text-white">
-                  {baseLocation[0].toFixed(6)}°, {baseLocation[1].toFixed(6)}°
+                  PC
                 </span>
                 {/* Source Badge */}
                 <span className={`text-[9px] px-1.5 py-0.2 rounded font-sans font-bold uppercase tracking-wider ${
@@ -1155,7 +1168,7 @@ function PanelContent({
                   ROBOT GPS:
                 </span>
                 <span className="font-bold text-white">
-                  {robotLocation ? `${robotLocation[0].toFixed(6)}°, ${robotLocation[1].toFixed(6)}°` : 'No Signal / Awaiting Fix'}
+                  {robotLocation ? 'Active' : 'No Signal / Awaiting Fix'}
                 </span>
                 {hardwareGps?.isValid && (
                   <span className="text-[9px] px-1.5 py-0.5 rounded font-sans font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
@@ -1224,13 +1237,6 @@ function PanelContent({
                     TARGET GPS:
                   </span>
                   <span className="font-bold text-white">
-                    {manifestPersons[0]?.location
-                      ? `${manifestPersons[0].location[0].toFixed(6)}°, ${manifestPersons[0].location[1].toFixed(6)}°`
-                      : robotLocation
-                      ? `${robotLocation[0].toFixed(6)}°, ${robotLocation[1].toFixed(6)}°`
-                      : 'Fix Pending'}
-                  </span>
-                  <span className="font-bold text-rose-300 bg-rose-950/70 border border-rose-500/40 px-1.5 py-0.5 rounded text-[10px]">
                     {manifestPersons.filter(p => p.location !== null).length > 0
                       ? `${manifestPersons.filter(p => p.location !== null).length} detected`
                       : 'Target Active'}
@@ -1396,80 +1402,36 @@ function PanelContent({
             {baseLocation && (
               <Marker position={baseLocation} icon={computerIcon}>
                 <Popup>
-                  <div className="font-mono text-xs space-y-1.5 min-w-[210px]">
+                  <div className="font-mono text-xs space-y-1.5 min-w-[180px]">
                     <div className="border-b pb-1 font-bold text-sky-700 flex items-center gap-1.5">
                       <span>💻</span> OPERATOR GROUND CONTROL (PC)
                     </div>
-                    <div className="bg-sky-50 border border-sky-200/80 p-2 rounded space-y-1">
-                      <div className="text-[10px] text-sky-800 font-sans font-bold uppercase tracking-wider">
-                        Computer Live GPS
-                      </div>
-                      <div className="text-[#162347] font-bold">
-                        LAT: <span className="text-sky-700">{baseLocation[0].toFixed(6)}° N</span>
-                      </div>
-                      <div className="text-[#162347] font-bold">
-                        LNG: <span className="text-sky-700">{baseLocation[1].toFixed(6)}° E</span>
-                      </div>
-                      {computerAccuracy && (
-                        <div className="text-[10px] text-slate-500 font-sans">
-                          Device Precision: ±{computerAccuracy}m
-                        </div>
-                      )}
-                    </div>
                     <div className="text-[10px] text-slate-500 font-sans">
-                      Ground Control Station Active • Targets co-located
+                      Ground Control Station Active
                     </div>
                   </div>
                 </Popup>
               </Marker>
             )}
 
-            {/* Real-Time Live Detected Person Marker (active while camera detects a person and robot location is detected) */}
-            {detectionStatus.personDetected && robotLocation && (
+            {/* Real-Time Live Detected Person Marker — pinned to the FROZEN snapshot location */}
+            {(detectionStatus.personDetected || frozenDetectionLocation) && (frozenDetectionLocation || robotLocation) && (
               <Fragment key="live-person-marker">
-                <Circle
-                  center={robotLocation}
-                  radius={22}
-                  pathOptions={{
-                    color: '#EF4444',
-                    fillColor: '#EF4444',
-                    fillOpacity: 0.35,
-                    weight: 2,
-                    dashArray: '4 4',
-                  }}
-                />
-                <Marker position={robotLocation} icon={livePersonIcon}>
+                <Marker position={(frozenDetectionLocation || robotLocation)!} icon={livePersonIcon}>
                   <Popup>
-                    <div className="font-mono text-xs space-y-1.5 min-w-[220px]">
+                    <div className="font-mono text-xs space-y-1.5 min-w-[200px]">
                       <div className="flex items-center justify-between border-b pb-1">
                         <span className="font-bold text-rose-600 flex items-center gap-1">
-                          🚨 LIVE TARGET DETECTED
+                          🚨 PERSON DETECTED
                         </span>
-                        <span className="bg-rose-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded animate-pulse">
-                          ACTIVE
+                        <span className="bg-rose-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">
+                          FIXED
                         </span>
                       </div>
-
-                      <div className="bg-rose-50 border border-rose-200 p-2 rounded space-y-1 text-[11px]">
-                        <div className="text-rose-800 font-sans text-[10px] uppercase font-bold tracking-wider">
-                          Target GPS Coordination (Live)
-                        </div>
-                        <div className="text-[#162347] font-bold">
-                          LAT: <span className="text-rose-600 font-mono">{robotLocation[0].toFixed(6)}° N</span>
-                        </div>
-                        <div className="text-[#162347] font-bold">
-                          LNG: <span className="text-rose-600 font-mono">{robotLocation[1].toFixed(6)}° E</span>
-                        </div>
-                        <div className="text-[10px] text-slate-500 font-sans italic">
-                          (Co-located at FloodScout-01 Vessel)
-                        </div>
-                      </div>
-
                       <div className="text-[10px] text-slate-600 flex items-center justify-between pt-0.5">
                         <span>People in frame: <strong className="text-rose-600">{detectionStatus.personCount}</strong></span>
                         <span>Score: <strong className="text-emerald-700">{(detectionStatus.highestConfidence).toFixed(2)}</strong></span>
                       </div>
-
                       {(detectionApi.activeIncident || manifestPersons[0]) && (
                         <button
                           onClick={() => {
@@ -1479,7 +1441,7 @@ function PanelContent({
                           className="w-full mt-2 bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-mono font-bold py-1.5 px-3 rounded flex items-center justify-center gap-1.5 cursor-pointer transition-colors shadow-xs active:scale-98"
                         >
                           <Eye size={13} />
-                          <span>Inspect Live Target</span>
+                          <span>Inspect Target</span>
                         </button>
                       )}
                     </div>
@@ -1492,19 +1454,9 @@ function PanelContent({
             {manifestPersons.map(p => (
               p.location && (
                 <Fragment key={`person-marker-${p.personId}`}>
-                  <Circle
-                    center={p.location}
-                    radius={18}
-                    pathOptions={{
-                      color: '#EF4444',
-                      fillColor: '#EF4444',
-                      fillOpacity: 0.25,
-                      weight: 1.5,
-                    }}
-                  />
                   <Marker position={p.location} icon={getVictimMarkerIcon('Detected')}>
                     <Popup>
-                      <div className="font-mono text-xs space-y-1.5 min-w-[220px]">
+                      <div className="font-mono text-xs space-y-1.5 min-w-[200px]">
                         <div className="flex items-center justify-between border-b pb-1">
                           <span className="font-bold text-rose-600 flex items-center gap-1">
                             🚨 PERSON DETECTED
@@ -1512,18 +1464,6 @@ function PanelContent({
                           <span className="bg-rose-100 text-rose-800 text-[10px] font-bold px-1.5 py-0.5 rounded">
                             #{p.personId}
                           </span>
-                        </div>
-
-                        <div className="bg-rose-50 border border-rose-200 p-2 rounded space-y-1 text-[11px]">
-                          <div className="text-rose-800 font-sans text-[10px] uppercase font-bold tracking-wider">
-                            Target GPS Coordination
-                          </div>
-                          <div className="text-[#162347] font-bold">
-                            LAT: <span className="text-rose-600 font-mono">{p.location[0].toFixed(6)}° N</span>
-                          </div>
-                          <div className="text-[#162347] font-bold">
-                            LNG: <span className="text-rose-600 font-mono">{p.location[1].toFixed(6)}° E</span>
-                          </div>
                         </div>
 
                         {p.cropUrl && (
@@ -1624,17 +1564,7 @@ function PanelContent({
                       <div className={`text-[10px] font-sans font-bold uppercase tracking-wider ${
                         isPersonDetectedAtRobot ? 'text-rose-800' : 'text-cyan-900'
                       }`}>
-                        {isPersonDetectedAtRobot ? 'Victim Flagged at Coordinates' : 'Live Real-Time Telemetry'}
-                      </div>
-                      <div className="text-[#162347] font-bold">
-                        LAT: <span className={isPersonDetectedAtRobot ? 'text-rose-600 font-mono' : 'text-cyan-700 font-mono'}>
-                          {robotLocation[0].toFixed(6)}° N
-                        </span>
-                      </div>
-                      <div className="text-[#162347] font-bold">
-                        LNG: <span className={isPersonDetectedAtRobot ? 'text-rose-600 font-mono' : 'text-cyan-700 font-mono'}>
-                          {robotLocation[1].toFixed(6)}° E
-                        </span>
+                        {isPersonDetectedAtRobot ? 'Person Detected — Marker Frozen' : 'Live Real-Time Telemetry'}
                       </div>
                       <div className="text-[10px] text-slate-600 flex justify-between pt-0.5">
                         <span>Speed: {robotSpeed} km/h</span>
@@ -1677,67 +1607,6 @@ function PanelContent({
               <span className="text-[9px] text-slate-500 font-sans block">
                 Aim water-level camera (GPIO 18 Pan • GPIO 19 Tilt)
               </span>
-            </div>
-
-            {/* Inline ESP32 IP Configuration Bar */}
-            <div className="w-full bg-[#FAF7F2] border border-[#E6DFD5] rounded-lg p-2 font-mono text-[10px] space-y-1.5 shadow-2xs">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-[#162347] flex items-center gap-1">
-                  <Wifi size={11} className={panTilt.connected ? "text-emerald-600" : "text-amber-600"} />
-                  ESP32 Controller IP:
-                </span>
-                <span className={`px-1.5 py-0.2 rounded font-bold text-[9px] ${
-                  panTilt.connected
-                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                    : 'bg-rose-100 text-rose-800 border border-rose-300'
-                }`}>
-                  {panTilt.connected ? 'ONLINE' : 'OFFLINE'}
-                </span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <input
-                  type="text"
-                  defaultValue={panTilt.esp32Url.replace(/^https?:\/\//, '')}
-                  key={panTilt.esp32Url}
-                  placeholder="e.g. 10.185.112.76"
-                  className="flex-1 bg-white border border-[#E6DFD5] rounded px-2 py-1 text-[10px] text-[#162347] focus:outline-none focus:ring-1 focus:ring-[#162347]"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      const val = (e.target as HTMLInputElement).value.trim();
-                      if (val) {
-                        panTilt.setEsp32Url(val);
-                        panTilt.fetchStatus();
-                      }
-                    }
-                  }}
-                  id="esp32-arm-ip-input"
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    const el = document.getElementById('esp32-arm-ip-input') as HTMLInputElement | null;
-                    if (el && el.value.trim()) {
-                      panTilt.setEsp32Url(el.value.trim());
-                      panTilt.fetchStatus();
-                    }
-                  }}
-                  className="px-2 py-1 rounded bg-[#162347] hover:bg-[#243452] text-white font-bold text-[9px] cursor-pointer transition-colors active:scale-95"
-                  title="Apply new IP and recheck ESP32 status"
-                >
-                  SET IP
-                </button>
-                <button
-                  type="button"
-                  onClick={() => panTilt.fetchStatus()}
-                  className="px-2 py-1 rounded bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-[9px] cursor-pointer transition-colors active:scale-95"
-                  title="Ping ESP32 now"
-                >
-                  PING
-                </button>
-              </div>
-              <div className="text-[8.5px] text-slate-500 font-sans">
-                Check phone hotspot connected devices or Arduino serial monitor for the ESP32 IP.
-              </div>
             </div>
 
             {/* D-Pad for Camera Servos */}
@@ -1798,83 +1667,6 @@ function PanelContent({
               <div />
             </div>
 
-            {/* ESP32 Wi-Fi Pan/Tilt Connection Status & Center Reset */}
-            <div className="w-full flex items-center justify-between px-3 py-1.5 rounded bg-[#FAF7F2] border border-[#E6DFD5] font-mono text-[10px]">
-              <div className="flex items-center gap-1.5 text-[#162347]">
-                <Compass size={12} className="text-[#162347]" />
-                <span className="font-semibold uppercase tracking-wider text-[9px] text-[#162347]/70">Pan/Tilt</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const input = window.prompt(
-                      `Enter ESP32 IP address or URL:\n(e.g., 192.168.0.50 or http://192.168.0.50)`,
-                      panTilt.esp32Url
-                    );
-                    if (input && input.trim()) {
-                      panTilt.setEsp32Url(input.trim());
-                      panTilt.fetchStatus();
-                    }
-                  }}
-                  className="flex items-center gap-1 cursor-pointer focus:outline-none"
-                  title={`ESP32 URL: ${panTilt.esp32Url} (Click to change IP)`}
-                >
-                  {panTilt.connected ? (
-                    <span className="font-bold text-xs text-emerald-800 bg-emerald-100/70 border border-emerald-300 px-1.5 py-0.5 rounded flex items-center gap-1 hover:bg-emerald-200/80 transition-colors">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                      ESP32: Connected
-                    </span>
-                  ) : (
-                    <span className="text-[10px] font-bold text-amber-800 bg-amber-100 border border-amber-300 px-1.5 py-0.5 rounded flex items-center gap-1 hover:bg-amber-200 transition-colors">
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                      ESP32: Offline
-                      <Wifi size={10} className="text-amber-700/80 ml-0.5" />
-                    </span>
-                  )}
-                </button>
-              </div>
-              <div className="flex items-center gap-1.5">
-                {panTilt.isProcessing && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-ping" title="Sending command..." />
-                )}
-                {panTilt.connected ? (
-                  <button
-                    type="button"
-                    onClick={() => panTilt.sendCommand('center')}
-                    className="px-2 py-0.5 rounded bg-[#162347] hover:bg-[#243452] text-white text-[9px] font-bold transition-all active:scale-95 cursor-pointer"
-                    title="Reset Sonar to Neutral / Center"
-                  >
-                    CENTER
-                  </button>
-                ) : (
-                  <span className="text-[9px] text-slate-400 font-mono italic">
-                    Offline
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Graceful Pan/Tilt Error Message */}
-            {panTilt.error && (
-              <div
-                onClick={() => {
-                  const input = window.prompt(
-                    `Enter ESP32 IP address or URL:\n(e.g., 192.168.0.50 or http://192.168.0.50)`,
-                    panTilt.esp32Url
-                  );
-                  if (input && input.trim()) {
-                    panTilt.setEsp32Url(input.trim());
-                    panTilt.fetchStatus();
-                  }
-                }}
-                className="w-full text-center text-[10px] font-mono text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1 animate-fadeIn cursor-pointer hover:bg-amber-100 transition-colors"
-                title="Click to configure ESP32 IP address"
-              >
-                <span>{panTilt.error} <span className="underline font-semibold ml-1">(Click to set IP)</span></span>
-              </div>
-            )}
-
-            {/* Dual Thruster & Motor Movement Telemetry */}
-            <MotorTelemetryCard />
           </div>
         </div>
       );
@@ -2850,7 +2642,7 @@ export default function Dashboard() {
                   type="text"
                   value={esp32Input}
                   onChange={(e) => setEsp32Input(e.target.value)}
-                  placeholder="e.g. http://10.185.112.106"
+                  placeholder="e.g. http://10.133.81.149"
                   className="w-full bg-[#0E172C] border border-[#24355E] rounded-lg px-3 py-2 text-white font-mono text-xs focus:outline-none focus:border-[#BED6EE]"
                 />
                 <p className="text-[10px] text-white/50">

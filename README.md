@@ -20,10 +20,10 @@
 
 | Resource | Link |
 |---|---|
-| 📄 Documentation | [View Documentation](https://drive.google.com/file/d/1i0qgKs-Tq0rFsNv8o017sZ4CR9GrnQFs/view?usp=sharing) |
+| 📄 Proposal | [View Documentation](https://drive.google.com/file/d/1oDCYaznCDXtijMTfGRWJKIA5V9QmqysH/view?usp=drive_link) |
 | 🎥 Demo Video | [Watch Demo Video](https://drive.google.com/file/d/1w0KB5JXJXWeRGugl_taHCY_Cb30htfpa/view?usp=drive_link) |
-| 💰 Financial Document | [View Financial Document](https://drive.google.com/file/d/1B4nQ1RkrxqchXpL9OTO9Ee8-ohZ8cPHv/view?usp=sharing) |
-| 📝 Nexus Log | [View Nexus Log](https://drive.google.com/file/d/1B4nQ1RkrxqchXpL9OTO9Ee8-ohZ8cPHv/view?usp=sharing) |
+| 💰 Financial Document | [View Financial Document](https://drive.google.com/file/d/1vtnzGo-7wIBIDdhyJ4wWmR2MeXc8u_d5/view?usp=sharing) |
+| 📝 Nexus Log | [View Nexus Log](https://drive.google.com/file/d/1MX0LrWWwvtHg_kmQjgxDpz4evfgvJAmV/view?usp=drive_link) |
 | 🌐 Live Website | [Visit FloodScout Dashboard](https://flood-scout-ecru.vercel.app/) |
 
 </div>

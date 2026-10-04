@@ -21,7 +21,7 @@
 | Resource | Link |
 |---|---|
 | 📄 Proposal | [View Documentation](https://drive.google.com/file/d/1oDCYaznCDXtijMTfGRWJKIA5V9QmqysH/view?usp=drive_link) |
-| 🎥 Demo Video | [Watch Demo Video](https://drive.google.com/file/d/1w0KB5JXJXWeRGugl_taHCY_Cb30htfpa/view?usp=drive_link) |
+| 🎥 Demo Video | [Watch Demo Video](https://www.youtube.com/watch?v=gN4hswfjLjo) |
 | 💰 Financial Document | [View Financial Document](https://drive.google.com/file/d/1vtnzGo-7wIBIDdhyJ4wWmR2MeXc8u_d5/view?usp=sharing) |
 | 📝 Nexus Log | [View Nexus Log](https://drive.google.com/file/d/1MX0LrWWwvtHg_kmQjgxDpz4evfgvJAmV/view?usp=drive_link) |
 | 🌐 Live Website | [Visit FloodScout Dashboard](https://flood-scout-ecru.vercel.app/) |

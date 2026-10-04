@@ -21,7 +21,6 @@ import {
   DndContext,
   pointerWithin,
   KeyboardSensor,
-  PointerSensor,
   TouchSensor,
   MouseSensor,
   useSensor,

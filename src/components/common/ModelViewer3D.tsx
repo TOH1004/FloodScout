@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { RotateCw, Play, Pause, Compass, Maximize2 } from 'lucide-react';
+import { RotateCw, Play, Pause, Compass } from 'lucide-react';
 
 interface ModelViewer3DProps {
   modelUrl?: string;
@@ -20,7 +20,6 @@ export const ModelViewer3D: React.FC<ModelViewer3DProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
   const [loadProgress, setLoadProgress] = useState(0);
-  const [error, setError] = useState<string | null>(null);
   const [isRotating, setIsRotating] = useState(true);
 
   // References to three objects for interaction
@@ -183,7 +182,6 @@ export const ModelViewer3D: React.FC<ModelViewer3DProps> = ({
       },
       (err) => {
         console.error('Error loading 3D model:', err);
-        setError('Failed to load 3D model. Falling back.');
         setLoading(false);
       }
     );

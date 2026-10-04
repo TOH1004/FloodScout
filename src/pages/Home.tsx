@@ -3,8 +3,6 @@ import { Link } from 'react-router-dom';
 import {
   ArrowRight,
   ArrowUpRight,
-  Wifi,
-  Battery,
   Navigation,
   Eye,
   Radio,
@@ -14,9 +12,6 @@ import {
   Waves,
   Menu,
   X,
-  Cpu,
-  Activity,
-  Crosshair,
 } from 'lucide-react';
 
 import FloodScoutLogo from '../components/common/FloodScoutLogo';

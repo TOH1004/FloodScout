@@ -62,6 +62,7 @@ Drones are effective for rapid wide-area assessment, but aerial cameras can be a
 ---
 
 ## 2. Proposed Solution
+![FloodScout Robot](assets/robot.jpg)
 
 ### What Is FloodScout?
 

@@ -3,7 +3,8 @@
 # 🌊 FloodScout
 ### Compact Flood Search-and-Rescue Reconnaissance Vehicle
 
-**Team:** Toh Shee Thong · Yeat Jing Rong · Chew Jia Sheng · Dawson Chan Shang Lin  
+**Team:** Toh Shee Thong · Yeat Jing Rong · Chew Jia Sheng · Dawson Chan Shang Lin
+**Track:** Global Impact
 **Problem Statement:** Flood Search-and-Rescue / Victim Localisation
 
 <br>

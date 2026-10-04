@@ -882,14 +882,14 @@ FloodScout uses two separate battery branches with a shared ground reference.
           ESC #1                ESC #2
              │                     │
         Left Thruster        Right Thruster
-             │
-          LM2596 #1
+             │                     |
+          LM2596 #1 ────────────────
              │
        ESP32 #1 + Receiver
 
 
              ┌─────────────────────┐
-             │ 2S 7.4V Li-ion     │
+             │ 2S 7.4V Li-ion      │
              └──────────┬──────────┘
                         │
               Camera / Sensor Branch

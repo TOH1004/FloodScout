@@ -101,7 +101,8 @@ export function useObstacleSensor(): ObstacleSensorState {
 
   const isObstacleDetected = distanceM <= warningThresholdM;
 
-  // Poll ESP32 hardware directly and via backend proxy — NO MOCK SIMULATION
+
+  // Poll ESP32 hardware directly and via backend proxy
   useEffect(() => {
     let isMounted = true;
     const backendBase = getBackendBaseUrl();
@@ -196,7 +197,7 @@ export function useObstacleSensor(): ObstacleSensorState {
       }
     };
 
-    // Poll every 500ms for live distance updates
+    // Poll every 350ms for live distance updates
     pollHardware();
     const interval = setInterval(pollHardware, 350);
 
@@ -211,6 +212,7 @@ export function useObstacleSensor(): ObstacleSensorState {
       window.removeEventListener('floodscout_esp32_url_changed', handleUrlChange);
     };
   }, []);
+
 
   // Record history & trigger audio from real measurements
   useEffect(() => {

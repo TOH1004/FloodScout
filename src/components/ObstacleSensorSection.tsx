@@ -116,7 +116,7 @@ export function ObstacleSensorSection() {
             <Radar size={16} />
           </div>
           <div>
-            <h3 className="font-editorial-serif font-bold text-sm text-[#162347] leading-none flex items-center gap-2">
+            <h3 className="font-sans font-bold text-sm text-[#162347] leading-none flex items-center gap-2">
               <span>Front Obstacle &amp; Proximity Sensor</span>
               {isHardwareConnected ? (
                 <button
@@ -240,7 +240,7 @@ export function ObstacleSensorSection() {
         </div>
 
         <div className="text-right shrink-0 font-mono">
-          <div className="text-3xl font-black font-editorial-serif leading-none tracking-tight">
+          <div className="text-3xl font-black font-sans leading-none tracking-tight">
             {distanceCm > 0 && distanceCm <= 450 ? distanceCm.toFixed(1) : '> 400'} <span className="text-sm font-mono font-normal">cm</span>
           </div>
           <div className="text-[10px] text-slate-500 font-bold mt-0.5">
@@ -409,7 +409,7 @@ export function ObstacleSensorSection() {
               <span className="text-[9px] font-mono uppercase font-bold text-slate-500 block mb-0.5">
                 Front Distance
               </span>
-              <div className="font-editorial-serif font-black text-2xl text-[#162347] leading-none">
+              <div className="font-sans font-black text-2xl text-[#162347] leading-none">
                 {distanceCm > 0 && distanceCm <= 450 ? distanceCm.toFixed(1) : '> 400'} <span className="text-xs font-mono font-normal">cm</span>
               </div>
               <span className="text-[10px] font-mono text-slate-500 mt-1 block">
@@ -443,7 +443,7 @@ export function ObstacleSensorSection() {
               <span className="text-[9px] font-mono uppercase font-bold text-slate-500 block mb-0.5">
                 Ping Frequency
               </span>
-              <div className="font-editorial-serif font-bold text-lg text-sky-800 leading-none">
+              <div className="font-sans font-bold text-lg text-sky-800 leading-none">
                 {pingRateHz} <span className="text-xs font-mono font-normal">Hz</span>
               </div>
               <span className="text-[10px] font-mono text-slate-500 mt-1 block">

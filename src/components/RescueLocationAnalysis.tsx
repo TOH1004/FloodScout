@@ -928,7 +928,7 @@ export function RescueLocationAnalysis({
                 <div className="text-[9px] font-bold tracking-wider uppercase text-slate-500 mb-1">
                   Line of Sight Trace
                 </div>
-                <div className="font-editorial-serif font-bold text-xl text-[#162347]">
+                <div className="font-sans font-bold text-xl text-[#162347]">
                   {distPcToRobotKm !== null ? (distPcToRobotKm * 1000).toFixed(0) : '--'} <span className="text-xs font-mono font-normal">m</span>
                 </div>
                 <div className="text-[9px] font-mono text-slate-500 mt-1">
@@ -940,7 +940,7 @@ export function RescueLocationAnalysis({
                 <div className="text-[9px] font-bold tracking-wider uppercase text-slate-500 mb-1">
                   Azimuth Bearing
                 </div>
-                <div className="font-editorial-serif font-bold text-xl text-sky-800">
+                <div className="font-sans font-bold text-xl text-sky-800">
                   {bearingPcToRobot !== null ? `${bearingPcToRobot}° ` : '-- '}
                   <span className="text-xs font-mono font-normal font-bold">({compassPcToRobot})</span>
                 </div>
@@ -953,7 +953,7 @@ export function RescueLocationAnalysis({
                 <div className="text-[9px] font-bold tracking-wider uppercase text-slate-500 mb-1">
                   Total Travelled Trail
                 </div>
-                <div className="font-editorial-serif font-bold text-xl text-cyan-800">
+                <div className="font-sans font-bold text-xl text-cyan-800">
                   {activeMission.distanceTravelledKm.toFixed(2)} <span className="text-xs font-mono font-normal">km</span>
                 </div>
                 <div className="text-[9px] font-mono text-slate-500 mt-1">
@@ -965,7 +965,7 @@ export function RescueLocationAnalysis({
                 <div className="text-[9px] font-bold tracking-wider uppercase text-slate-500 mb-1">
                   RF Uplink Quality
                 </div>
-                <div className="font-editorial-serif font-bold text-xl text-emerald-800">
+                <div className="font-sans font-bold text-xl text-emerald-800">
                   {signalDbm} <span className="text-xs font-mono font-normal">dBm</span>
                 </div>
                 <div className="text-[9px] font-mono text-emerald-700 mt-1">

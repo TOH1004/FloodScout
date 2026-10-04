@@ -15,6 +15,7 @@ import {
   Terminal,
   Grid,
   ListFilter,
+  ArrowLeft,
 } from "lucide-react";
 interface ComponentItem {
   id: string;
@@ -363,7 +364,7 @@ export default function Technology() {
     }
   };
   return (
-    <div className="w-full bg-[#ECECED] text-[#11141D] min-h-screen relative font-sans selection:bg-[#11141D] selection:text-[#FAF7F2] pb-24 overflow-x-hidden">
+    <div className="w-full bg-[#ECECED] text-[#11141D] min-h-screen relative font-sans selection:bg-[#11141D] selection:text-[#F3ECDE] pb-24 overflow-x-hidden">
       {" "}
       {/* Precision Drafting Grid Overlay */}{" "}
       <div
@@ -380,13 +381,19 @@ export default function Technology() {
         <div className="flex flex-wrap items-center justify-between gap-4 pb-6 mb-8 border-b border-[#D2D5DC] font-mono text-[10px] sm:text-[11px] tracking-[0.25em] text-[#555E6D] uppercase">
           {" "}
           <div className="flex items-center gap-3">
-            {" "}
-            <span className="w-2.5 h-2.5 bg-[#11141D] inline-block"></span>{" "}
-            <span>SYSTEM SPECIFICATION // REV 2.4</span>{" "}
-            <span className="hidden sm:inline text-[#9DA4B0]">|</span>{" "}
+            <Link
+              to="/"
+              className="inline-flex items-center gap-1.5 bg-[#183451] hover:bg-[#1f2f5c] text-white text-[11px] font-bold tracking-wider px-3.5 py-1.5 rounded-full transition-all active:scale-95 shadow-sm group mr-2"
+            >
+              <ArrowLeft size={13} className="group-hover:-translate-x-0.5 transition-transform" />
+              <span>Back</span>
+            </Link>
+            <span className="w-2.5 h-2.5 bg-[#11141D] inline-block"></span>
+            <span>SYSTEM SPECIFICATION // REV 2.4</span>
+            <span className="hidden sm:inline text-[#9DA4B0]">|</span>
             <span className="hidden sm:inline">
               AUTONOMOUS SURFACE VEHICLE (USV)
-            </span>{" "}
+            </span>
           </div>{" "}
           <div className="flex items-center gap-4">
             {" "}
@@ -778,7 +785,7 @@ export default function Technology() {
                 <div
                   key={item.id}
                   id={`part-${item.id}`}
-                  className={`border bg-white transition-all duration-300 flex flex-col justify-between relative group ${isHighlighted ? "border-[#11141D] ring-2 ring-[#11141D] shadow-lg bg-[#FAF7F2]" : "border-[#CBD0D9] hover:border-black hover:shadow-md"}`}
+                  className={`border bg-white transition-all duration-300 flex flex-col justify-between relative group ${isHighlighted ? "border-[#11141D] ring-2 ring-[#11141D] shadow-lg bg-[#F3ECDE]" : "border-[#CBD0D9] hover:border-black hover:shadow-md"}`}
                 >
                   {" "}
                   {/* Card CAD Border Header */}{" "}

@@ -5,7 +5,7 @@ import {
   Camera, X, Cpu, Target, FileText,
   GripVertical, Eye, User, Users, ArrowUpDown,
   Navigation, Laptop, Maximize2, Minimize2, Wifi, Settings, Check, RefreshCw, Globe, Edit3, Radio,
-  History as HistoryIcon, AlertTriangle, Radar
+  History as HistoryIcon, AlertTriangle, Radar, Layers, ChevronDown
 } from 'lucide-react';
 import { useDetectionApi, type RescueIncident } from '../hooks/useDetectionApi';
 import { RescueLocationAnalysis } from '../components/RescueLocationAnalysis';
@@ -15,6 +15,7 @@ import { IncidentModal } from '../components/IncidentModal';
 import { CameraSettingsPanel } from '../components/CameraSettingsPanel';
 import { WifiCameraModal } from '../components/WifiCameraModal';
 import { extractCameraHost } from '../config/camera';
+import FloodScoutLogo from '../components/common/FloodScoutLogo';
 import { useMotorTelemetry } from '../hooks/useMotorTelemetry';
 import {
   DndContext,
@@ -43,12 +44,12 @@ import {
   Panel,
   Separator as PanelResizeHandle,
 } from 'react-resizable-panels';
-import { MapContainer, TileLayer, Marker, Popup, Circle, useMapEvents, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { useRescue } from '../context/RescueContext';
 import type { VictimStatus } from '../context/RescueContext';
-import { type LayoutNode, type PanelId, removeNode, insertNode, hasPanel, addDockPanel } from '../utils/layoutTree';
+import { type LayoutNode, type PanelId, removeNode, insertNode, hasPanel, addDockPanel, DEFAULT_MISSION_LAYOUT } from '../utils/layoutTree';
 export type { PanelId, LayoutNode };
 
 // ─── Map Icons ────────────────────────────────────────────────────────────────
@@ -106,10 +107,6 @@ const getRobotIcon = (personDetected: boolean) => {
   });
 };
 
-function MapClickHandler({ onMapClick }: { onMapClick: (lat: number, lng: number) => void }) {
-  useMapEvents({ click: (e) => onMapClick(e.latlng.lat, e.latlng.lng) });
-  return null;
-}
 
 function MapResizerAndController({
   center,
@@ -190,7 +187,7 @@ function LocateControl({
 }) {
   const map = useMap();
   return (
-    <div className="leaflet-top leaflet-right" style={{ marginTop: '55px', marginRight: '10px', zIndex: 999 }}>
+    <div className="leaflet-bottom leaflet-left" style={{ marginBottom: '20px', marginLeft: '10px', zIndex: 999 }}>
       <div className="leaflet-control">
         <button
           onClick={async (e) => {
@@ -213,6 +210,86 @@ function LocateControl({
     </div>
   );
 }
+
+function TileSelectorControl({
+  mapTileSource,
+  setMapTileSource,
+}: {
+  mapTileSource: 'google' | 'google-hybrid' | 'osm';
+  setMapTileSource: (src: 'google' | 'google-hybrid' | 'osm') => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen]);
+
+  const tileLabels: Record<'google' | 'google-hybrid' | 'osm', string> = {
+    google: 'Google Maps',
+    'google-hybrid': 'Google Hybrid',
+    osm: 'OSM',
+  };
+
+  return (
+    <div
+      ref={containerRef}
+      className="leaflet-top leaflet-right pointer-events-auto"
+      style={{ marginTop: '55px', marginRight: '10px', zIndex: 999 }}
+      onClick={(e) => e.stopPropagation()}
+      onDoubleClick={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      <div className="leaflet-control relative">
+        <button
+          onClick={() => setIsOpen((prev) => !prev)}
+          className="bg-white/95 backdrop-blur-md hover:bg-sky-50 text-[#183451] border border-slate-300 rounded-md px-2.5 py-1.5 shadow-md flex items-center gap-1.5 transition-all cursor-pointer font-mono font-bold text-xs active:scale-95 group pointer-events-auto"
+          title="Select Map Tile Layer"
+        >
+          <Layers size={14} className="text-sky-600 group-hover:scale-110 transition-transform" />
+          <span>{tileLabels[mapTileSource]}</span>
+          <ChevronDown
+            size={12}
+            className={`text-slate-500 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+          />
+        </button>
+
+        {isOpen && (
+          <div className="absolute right-0 mt-1 w-36 bg-white/95 backdrop-blur-md rounded-md shadow-lg border border-slate-200 py-1 text-xs font-mono font-bold z-[1000] flex flex-col overflow-hidden">
+            {(['google', 'google-hybrid', 'osm'] as const).map((source) => (
+              <button
+                key={source}
+                onClick={() => {
+                  setMapTileSource(source);
+                  setIsOpen(false);
+                }}
+                className={`w-full text-left px-3 py-1.5 flex items-center justify-between transition-colors cursor-pointer ${
+                  mapTileSource === source
+                    ? 'bg-[#183451] text-white'
+                    : 'text-slate-700 hover:bg-sky-50'
+                }`}
+              >
+                <span>{tileLabels[source]}</span>
+                {mapTileSource === source && <Check size={12} className="text-white" />}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface PanelDef { id: PanelId; label: string; icon: React.ElementType }
@@ -245,8 +322,8 @@ function DockButton({
       style={{ opacity: isDragging ? 0.4 : 1, cursor: isDragging ? 'grabbing' : 'grab' }}
       className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[10px] uppercase tracking-widest font-bold whitespace-nowrap transition-all select-none ${
         isActive
-          ? 'bg-[#162347] text-white shadow'
-          : 'bg-[#FAF7F2] text-[#162347]/60 hover:bg-[#E6DFD5] border border-[#E6DFD5]'
+          ? 'bg-[#183451] text-white shadow'
+          : 'bg-[#F3ECDE] text-[#183451]/60 hover:bg-[#E6DFD5] border border-[#E6DFD5]'
       }`}
     >
       <def.icon size={12} /> {def.label}
@@ -288,42 +365,42 @@ function SortablePanel({
     >
       {/* Drop indicators for the 4 zones */}
       {dropPosition === 'top' && (
-        <div className="absolute top-0 left-0 right-0 h-1.5 bg-[#162347] z-50 rounded-t-sm pointer-events-none" />
+        <div className="absolute top-0 left-0 right-0 h-1.5 bg-[#183451] z-50 rounded-t-sm pointer-events-none" />
       )}
       {dropPosition === 'bottom' && (
-        <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-[#162347] z-50 rounded-b-sm pointer-events-none" />
+        <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-[#183451] z-50 rounded-b-sm pointer-events-none" />
       )}
       {dropPosition === 'left' && (
-        <div className="absolute top-0 bottom-0 left-0 w-1.5 bg-[#162347] z-50 rounded-l-sm pointer-events-none" />
+        <div className="absolute top-0 bottom-0 left-0 w-1.5 bg-[#183451] z-50 rounded-l-sm pointer-events-none" />
       )}
       {dropPosition === 'right' && (
-        <div className="absolute top-0 bottom-0 right-0 w-1.5 bg-[#162347] z-50 rounded-r-sm pointer-events-none" />
+        <div className="absolute top-0 bottom-0 right-0 w-1.5 bg-[#183451] z-50 rounded-r-sm pointer-events-none" />
       )}
-      <div className="bg-[#FAF7F2] px-3 py-2 border-b border-[#E6DFD5] flex items-center justify-between shrink-0 select-none">
-        <div className="flex items-center gap-2 text-[#162347]">
+      <div className="bg-[#F3ECDE] px-3 py-2 border-b border-[#E6DFD5] flex items-center justify-between shrink-0 select-none">
+        <div className="flex items-center gap-2 text-[#183451]">
           {/* Drag handle */}
           <button
             {...attributes}
             {...listeners}
-            className="cursor-grab active:cursor-grabbing text-[#162347]/40 hover:text-[#162347] touch-none p-0.5"
+            className="cursor-grab active:cursor-grabbing text-[#183451]/40 hover:text-[#183451] touch-none p-0.5"
             title="Drag to reorder"
           >
             <GripVertical size={15} />
           </button>
           <def.icon size={13} />
-          <h3 className="font-editorial-serif text-sm font-bold tracking-widest uppercase">{def.label}</h3>
+          <h3 className="font-sans text-xs font-bold tracking-widest uppercase text-[#183451]">{def.label}</h3>
         </div>
         <div className="flex items-center gap-1">
           {onMaximize && (
             <button
               onClick={onMaximize}
-              className="text-[#162347]/40 hover:text-[#162347] transition-colors p-1 cursor-pointer"
+              className="text-[#183451]/40 hover:text-[#183451] transition-colors p-1 cursor-pointer"
               title={isMaximized ? "Restore split layout" : "Maximize panel full width"}
             >
               {isMaximized ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
             </button>
           )}
-          <button onClick={onClose} className="text-[#162347]/40 hover:text-rose-600 transition-colors p-1 cursor-pointer">
+          <button onClick={onClose} className="text-[#183451]/40 hover:text-rose-600 transition-colors p-1 cursor-pointer">
             <X size={15} />
           </button>
         </div>
@@ -339,7 +416,7 @@ function SortablePanel({
 function ResizeHandle({ orientation = 'horizontal' }: { orientation?: 'horizontal' | 'vertical' }) {
   return (
     <PanelResizeHandle
-      className={`group relative flex items-center justify-center bg-[#E6DFD5] hover:bg-[#BED6EE] data-[separator=active]:bg-[#162347] transition-colors duration-150 shrink-0 select-none ${
+      className={`group relative flex items-center justify-center bg-[#E6DFD5] hover:bg-[#D4AF83] data-[separator=active]:bg-[#183451] transition-colors duration-150 shrink-0 select-none ${
         orientation === 'horizontal'
           ? 'w-2.5 h-full cursor-col-resize'
           : 'h-2.5 w-full cursor-row-resize'
@@ -349,7 +426,7 @@ function ResizeHandle({ orientation = 'horizontal' }: { orientation?: 'horizonta
         orientation === 'horizontal' ? 'flex-col' : 'flex-row'
       }`}>
         {[0,1,2].map(i => (
-          <div key={i} className="w-1.5 h-1.5 rounded-full bg-[#162347]/30 group-hover:bg-[#162347]/70 group-data-[separator=active]:bg-white transition-colors" />
+          <div key={i} className="w-1.5 h-1.5 rounded-full bg-[#183451]/30 group-hover:bg-[#183451]/70 group-data-[separator=active]:bg-white transition-colors" />
         ))}
       </div>
     </PanelResizeHandle>
@@ -398,10 +475,9 @@ function PanelContent({
 
   const [aiBoxes, setAiBoxes] = useState(true);
   const [crosshair, setCrosshair] = useState(true);
-  const [waypoint, setWaypoint] = useState<[number, number] | null>(null);
   const [localThreshold, setLocalThreshold] = useState(50);
   const [victimSortBy, setVictimSortBy] = useState<'person' | 'time'>('person');
-  const [mapTileSource, setMapTileSource] = useState<'google' | 'google-hybrid' | 'carto' | 'osm'>('google');
+  const [mapTileSource, setMapTileSource] = useState<'google' | 'google-hybrid' | 'osm'>('google');
   const [showWifiModal, setShowWifiModal] = useState(false);
   const [directFeedError, setDirectFeedError] = useState(false);
   const [inlineCameraIpInput, setInlineCameraIpInput] = useState('');
@@ -582,7 +658,7 @@ function PanelContent({
                   <div className="flex items-center gap-2 pt-1">
                     <button
                       onClick={() => setShowWifiModal(true)}
-                      className="px-3 py-1.5 rounded bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold font-mono transition-all flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95"
+                      className="px-3 py-1.5 rounded bg-[#183451] hover:bg-[#1d3a5f] text-white text-xs font-bold font-mono transition-all flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95"
                     >
                       <Wifi size={13} /> Configure Wi-Fi IP
                     </button>
@@ -646,7 +722,7 @@ function PanelContent({
                         await setCameraStreamUrl(target);
                       }}
                       disabled={isUpdatingCameraUrl}
-                      className="bg-sky-600 hover:bg-sky-500 text-white px-3 py-1.5 rounded text-xs font-bold font-mono transition-all cursor-pointer flex items-center gap-1 active:scale-95 disabled:opacity-50"
+                      className="bg-[#183451] hover:bg-[#1d3a5f] text-white px-3 py-1.5 rounded text-xs font-bold font-mono transition-all cursor-pointer flex items-center gap-1 active:scale-95 disabled:opacity-50"
                     >
                       {isUpdatingCameraUrl ? <RefreshCw size={12} className="animate-spin" /> : <Check size={12} />}
                       Connect
@@ -761,7 +837,7 @@ function PanelContent({
                 {/* Wi-Fi Camera Setup Button */}
                 <button
                   onClick={() => setShowWifiModal(true)}
-                  className="bg-slate-900/90 hover:bg-[#162347] text-sky-300 hover:text-white border border-sky-500/40 rounded-md px-2 py-1 shadow-md text-[10px] font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
+                  className="bg-slate-900/90 hover:bg-[#183451] text-sky-300 hover:text-white border border-sky-500/40 rounded-md px-2 py-1 shadow-md text-[10px] font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
                   title="Configure Wi-Fi Camera IP / Stream URL"
                 >
                   <Wifi size={12} className="text-sky-400" />
@@ -940,7 +1016,7 @@ function PanelContent({
 
             {/* Rescue Incident Card Overlay when an Incident is Captured */}
             {activeIncident && (
-              <div className="absolute bottom-3 left-3 right-3 sm:right-auto sm:max-w-md bg-[#162347]/95 border-2 border-emerald-500/70 text-white p-3 rounded shadow-2xl backdrop-blur-md flex flex-col gap-2 z-40 animate-fadeIn">
+              <div className="absolute bottom-3 left-3 right-3 sm:right-auto sm:max-w-md bg-[#183451]/95 border-2 border-emerald-500/70 text-white p-3 rounded shadow-2xl backdrop-blur-md flex flex-col gap-2 z-40 animate-fadeIn">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5 text-[10px] font-mono text-emerald-400 font-bold uppercase">
                     <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
@@ -974,7 +1050,7 @@ function PanelContent({
                       <span className="text-xs font-mono font-bold text-white">
                         {activeIncident.personCount} Person(s)
                       </span>
-                      <span className="text-[9px] font-mono text-[#BED6EE] bg-white/10 px-1.5 rounded">
+                      <span className="text-[9px] font-mono text-white bg-white/10 px-1.5 rounded">
                         {activeIncident.id}
                       </span>
                     </div>
@@ -990,7 +1066,7 @@ function PanelContent({
 
                 {/* Card Action Buttons */}
                 <div className="flex items-center justify-between pt-1 border-t border-white/10 text-[10px] font-mono">
-                  <span className="text-[#BED6EE]/70 text-[9px]">
+                  <span className="text-white/80 text-[9px]">
                     {activeIncident.descriptionStatus === 'completed'
                       ? '✓ Gemini Observation Ready'
                       : activeIncident.descriptionStatus === 'pending'
@@ -1001,7 +1077,7 @@ function PanelContent({
                     {onTrackPerson && (
                       <button
                         onClick={() => onTrackPerson(baseLocation)}
-                        className="flex items-center gap-1 bg-sky-600 hover:bg-sky-500 text-white font-bold px-2 py-1 rounded transition-colors shadow-sm"
+                        className="flex items-center gap-1 bg-[#183451] hover:bg-[#1d3a5f] text-white font-bold px-2 py-1 rounded transition-colors shadow-sm"
                         title="Show on Map"
                       >
                         <Navigation size={11} /> Map
@@ -1020,10 +1096,10 @@ function PanelContent({
           </div>
 
           {/* Bottom Telemetry & Status Bar */}
-          <div className="bg-[#162347] border-t border-[#24355E] px-3.5 py-2 text-xs font-mono text-[#FAF7F2] flex flex-wrap items-center justify-between gap-2 shrink-0">
+          <div className="bg-[#183451] border-t border-[#1d3a5f] px-3.5 py-2 text-xs font-mono text-[#F3ECDE] flex flex-wrap items-center justify-between gap-2 shrink-0">
             <div className="flex items-center gap-4 text-[11px]">
               <div className="flex items-center gap-1.5">
-                <span className="text-[#BED6EE] uppercase tracking-wider text-[9px]">Status:</span>
+                <span className="text-white uppercase tracking-wider text-[9px]">Status:</span>
                 {detectionStatus.personDetected ? (
                   <span className="text-rose-400 font-bold flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-ping" />
@@ -1037,14 +1113,14 @@ function PanelContent({
                 )}
               </div>
               <div className="hidden sm:flex items-center gap-1.5">
-                <span className="text-[#BED6EE] uppercase tracking-wider text-[9px]">Detection Score:</span>
+                <span className="text-white uppercase tracking-wider text-[9px]">Detection Score:</span>
                 <span className="font-bold text-white">
                   {detectionStatus.personDetected ? detectionStatus.highestConfidence.toFixed(2) : '—'}
                 </span>
               </div>
             </div>
 
-            <div className="flex items-center gap-3 text-[10px] text-[#BED6EE]">
+            <div className="flex items-center gap-3 text-[10px] text-white">
               <span className="flex items-center gap-1 font-bold text-sky-300">
                 <Laptop size={11} /> PC GPS: <strong className="text-white font-mono">{baseLocation[0].toFixed(4)}°, {baseLocation[1].toFixed(4)}°</strong>
               </span>
@@ -1088,7 +1164,7 @@ function PanelContent({
                   const target = newLoc || baseLocation;
                   if (onTrackPerson) onTrackPerson(target);
                 }}
-                className="bg-[#162347]/95 hover:bg-[#1f2f5c] text-[#FAF7F2] backdrop-blur-md px-3 py-1.5 rounded-md shadow-md border border-sky-400/60 text-[11px] font-mono flex items-center gap-2 transition-all cursor-pointer active:scale-95 group"
+                className="bg-[#183451]/95 hover:bg-[#1f2f5c] text-[#F3ECDE] backdrop-blur-md px-3 py-1.5 rounded-md shadow-md border border-sky-400/60 text-[11px] font-mono flex items-center gap-2 transition-all cursor-pointer active:scale-95 group"
                 title={locationError ? `${locationError} - Click to refresh GPS / IP detection` : 'Click to Refresh & Center Tactical Map on Computer Ground Control'}
               >
                 <span className="text-sky-400 flex items-center gap-1 font-bold">
@@ -1140,7 +1216,7 @@ function PanelContent({
                     }
                   }
                 }}
-                className="bg-[#162347]/80 hover:bg-[#1f2f5c] text-sky-300 hover:text-white px-2 py-1.5 rounded-md border border-sky-500/40 text-[10px] font-mono flex items-center gap-1 transition-all cursor-pointer active:scale-95"
+                className="bg-[#183451]/80 hover:bg-[#1f2f5c] text-sky-300 hover:text-white px-2 py-1.5 rounded-md border border-sky-500/40 text-[10px] font-mono flex items-center gap-1 transition-all cursor-pointer active:scale-95"
                 title="Manually Set / Calibrate Computer Coordinates"
               >
                 <Edit3 size={11} /> Manual
@@ -1155,7 +1231,7 @@ function PanelContent({
                 className={`backdrop-blur-md px-3 py-1.5 rounded-md shadow-md border text-[11px] font-mono flex items-center gap-2 transition-all cursor-pointer active:scale-95 group ${
                   isPersonDetectedAtRobot
                     ? 'bg-rose-950/95 hover:bg-rose-900 text-white border-rose-500 ring-1 ring-rose-400 animate-pulse'
-                    : 'bg-[#162347]/95 hover:bg-[#1f2f5c] text-[#FAF7F2] border-cyan-400/60'
+                    : 'bg-[#183451]/95 hover:bg-[#1f2f5c] text-[#F3ECDE] border-cyan-400/60'
                 }`}
                 title={isPersonDetectedAtRobot ? "🚨 Person detected at robot position! Click to center map" : "Click to Center Tactical Map on Robot"}
               >
@@ -1206,7 +1282,7 @@ function PanelContent({
 
               {/* Live Thruster Motion Status on Tactical Map */}
               <div
-                className={`bg-[#162347]/95 backdrop-blur-md px-2.5 py-1.5 rounded-md shadow-md border text-[10px] font-mono flex items-center gap-1.5 transition-all ${
+                className={`bg-[#183451]/95 backdrop-blur-md px-2.5 py-1.5 rounded-md shadow-md border text-[10px] font-mono flex items-center gap-1.5 transition-all ${
                   motorTelemetry.motion.state.includes('FORWARD')
                     ? 'border-emerald-500/60 text-emerald-300'
                     : motorTelemetry.motion.state.includes('REVERSE')
@@ -1233,7 +1309,7 @@ function PanelContent({
 
               {/* Target GPS Coordination (Only if target is detected) */}
               {(manifestPersons.some(p => p.location !== null) || (detectionStatus.personDetected && robotLocation)) && (
-                <div className="bg-[#162347]/95 text-[#FAF7F2] backdrop-blur-md px-3 py-1.5 rounded-md shadow-md border border-rose-500/60 text-[11px] font-mono flex items-center gap-2">
+                <div className="bg-[#183451]/95 text-[#F3ECDE] backdrop-blur-md px-3 py-1.5 rounded-md shadow-md border border-rose-500/60 text-[11px] font-mono flex items-center gap-2">
                   <span className="text-rose-400 flex items-center gap-1 font-bold">
                     <MapPin size={13} className="text-rose-400 animate-bounce" />
                     TARGET GPS:
@@ -1262,12 +1338,12 @@ function PanelContent({
               )}
             </div>
 
-            {/* Free OSM / CARTO Tile Switcher & Maximize Map Control */}
+            {/* Maximize Map Control */}
             <div className="pointer-events-auto flex items-center gap-2">
               {onMaximizeMap && (
                 <button
                   onClick={onMaximizeMap}
-                  className="bg-white/95 backdrop-blur-md hover:bg-sky-50 text-[#162347] border border-slate-300 px-2.5 py-1 rounded-md shadow-md flex items-center gap-1.5 text-[10px] font-mono font-bold transition-all cursor-pointer active:scale-95 group"
+                  className="bg-white/95 backdrop-blur-md hover:bg-sky-50 text-[#183451] border border-slate-300 px-2.5 py-1 rounded-md shadow-md flex items-center gap-1.5 text-[10px] font-mono font-bold transition-all cursor-pointer active:scale-95 group"
                   title={isMapMaximized ? "Restore split layout" : "Make map bigger (full workspace)"}
                 >
                   {isMapMaximized ? (
@@ -1278,57 +1354,6 @@ function PanelContent({
                   <span>{isMapMaximized ? 'Split View' : 'Full Map'}</span>
                 </button>
               )}
-
-              <div className="bg-white/95 backdrop-blur-md p-1 rounded-md shadow-md border border-slate-200 flex items-center gap-1 text-[10px] font-mono font-bold">
-                <span className="text-[9px] text-[#162347]/70 font-sans px-1 font-bold uppercase tracking-wider">
-                  {hardwareGps?.isValid ? `${hardwareGps.satellites} Sats • Live` : 'Tactical Map'}
-                </span>
-                <span className="text-slate-300">|</span>
-                <button
-                  onClick={() => setMapTileSource('google')}
-                  className={`px-2 py-1 rounded transition-colors cursor-pointer ${
-                    mapTileSource === 'google'
-                      ? 'bg-[#162347] text-white shadow-xs'
-                      : 'text-slate-600 hover:bg-slate-100'
-                  }`}
-                  title="Google Maps Road / Street Layer"
-                >
-                  Google Maps
-                </button>
-                <button
-                  onClick={() => setMapTileSource('google-hybrid')}
-                  className={`px-2 py-1 rounded transition-colors cursor-pointer ${
-                    mapTileSource === 'google-hybrid'
-                      ? 'bg-[#162347] text-white shadow-xs'
-                      : 'text-slate-600 hover:bg-slate-100'
-                  }`}
-                  title="Google Maps Hybrid (Satellite Imagery + Street Labels)"
-                >
-                  Google Hybrid
-                </button>
-                <button
-                  onClick={() => setMapTileSource('carto')}
-                  className={`px-2 py-1 rounded transition-colors cursor-pointer ${
-                    mapTileSource === 'carto'
-                      ? 'bg-[#162347] text-white shadow-xs'
-                      : 'text-slate-600 hover:bg-slate-100'
-                  }`}
-                  title="Tactical Voyager Layer (Fast Cloudflare Edge CDN)"
-                >
-                  CARTO
-                </button>
-                <button
-                  onClick={() => setMapTileSource('osm')}
-                  className={`px-2 py-1 rounded transition-colors cursor-pointer ${
-                    mapTileSource === 'osm'
-                      ? 'bg-[#162347] text-white shadow-xs'
-                      : 'text-slate-600 hover:bg-slate-100'
-                  }`}
-                  title="Direct OpenStreetMap Tile Layer"
-                >
-                  OSM
-                </button>
-              </div>
             </div>
           </div>
 
@@ -1349,6 +1374,10 @@ function PanelContent({
                 return loc || baseLocation;
               }}
               isLocating={locationStatus === 'locating'}
+            />
+            <TileSelectorControl
+              mapTileSource={mapTileSource}
+              setMapTileSource={setMapTileSource}
             />
 
             {mapTileSource === 'google' && (
@@ -1375,18 +1404,6 @@ function PanelContent({
               />
             )}
 
-            {mapTileSource === 'carto' && (
-              <TileLayer
-                attribution='&copy; CARTO &copy; OpenStreetMap contributors'
-                url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png"
-                subdomains="abcd"
-                maxZoom={18}
-                minZoom={10}
-                keepBuffer={8}
-                updateWhenZooming={false}
-              />
-            )}
-
             {mapTileSource === 'osm' && (
               <TileLayer
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -1397,8 +1414,6 @@ function PanelContent({
                 updateWhenZooming={false}
               />
             )}
-
-            <MapClickHandler onMapClick={(lat, lng) => setWaypoint([lat, lng])} />
 
             {/* Operator Ground Control PC Marker */}
             {baseLocation && (
@@ -1485,7 +1500,7 @@ function PanelContent({
 
                         <button
                           onClick={() => onInspectIncident(p.incident, p.personId)}
-                          className="w-full mt-2 bg-[#162347] hover:bg-[#24355E] text-white text-[11px] font-mono font-bold py-1.5 px-3 rounded flex items-center justify-center gap-1.5 cursor-pointer transition-colors shadow-xs active:scale-98"
+                          className="w-full mt-2 bg-[#183451] hover:bg-[#1d3a5f] text-white text-[11px] font-mono font-bold py-1.5 px-3 rounded flex items-center justify-center gap-1.5 cursor-pointer transition-colors shadow-xs active:scale-98"
                         >
                           <Eye size={13} className="text-emerald-400" />
                           <span>Inspect Person #{p.personId}</span>
@@ -1592,7 +1607,6 @@ function PanelContent({
               </Marker>
             )}
 
-            {waypoint && <Circle center={waypoint} radius={20} pathOptions={{ color: '#F59E0B', fillColor: '#F59E0B', fillOpacity: 0.4 }} />}
           </MapContainer>
         </div>
       );
@@ -1603,8 +1617,8 @@ function PanelContent({
           <div className="m-auto flex flex-col items-center gap-4 w-full max-w-xs py-2">
             {/* Camera Pan/Tilt Servo Control Header */}
             <div className="w-full text-center">
-              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#162347]/70 flex items-center justify-center gap-1.5">
-                <Compass size={12} className="text-[#162347]" /> Camera Pan &amp; Tilt Arm
+              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#183451]/70 flex items-center justify-center gap-1.5">
+                <Compass size={12} className="text-[#183451]" /> Camera Pan &amp; Tilt Arm
               </span>
               <span className="text-[9px] text-slate-500 font-sans block">
                 Aim water-level camera (GPIO 18 Pan • GPIO 19 Tilt)
@@ -1618,7 +1632,7 @@ function PanelContent({
                 onClick={() => panTilt.sendCommand('up')}
                 disabled={panTilt.isProcessing}
                 style={{ touchAction: 'manipulation' }}
-                className="h-14 rounded-lg bg-[#FAF7F2] hover:bg-[#162347] text-[#162347] hover:text-white border border-[#E6DFD5] flex items-center justify-center transition-all active:scale-95 shadow-sm disabled:opacity-75 cursor-pointer select-none"
+                className="h-14 rounded-lg bg-[#F3ECDE] hover:bg-[#183451] text-[#183451] hover:text-white border border-[#E6DFD5] flex items-center justify-center transition-all active:scale-95 shadow-sm disabled:opacity-75 cursor-pointer select-none"
                 title="Tilt Camera Up (+10°)"
               >
                 <ArrowUp size={22} />
@@ -1629,7 +1643,7 @@ function PanelContent({
                 onClick={() => panTilt.sendCommand('left')}
                 disabled={panTilt.isProcessing}
                 style={{ touchAction: 'manipulation' }}
-                className="h-14 rounded-lg bg-[#FAF7F2] hover:bg-[#162347] text-[#162347] hover:text-white border border-[#E6DFD5] flex items-center justify-center transition-all active:scale-95 shadow-sm disabled:opacity-75 cursor-pointer select-none"
+                className="h-14 rounded-lg bg-[#F3ECDE] hover:bg-[#183451] text-[#183451] hover:text-white border border-[#E6DFD5] flex items-center justify-center transition-all active:scale-95 shadow-sm disabled:opacity-75 cursor-pointer select-none"
                 title="Pan Camera Left (-10°)"
               >
                 <ArrowLeft size={22} />
@@ -1646,7 +1660,7 @@ function PanelContent({
                 onDoubleClick={() => panTilt.sendCommand('center')}
                 disabled={panTilt.isProcessing}
                 style={{ touchAction: 'manipulation' }}
-                className="h-14 rounded-lg bg-[#162347] text-[#FAF7F2] font-mono text-[11px] font-bold active:scale-95 shadow-sm disabled:opacity-75 cursor-pointer select-none"
+                className="h-14 rounded-lg bg-[#183451] text-[#F3ECDE] font-mono text-[11px] font-bold active:scale-95 shadow-sm disabled:opacity-75 cursor-pointer select-none"
                 title="Hold Camera Position (Double-click to Center 90°/90°)"
               >
                 STOP
@@ -1655,7 +1669,7 @@ function PanelContent({
                 onClick={() => panTilt.sendCommand('right')}
                 disabled={panTilt.isProcessing}
                 style={{ touchAction: 'manipulation' }}
-                className="h-14 rounded-lg bg-[#FAF7F2] hover:bg-[#162347] text-[#162347] hover:text-white border border-[#E6DFD5] flex items-center justify-center transition-all active:scale-95 shadow-sm disabled:opacity-75 cursor-pointer select-none"
+                className="h-14 rounded-lg bg-[#F3ECDE] hover:bg-[#183451] text-[#183451] hover:text-white border border-[#E6DFD5] flex items-center justify-center transition-all active:scale-95 shadow-sm disabled:opacity-75 cursor-pointer select-none"
                 title="Pan Camera Right (+10°)"
               >
                 <ArrowRight size={22} />
@@ -1666,7 +1680,7 @@ function PanelContent({
                 onClick={() => panTilt.sendCommand('down')}
                 disabled={panTilt.isProcessing}
                 style={{ touchAction: 'manipulation' }}
-                className="h-14 rounded-lg bg-[#FAF7F2] hover:bg-[#162347] text-[#162347] hover:text-white border border-[#E6DFD5] flex items-center justify-center transition-all active:scale-95 shadow-sm disabled:opacity-75 cursor-pointer select-none"
+                className="h-14 rounded-lg bg-[#F3ECDE] hover:bg-[#183451] text-[#183451] hover:text-white border border-[#E6DFD5] flex items-center justify-center transition-all active:scale-95 shadow-sm disabled:opacity-75 cursor-pointer select-none"
                 title="Tilt Camera Down (-10°)"
               >
                 <ArrowDown size={22} />
@@ -1687,22 +1701,22 @@ function PanelContent({
           <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-[#E6DFD5]">
             <div className="flex items-center gap-1.5">
               <User size={14} className="text-rose-600" />
-              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#162347]">
+              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#183451]">
                 Victim Manifest ({victimSortBy === 'person' ? manifestPersons.length : incidentsByTime.length})
               </span>
             </div>
 
             {/* Arrangement Selector: By Person vs By TIME */}
-            <div className="flex items-center gap-1 bg-[#FAF7F2] p-0.5 rounded border border-[#E6DFD5] text-[10px] font-mono font-bold">
-              <span className="text-[9px] text-[#162347]/50 px-1 uppercase flex items-center gap-1">
+            <div className="flex items-center gap-1 bg-[#F3ECDE] p-0.5 rounded border border-[#E6DFD5] text-[10px] font-mono font-bold">
+              <span className="text-[9px] text-[#183451]/50 px-1 uppercase flex items-center gap-1">
                 <ArrowUpDown size={10} /> Sort:
               </span>
               <button
                 onClick={() => setVictimSortBy('person')}
                 className={`px-2.5 py-0.5 rounded transition-all cursor-pointer ${
                   victimSortBy === 'person'
-                    ? 'bg-[#162347] text-white shadow-xs'
-                    : 'text-[#162347]/70 hover:text-[#162347] hover:bg-[#E6DFD5]'
+                    ? 'bg-[#183451] text-white shadow-xs'
+                    : 'text-[#183451]/70 hover:text-[#183451] hover:bg-[#E6DFD5]'
                 }`}
                 title="Arrange by Person ID (highest number like Person #8 on top with cropped photo)"
               >
@@ -1712,8 +1726,8 @@ function PanelContent({
                 onClick={() => setVictimSortBy('time')}
                 className={`px-2.5 py-0.5 rounded transition-all cursor-pointer ${
                   victimSortBy === 'time'
-                    ? 'bg-[#162347] text-white shadow-xs'
-                    : 'text-[#162347]/70 hover:text-[#162347] hover:bg-[#E6DFD5]'
+                    ? 'bg-[#183451] text-white shadow-xs'
+                    : 'text-[#183451]/70 hover:text-[#183451] hover:bg-[#E6DFD5]'
                 }`}
                 title="Arrange by Time (original incident INC-... on top with cropped pictures)"
               >
@@ -1751,22 +1765,22 @@ function PanelContent({
                             </div>
                           </div>
                         ) : (
-                          <div className="w-12 h-12 rounded-full bg-[#162347] text-[#FAF7F2] font-mono font-bold text-xs flex items-center justify-center shadow-xs shrink-0">
+                          <div className="w-12 h-12 rounded-full bg-[#183451] text-[#F3ECDE] font-mono font-bold text-xs flex items-center justify-center shadow-xs shrink-0">
                             #{v.personId}
                           </div>
                         )}
 
                         <div>
-                          <div className="font-mono font-bold text-sm text-[#162347] flex items-center gap-1.5">
+                          <div className="font-mono font-bold text-sm text-[#183451] flex items-center gap-1.5">
                             <span>{v.label}</span>
                             <span className="text-[9px] font-mono text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded font-bold">
                               Score: {v.score.toFixed(2)}
                             </span>
                           </div>
-                          <div className="text-[10px] font-mono text-[#162347]/60 flex items-center gap-1.5 mt-0.5">
+                          <div className="text-[10px] font-mono text-[#183451]/60 flex items-center gap-1.5 mt-0.5">
                             <span>{v.incident.id}</span>
                             <span>•</span>
-                            <span className="flex items-center gap-0.5 text-[#162347]/80 font-semibold">
+                            <span className="flex items-center gap-0.5 text-[#183451]/80 font-semibold">
                               <Clock size={10} /> {v.time}
                             </span>
                             <span className="text-[9px] bg-sky-100 text-sky-800 border border-sky-300 px-1.5 py-0.5 rounded font-bold font-mono">
@@ -1779,7 +1793,7 @@ function PanelContent({
                       {/* Right: Inspect Button */}
                       <button
                         onClick={() => onInspectIncident(v.incident, v.personId)}
-                        className="bg-[#162347] hover:bg-[#24355E] text-white px-2.5 py-1.5 rounded text-[10px] font-mono font-bold flex items-center gap-1 transition-colors shrink-0 cursor-pointer"
+                        className="bg-[#183451] hover:bg-[#1d3a5f] text-white px-2.5 py-1.5 rounded text-[10px] font-mono font-bold flex items-center gap-1 transition-colors shrink-0 cursor-pointer"
                       >
                         <Eye size={12} /> Inspect
                       </button>
@@ -1796,7 +1810,7 @@ function PanelContent({
                       {v.location && onTrackPerson && (
                         <button
                           onClick={() => onTrackPerson(v.location!)}
-                          className="bg-[#162347] hover:bg-[#24355E] text-[#FAF7F2] text-[10px] font-mono font-bold px-2 py-1 rounded flex items-center gap-1 transition-colors cursor-pointer shadow-xs active:scale-95"
+                          className="bg-[#183451] hover:bg-[#1d3a5f] text-[#F3ECDE] text-[10px] font-mono font-bold px-2 py-1 rounded flex items-center gap-1 transition-colors cursor-pointer shadow-xs active:scale-95"
                           title="Locate person on Tactical Map"
                         >
                           <Navigation size={10} /> Track on Map
@@ -1805,7 +1819,7 @@ function PanelContent({
                     </div>
 
                     {v.description && (
-                      <p className="text-[11px] text-[#162347]/80 line-clamp-2 leading-tight bg-slate-50 p-2 rounded border border-slate-100 font-sans">
+                      <p className="text-[11px] text-[#183451]/80 line-clamp-2 leading-tight bg-slate-50 p-2 rounded border border-slate-100 font-sans">
                         {v.description}
                       </p>
                     )}
@@ -1832,13 +1846,13 @@ function PanelContent({
                       {/* Incident Header: INC-... and Time */}
                       <div className="flex items-center justify-between text-xs">
                         <div className="flex items-center gap-2">
-                          <span className="font-mono font-bold text-sm text-[#162347]">{inc.id}</span>
+                          <span className="font-mono font-bold text-sm text-[#183451]">{inc.id}</span>
                           <span className="text-[9px] font-mono px-1.5 py-0.5 rounded font-bold uppercase bg-rose-100 text-rose-800 border border-rose-200">
                             {inc.personCount} Person{inc.personCount > 1 ? 's' : ''}
                           </span>
                         </div>
-                        <div className="flex items-center gap-1 text-[11px] font-mono text-[#162347]/70 font-semibold">
-                          <Clock size={12} className="text-[#162347]/60" /> {inc.time}
+                        <div className="flex items-center gap-1 text-[11px] font-mono text-[#183451]/70 font-semibold">
+                          <Clock size={12} className="text-[#183451]/60" /> {inc.time}
                         </div>
                       </div>
 
@@ -1853,7 +1867,7 @@ function PanelContent({
                         {incLocation && onTrackPerson && (
                           <button
                             onClick={() => onTrackPerson(incLocation)}
-                            className="bg-[#162347] hover:bg-[#24355E] text-[#FAF7F2] text-[10px] font-mono font-bold px-2 py-1 rounded flex items-center gap-1 transition-colors cursor-pointer shadow-xs active:scale-95"
+                            className="bg-[#183451] hover:bg-[#1d3a5f] text-[#F3ECDE] text-[10px] font-mono font-bold px-2 py-1 rounded flex items-center gap-1 transition-colors cursor-pointer shadow-xs active:scale-95"
                             title="Locate incident on Tactical Map"
                           >
                             <Navigation size={10} /> Track on Map
@@ -1864,7 +1878,7 @@ function PanelContent({
                       {/* Original Scene Image (INC-... full frame) */}
                       {inc.originalImageUrl && (
                         <div className="space-y-1">
-                          <div className="text-[10px] font-mono font-semibold uppercase text-[#162347]/70 flex items-center gap-1">
+                          <div className="text-[10px] font-mono font-semibold uppercase text-[#183451]/70 flex items-center gap-1">
                             <Eye size={11} className="text-blue-500" /> Original Capture:
                           </div>
                           <div
@@ -1888,7 +1902,7 @@ function PanelContent({
                       {/* Cropped Pictures Row by Time */}
                       {personList.length > 0 && (
                         <div className="space-y-1.5">
-                          <div className="text-[10px] font-mono font-semibold uppercase text-[#162347]/70 flex items-center gap-1">
+                          <div className="text-[10px] font-mono font-semibold uppercase text-[#183451]/70 flex items-center gap-1">
                             <User size={11} className="text-emerald-600" /> Cropped Persons:
                           </div>
                           <div className="flex flex-wrap gap-2">
@@ -1906,7 +1920,7 @@ function PanelContent({
                                   />
                                 </div>
                                 <div className="font-mono pr-1">
-                                  <div className="text-[11px] font-bold text-[#162347] flex items-center gap-1">
+                                  <div className="text-[11px] font-bold text-[#183451] flex items-center gap-1">
                                     <span>{p.label}</span>
                                     {(p as any).isReturning && (
                                       <span className="text-[8px] bg-amber-100 text-amber-800 border border-amber-300 px-1 py-0.2 rounded font-bold uppercase tracking-wider">
@@ -1926,7 +1940,7 @@ function PanelContent({
 
                       {/* AI Description */}
                       {inc.description && (
-                        <p className="text-[11px] text-[#162347]/80 line-clamp-2 leading-tight bg-slate-50 p-2 rounded border border-slate-100 font-sans">
+                        <p className="text-[11px] text-[#183451]/80 line-clamp-2 leading-tight bg-slate-50 p-2 rounded border border-slate-100 font-sans">
                           {inc.description}
                         </p>
                       )}
@@ -1950,7 +1964,7 @@ function PanelContent({
                         </span>
                         <button
                           onClick={() => onInspectIncident(inc)}
-                          className="bg-[#162347] hover:bg-[#24355E] text-white px-2.5 py-1 rounded text-[10px] flex items-center gap-1 font-bold transition-colors cursor-pointer"
+                          className="bg-[#183451] hover:bg-[#1d3a5f] text-white px-2.5 py-1 rounded text-[10px] flex items-center gap-1 font-bold transition-colors cursor-pointer"
                         >
                           <Eye size={12} /> Inspect Incident
                         </button>
@@ -1962,14 +1976,14 @@ function PanelContent({
           ) : (
             /* Clean Empty State when no real victims have been detected */
             <div className="h-full flex flex-col items-center justify-center p-6 text-center space-y-3 my-auto">
-              <div className="w-12 h-12 rounded-full bg-[#162347]/5 border border-[#162347]/15 flex items-center justify-center text-[#162347]/60">
+              <div className="w-12 h-12 rounded-full bg-[#183451]/5 border border-[#183451]/15 flex items-center justify-center text-[#183451]/60">
                 <Users size={24} />
               </div>
               <div>
-                <h4 className="font-mono text-xs font-bold text-[#162347] uppercase tracking-wider">
+                <h4 className="font-mono text-xs font-bold text-[#183451] uppercase tracking-wider">
                   No Victims Currently Detected
                 </h4>
-                <p className="text-[11px] text-[#162347]/60 mt-1 max-w-xs leading-relaxed">
+                <p className="text-[11px] text-[#183451]/60 mt-1 max-w-xs leading-relaxed">
                   OpenCV HOG + SVM person detector is actively monitoring the live video stream. Detected persons (Person #1, Person #2) will appear here in real-time.
                 </p>
               </div>
@@ -2014,7 +2028,7 @@ function PanelContent({
         <div className="h-full overflow-y-auto p-4 space-y-5">
           {/* AI Detection Controls */}
           <div>
-            <h4 className="text-[10px] font-bold tracking-widest uppercase text-[#162347] mb-2 flex items-center justify-between">
+            <h4 className="text-[10px] font-bold tracking-widest uppercase text-[#183451] mb-2 flex items-center justify-between">
               <span>AI Detection Sensitivity</span>
               <span className="font-mono text-emerald-700 font-bold">{localThreshold}%</span>
             </h4>
@@ -2024,9 +2038,9 @@ function PanelContent({
               max={95}
               value={localThreshold}
               onChange={(e) => handleThresholdChange(Number(e.target.value))}
-              className="w-full accent-[#162347] h-1.5 rounded cursor-pointer bg-[#E6DFD5]"
+              className="w-full accent-[#183451] h-1.5 rounded cursor-pointer bg-[#E6DFD5]"
             />
-            <div className="flex justify-between text-[9px] font-mono text-[#162347]/60 mt-1">
+            <div className="flex justify-between text-[9px] font-mono text-[#183451]/60 mt-1">
               <span>More Sensitive (10%)</span>
               <span>Higher Precision (95%)</span>
             </div>
@@ -2045,14 +2059,14 @@ function PanelContent({
 
           {/* HUD Overlays */}
           <div className="pt-2 border-t border-[#E6DFD5]">
-            <h4 className="text-[10px] font-bold tracking-widest uppercase text-[#162347] mb-2">HUD Overlays</h4>
+            <h4 className="text-[10px] font-bold tracking-widest uppercase text-[#183451] mb-2">HUD Overlays</h4>
             <div className="space-y-2 font-mono text-xs">
               <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={aiBoxes} onChange={e => setAiBoxes(e.target.checked)} className="accent-[#162347] w-4 h-4" />
+                <input type="checkbox" checked={aiBoxes} onChange={e => setAiBoxes(e.target.checked)} className="accent-[#183451] w-4 h-4" />
                 AI Bounding Boxes
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={crosshair} onChange={e => setCrosshair(e.target.checked)} className="accent-[#162347] w-4 h-4" />
+                <input type="checkbox" checked={crosshair} onChange={e => setCrosshair(e.target.checked)} className="accent-[#183451] w-4 h-4" />
                 Center Reticle
               </label>
             </div>
@@ -2065,8 +2079,8 @@ function PanelContent({
       const { history } = detectionApi;
 
       return (
-        <div className="h-full overflow-y-auto p-3 bg-[#162347] font-mono text-xs space-y-2">
-          <div className="text-[10px] text-[#BED6EE] uppercase tracking-widest font-bold pb-2 border-b border-white/10 flex items-center justify-between">
+        <div className="h-full overflow-y-auto p-3 bg-[#183451] font-mono text-xs space-y-2">
+          <div className="text-[10px] text-white uppercase tracking-widest font-bold pb-2 border-b border-white/10 flex items-center justify-between">
             <span>Detection History</span>
             <span className="text-[9px] text-emerald-400">● Live Feed</span>
           </div>
@@ -2139,9 +2153,9 @@ function LayoutRenderer({
 }) {
   if (!node) {
     return (
-      <div className="h-full w-full flex flex-col items-center justify-center text-[#162347]/40">
+      <div className="h-full w-full flex flex-col items-center justify-center text-[#183451]/40">
         <Target size={48} className="mb-4 opacity-50" />
-        <p className="font-editorial-serif text-xl">No panels active</p>
+        <p className="font-sans text-xl font-bold text-[#183451]">No panels active</p>
         <p className="text-xs font-mono uppercase tracking-widest mt-2">Select a feature from the dock above</p>
       </div>
     );
@@ -2180,7 +2194,7 @@ function LayoutRenderer({
       className="h-full w-full min-h-0 min-w-0"
     >
       {node.children.flatMap((child, index) => {
-        const defaultSize = node.children.length > 0 ? Math.round(100 / node.children.length) : 50;
+        const defaultSize = child.size ?? (node.children.length > 0 ? Math.round(100 / node.children.length) : 50);
 
         const childEl = (
           <Panel
@@ -2292,30 +2306,14 @@ export default function Dashboard() {
     });
   }, []);
 
-  const [layout, setLayout] = useState<LayoutNode | null>({
-    type: 'group',
-    id: 'root-default-group',
-    direction: 'horizontal',
-    children: [
-      { type: 'panel', id: 'camera' },
-      { type: 'panel', id: 'map' },
-    ],
-  });
+  const [layout, setLayout] = useState<LayoutNode | null>(DEFAULT_MISSION_LAYOUT);
 
   const handleMaximizePanel = useCallback((id: PanelId) => {
     setLayout((prev) => {
-      // If already maximized to this single panel, restore previous layout (or default camera + map)
+      // If already maximized to this single panel, restore previous layout (or default mission layout)
       if (prev && prev.type === 'panel' && prev.id === id) {
         if (previousLayout) return previousLayout;
-        return {
-          type: 'group',
-          id: 'root-group',
-          direction: 'horizontal',
-          children: [
-            { type: 'panel', id: 'camera' },
-            { type: 'panel', id: 'map' },
-          ],
-        };
+        return DEFAULT_MISSION_LAYOUT;
       }
       setPreviousLayout(prev);
       return { type: 'panel', id };
@@ -2466,17 +2464,18 @@ export default function Dashboard() {
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
-    <div className="h-screen flex flex-col bg-[#FAF7F2] text-[#162347] font-sans overflow-hidden">
+    <div className="h-screen flex flex-col bg-[#F3ECDE] text-[#183451] font-sans overflow-hidden">
 
       {/* Header */}
-      <header className="bg-[#162347] text-[#FAF7F2] border-b border-[#24355E] px-6 py-3.5 flex items-center justify-between gap-4 shrink-0 z-[999]">
+      <header className="bg-[#183451] text-[#F3ECDE] border-b border-[#1d3a5f] px-6 py-3.5 flex items-center justify-between gap-4 shrink-0 z-[999]">
         <div className="flex items-center gap-4">
-          <Link to="/" className="flex items-center gap-2 text-xs font-semibold tracking-[0.2em] uppercase text-[#BED6EE] hover:text-white bg-white/10 px-3.5 py-1.5 rounded-full transition-colors">
+          <Link to="/" className="flex items-center gap-2 text-xs font-semibold tracking-[0.2em] uppercase text-white hover:text-white bg-white/10 px-3.5 py-1.5 rounded-full transition-colors">
             <ArrowLeft size={14} /> Back
           </Link>
-          <div className="border-l border-white/20 pl-4 flex items-baseline">
-            <span className="font-script text-2xl font-bold tracking-tight text-white">FloodScout</span>
-            <span className="ml-3 text-[11px] tracking-[0.25em] text-[#BED6EE] uppercase font-semibold hidden sm:inline">
+          <div className="border-l border-white/20 pl-4 flex items-center gap-2.5">
+            <FloodScoutLogo className="w-7 h-7" />
+            <span className="font-extrabold text-white tracking-widest text-lg uppercase font-sans">FloodScout</span>
+            <span className="ml-3 text-[11px] tracking-[0.25em] text-white/80 uppercase font-semibold hidden sm:inline">
               Operations Command &amp; Control
             </span>
           </div>
@@ -2517,7 +2516,7 @@ export default function Dashboard() {
             <span className={`w-2 h-2 rounded-full ${robotOnline ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`} />
             {robotOnline ? 'ONLINE' : 'OFFLINE'}
           </div>
-          <div className="font-mono text-[#BED6EE] flex items-center gap-1.5 text-xs">
+          <div className="font-mono text-white flex items-center gap-1.5 text-xs">
             <Clock size={13} /> {time}
           </div>
         </div>
@@ -2576,16 +2575,16 @@ export default function Dashboard() {
       {/* Connection & HTTPS Backend Settings Modal */}
       {showConnectionModal && (
         <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-[#162347] text-[#FAF7F2] border border-[#24355E] rounded-xl shadow-2xl w-full max-w-lg overflow-hidden">
-            <div className="px-5 py-4 border-b border-[#24355E] flex items-center justify-between">
+          <div className="bg-[#183451] text-[#F3ECDE] border border-[#1d3a5f] rounded-xl shadow-2xl w-full max-w-lg overflow-hidden">
+            <div className="px-5 py-4 border-b border-[#1d3a5f] flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Settings size={18} className="text-[#BED6EE]" />
+                <Settings size={18} className="text-white" />
                 <h3 className="font-bold text-sm tracking-wider uppercase text-white">Connection &amp; Backend Settings</h3>
               </div>
               <button
                 type="button"
                 onClick={() => setShowConnectionModal(false)}
-                className="text-[#BED6EE] hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+                className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
               >
                 <X size={18} />
               </button>
@@ -2600,9 +2599,9 @@ export default function Dashboard() {
               )}
 
               {/* Mobile HTTPS Note */}
-              <div className="p-3 rounded-lg bg-[#0284C7]/15 border border-[#0284C7]/30 text-[#BED6EE] space-y-1.5">
+              <div className="p-3 rounded-lg bg-[#0284C7]/15 border border-[#0284C7]/30 text-white space-y-1.5">
                 <div className="font-semibold text-white flex items-center gap-1.5">
-                  <Globe size={14} className="text-[#BED6EE]" /> Mobile Phone / HTTPS Notice
+                  <Globe size={14} className="text-white" /> Mobile Phone / HTTPS Notice
                 </div>
                 <p className="leading-relaxed text-[11px]">
                   When opening on a mobile phone over HTTPS (e.g. Vercel), mobile browsers block plain <code className="text-amber-300 font-mono">http://</code> backends. Run Cloudflare Tunnel on your laptop to get a secure HTTPS link:
@@ -2629,10 +2628,10 @@ export default function Dashboard() {
                   value={backendInput}
                   onChange={(e) => setBackendInput(e.target.value)}
                   placeholder="e.g. https://xxx.trycloudflare.com or http://localhost:8000"
-                  className="w-full bg-[#0E172C] border border-[#24355E] rounded-lg px-3 py-2 text-white font-mono text-xs focus:outline-none focus:border-[#BED6EE]"
+                  className="w-full bg-[#0E172C] border border-[#1d3a5f] rounded-lg px-3 py-2 text-white font-mono text-xs focus:outline-none focus:border-white/40"
                 />
                 <p className="text-[10px] text-white/50">
-                  Current: <code className="text-[#BED6EE] font-mono">{detectionApi.apiBaseUrl}</code>
+                  Current: <code className="text-white font-mono">{detectionApi.apiBaseUrl}</code>
                 </p>
               </div>
 
@@ -2653,10 +2652,10 @@ export default function Dashboard() {
                   value={esp32Input}
                   onChange={(e) => setEsp32Input(e.target.value)}
                   placeholder="e.g. http://10.133.81.149"
-                  className="w-full bg-[#0E172C] border border-[#24355E] rounded-lg px-3 py-2 text-white font-mono text-xs focus:outline-none focus:border-[#BED6EE]"
+                  className="w-full bg-[#0E172C] border border-[#1d3a5f] rounded-lg px-3 py-2 text-white font-mono text-xs focus:outline-none focus:border-white/40"
                 />
                 <p className="text-[10px] text-white/50">
-                  Current: <code className="text-[#BED6EE] font-mono">{panTilt.esp32Url}</code> (proxied securely on HTTPS)
+                  Current: <code className="text-white font-mono">{panTilt.esp32Url}</code> (proxied securely on HTTPS)
                 </p>
               </div>
 
@@ -2665,7 +2664,7 @@ export default function Dashboard() {
                 <button
                   type="button"
                   onClick={() => setShowConnectionModal(false)}
-                  className="px-3.5 py-1.5 rounded-lg border border-[#24355E] hover:bg-white/5 text-white/70 transition-colors cursor-pointer"
+                  className="px-3.5 py-1.5 rounded-lg border border-[#1d3a5f] hover:bg-white/5 text-white/70 transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -2684,10 +2683,10 @@ export default function Dashboard() {
       {/* Drag ghost overlay */}
       <DragOverlay>
         {activeDragDef && (
-          <div className="bg-white border-2 border-[#162347] rounded-sm shadow-2xl px-4 py-2 flex items-center gap-2 opacity-90 rotate-2 pointer-events-none">
-            <GripVertical size={14} className="text-[#162347]/50" />
-            <activeDragDef.icon size={14} className="text-[#162347]" />
-            <span className="text-xs font-bold tracking-wider uppercase text-[#162347]">{activeDragDef.label}</span>
+          <div className="bg-white border-2 border-[#183451] rounded-sm shadow-2xl px-4 py-2 flex items-center gap-2 opacity-90 rotate-2 pointer-events-none">
+            <GripVertical size={14} className="text-[#183451]/50" />
+            <activeDragDef.icon size={14} className="text-[#183451]" />
+            <span className="text-xs font-bold tracking-wider uppercase text-[#183451]">{activeDragDef.label}</span>
           </div>
         )}
       </DragOverlay>

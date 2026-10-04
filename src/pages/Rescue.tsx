@@ -15,29 +15,29 @@ export default function Rescue() {
   };
 
   return (
-    <div className="w-full bg-[#FAF7F2] text-[#162347] py-16 sm:py-24 px-6 sm:px-12 max-w-6xl mx-auto">
+    <div className="w-full bg-[#F3ECDE] text-[#183451] py-16 sm:py-24 px-6 sm:px-12 max-w-6xl mx-auto">
       {/* Header */}
       <div className="text-center max-w-2xl mx-auto mb-16">
-        <span className="text-[11px] font-bold tracking-[0.35em] text-[#162347]/70 uppercase block mb-2">
+        <span className="text-[11px] font-bold tracking-[0.35em] text-[#183451]/70 uppercase block mb-2">
           REAL-TIME INCIDENT TRIAGE
         </span>
-        <h1 className="font-script text-4xl sm:text-5xl md:text-6xl text-[#162347] font-bold tracking-tight mb-4">
+        <h1 className="font-script text-4xl sm:text-5xl md:text-6xl text-[#183451] font-bold tracking-tight mb-4">
           Victim Radar
         </h1>
-        <p className="font-editorial-serif text-lg tracking-[0.15em] text-[#162347]/80 uppercase">
+        <p className="font-editorial-serif text-lg tracking-[0.15em] text-[#183451]/80 uppercase">
           Live AI Person Flags &amp; Dispatch Progression
         </p>
-        <div className="w-16 h-[1px] bg-[#162347]/30 mx-auto mt-4"></div>
+        <div className="w-16 h-[1px] bg-[#183451]/30 mx-auto mt-4"></div>
       </div>
 
       {/* Action Bar */}
       <div className="flex justify-between items-center max-w-5xl mx-auto mb-10 pb-4 border-b border-[#E6DFD5]">
-        <div className="text-xs text-[#162347]/70 font-mono">
+        <div className="text-xs text-[#183451]/70 font-mono">
           Showing {victims.length} incident records ({victims.filter(v => v.status !== 'Rescued').length} active)
         </div>
         <button
           onClick={simulateVictimDetection}
-          className="bg-[#162347] text-[#FAF7F2] hover:bg-[#0E172E] px-6 py-2 rounded-full text-[11px] font-semibold tracking-[0.2em] uppercase transition-all shadow-sm"
+          className="bg-[#183451] text-[#F3ECDE] hover:bg-[#0E172E] px-6 py-2 rounded-full text-[11px] font-semibold tracking-[0.2em] uppercase transition-all shadow-sm"
         >
           Simulate Detection
         </button>
@@ -60,7 +60,7 @@ export default function Rescue() {
             
             <div className="w-full md:w-1/2 flex flex-col items-start text-left space-y-3">
               <div className="flex items-center gap-2">
-                <span className="text-[10px] font-bold tracking-[0.25em] uppercase text-[#162347]/60">
+                <span className="text-[10px] font-bold tracking-[0.25em] uppercase text-[#183451]/60">
                   {victim.id} &nbsp;|&nbsp; {victim.time}
                 </span>
                 <span
@@ -76,15 +76,15 @@ export default function Rescue() {
                 </span>
               </div>
 
-              <h3 className="font-editorial-serif text-xl sm:text-2xl font-bold tracking-wide text-[#162347]">
+              <h3 className="font-editorial-serif text-xl sm:text-2xl font-bold tracking-wide text-[#183451]">
                 {victim.zone}
               </h3>
 
-              <p className="text-xs sm:text-sm text-[#162347]/80 leading-relaxed font-normal">
+              <p className="text-xs sm:text-sm text-[#183451]/80 leading-relaxed font-normal">
                 {victim.notes} — <strong>{victim.peopleCount} Person(s)</strong> flagged with <strong>{victim.confidence}% AI Confidence</strong> at a water depth of <strong>{victim.waterDepthAtLocation} meters</strong>.
               </p>
 
-              <div className="text-xs text-[#162347]/70 font-mono">
+              <div className="text-xs text-[#183451]/70 font-mono">
                 Assigned: {victim.assignedUnit || 'Awaiting Boat Allocation'}
               </div>
 
@@ -92,7 +92,7 @@ export default function Rescue() {
                 {victim.status !== 'Rescued' ? (
                   <button
                     onClick={() => updateVictimStatus(victim.id, getNextStatus(victim.status))}
-                    className="border border-[#162347] text-[#162347] hover:bg-[#162347] hover:text-[#FAF7F2] px-6 py-2 rounded-full text-[11px] font-semibold tracking-[0.2em] uppercase transition-all"
+                    className="border border-[#183451] text-[#183451] hover:bg-[#183451] hover:text-[#F3ECDE] px-6 py-2 rounded-full text-[11px] font-semibold tracking-[0.2em] uppercase transition-all"
                   >
                     Advance to {getNextStatus(victim.status)}
                   </button>
@@ -104,7 +104,7 @@ export default function Rescue() {
 
                 <Link
                   to="/dashboard"
-                  className="text-xs text-[#162347]/70 hover:text-[#162347] underline underline-offset-4"
+                  className="text-xs text-[#183451]/70 hover:text-[#183451] underline underline-offset-4"
                 >
                   Track on Map
                 </Link>

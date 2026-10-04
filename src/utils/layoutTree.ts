@@ -9,33 +9,34 @@ export type PanelId =
   | 'log';
 
 export type LayoutNode =
-  | { type: 'panel'; id: PanelId }
-  | { type: 'group'; id: string; direction: 'horizontal' | 'vertical'; children: LayoutNode[] };
+  | { type: 'panel'; id: PanelId; size?: number }
+  | { type: 'group'; id: string; direction: 'horizontal' | 'vertical'; size?: number; children: LayoutNode[] };
 
 export const DEFAULT_MISSION_LAYOUT: LayoutNode = {
   type: 'group',
   id: 'mission-root',
   direction: 'vertical',
+  size: 100,
   children: [
     {
       type: 'group',
       id: 'mission-upper-row',
       direction: 'horizontal',
+      size: 55,
       children: [
-        { type: 'panel', id: 'camera' },
-        { type: 'panel', id: 'map' },
+        { type: 'panel', id: 'camera', size: 58 },
+        { type: 'panel', id: 'sensors', size: 42 },
       ],
     },
     {
       type: 'group',
-      id: 'mission-bottom-row',
+      id: 'mission-lower-row',
       direction: 'horizontal',
+      size: 45,
       children: [
-        { type: 'panel', id: 'navigation' },
-        { type: 'panel', id: 'sensors' },
-        { type: 'panel', id: 'victims' },
-        { type: 'panel', id: 'log' },
-        { type: 'panel', id: 'status' },
+        { type: 'panel', id: 'navigation', size: 28 },
+        { type: 'panel', id: 'map', size: 44 },
+        { type: 'panel', id: 'log', size: 28 },
       ],
     },
   ],

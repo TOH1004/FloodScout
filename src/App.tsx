@@ -6,6 +6,7 @@ import Technology from './pages/Technology';
 import Rescue from './pages/Rescue';
 import Contact from './pages/Contact';
 import Dashboard from './pages/Dashboard';
+import Login from './pages/Login';
 import { RescueProvider } from './context/RescueContext';
 
 function App() {
@@ -27,6 +28,8 @@ function App() {
           </Route>
           {/* Operations Command Dashboard */}
           <Route path="/dashboard" element={<Dashboard />} />
+          {/* Login Page */}
+          <Route path="/login" element={<Login />} />
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

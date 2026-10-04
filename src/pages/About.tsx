@@ -4,7 +4,8 @@ import {
   CheckCircle2, 
   X, 
   ArrowUpRight, 
-  ArrowRight 
+  ArrowRight,
+  ArrowLeft
 } from 'lucide-react';
 import StoryPhotoCard from '../components/story/StoryPhotoCard';
 
@@ -30,7 +31,7 @@ export default function About() {
   };
 
   return (
-    <div className="w-full bg-[#FAF7F2] text-[#162347] min-h-screen relative overflow-x-hidden selection:bg-[#BED6EE] selection:text-[#162347]">
+    <div className="w-full bg-[#F3ECDE] text-[#183451] min-h-screen relative overflow-x-hidden selection:bg-[#D4AF83] selection:text-[#183451]">
       
       {/* Background Engineering Notebook Grid */}
       <div 
@@ -44,13 +45,24 @@ export default function About() {
         }}
       />
 
+      {/* Top Navigation / Back Button */}
+      <div className="relative z-20 max-w-5xl mx-auto px-4 sm:px-8 pt-6 pb-2 flex items-center justify-between">
+        <Link
+          to="/"
+          className="inline-flex items-center gap-2 bg-[#183451] hover:bg-[#1f2f5c] text-white text-xs font-bold tracking-wider uppercase px-4 py-2 rounded-full transition-all shadow-md active:scale-95 group"
+        >
+          <ArrowLeft size={15} className="group-hover:-translate-x-0.5 transition-transform" />
+          <span>Back</span>
+        </Link>
+      </div>
+
       {/* ─── Compact Hero Header ─── */}
-      <header className="relative z-10 pt-10 sm:pt-14 pb-8 px-4 sm:px-8 max-w-4xl mx-auto text-center">
-        <h1 className="font-writing font-bold text-2xl sm:text-3xl md:text-4xl text-[#162347] tracking-tight mb-3">
+      <header className="relative z-10 pt-4 sm:pt-6 pb-8 px-4 sm:px-8 max-w-4xl mx-auto text-center">
+        <h1 className="font-writing font-bold text-2xl sm:text-3xl md:text-4xl text-[#183451] tracking-tight mb-3">
           From an Idea to a Robot That Moves
         </h1>
 
-        <div className="max-w-2xl mx-auto space-y-2 text-[#162347]/85">
+        <div className="max-w-2xl mx-auto space-y-2 text-[#183451]/85">
           <p className="font-writing text-xs sm:text-sm leading-relaxed">
             FloodScout didn't begin as a finished rescue robot.
           </p>
@@ -58,7 +70,7 @@ export default function About() {
             It began with a <span className="font-bold underline decoration-amber-500/60 decoration-2 underline-offset-3">draft design</span>, a few ideas, and a simple question:
           </p>
           <div className="pt-1.5">
-            <span className="font-writing font-bold text-sm sm:text-base text-[#162347] bg-[#F6F0DC] px-4 py-1.5 rounded-2xl inline-block border border-[#162347] shadow-xs">
+            <span className="font-writing font-bold text-sm sm:text-base text-[#183451] bg-[#F6F0DC] px-4 py-1.5 rounded-2xl inline-block border border-[#183451] shadow-xs">
               “Can we actually make this work?”
             </span>
           </div>
@@ -76,17 +88,17 @@ export default function About() {
           <div className="space-y-3">
             {/* Story Content */}
             <div className="space-y-1.5 max-w-3xl">
-              <h2 className="font-writing font-bold text-base sm:text-lg text-[#162347] tracking-tight">
+              <h2 className="font-writing font-bold text-base sm:text-lg text-[#183451] tracking-tight">
                 01 — From a Draft to a Direction
               </h2>
 
-              <div className="font-writing text-xs sm:text-sm text-[#162347] leading-relaxed space-y-1.5">
-                <p>Our first step was not building. <span className="font-bold text-[#162347]">It was designing.</span></p>
+              <div className="font-writing text-xs sm:text-sm text-[#183451] leading-relaxed space-y-1.5">
+                <p>Our first step was not building. <span className="font-bold text-[#183451]">It was designing.</span></p>
                 <p>
                   We started with an initial draft of what FloodScout could look like and how it could work. After several discussions, we refined the idea and confirmed the direction of the robot.
                 </p>
                 <p>
-                  But having a design on paper was only the beginning. <span className="font-bold text-[#162347]">We still had to turn that idea into something real.</span>
+                  But having a design on paper was only the beginning. <span className="font-bold text-[#183451]">We still had to turn that idea into something real.</span>
                 </p>
               </div>
             </div>
@@ -117,17 +129,17 @@ export default function About() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
             {/* Left: Story Content */}
             <div className="lg:col-span-7 space-y-2 order-2 lg:order-1">
-              <h2 className="font-writing font-bold text-base sm:text-lg text-[#162347] tracking-tight">
+              <h2 className="font-writing font-bold text-base sm:text-lg text-[#183451] tracking-tight">
                 02 — Our First Build
               </h2>
 
-              <div className="font-writing text-xs sm:text-sm text-[#162347] leading-relaxed space-y-1.5">
+              <div className="font-writing text-xs sm:text-sm text-[#183451] leading-relaxed space-y-1.5">
                 <p>We had our first meeting and started building the first part of the prototype.</p>
                 <p>This was when we discovered an important lesson:</p>
                 
                 {/* Highlight Callout */}
                 <div className="pl-3.5 border-l-3 border-l-amber-500 py-1 my-1.5 bg-amber-50/60 rounded-r-xl pr-3">
-                  <p className="font-writing font-bold text-xs sm:text-sm text-[#162347]">
+                  <p className="font-writing font-bold text-xs sm:text-sm text-[#183451]">
                     “Not everything that looks possible on paper is practical in the real world.”
                   </p>
                 </div>
@@ -135,8 +147,8 @@ export default function About() {
                 <p>Some components did not work the way we expected.</p>
                 <p>Some ideas were difficult to implement.</p>
                 <p>Some parts of our original design simply had to change.</p>
-                <p className="text-[#162347]/70 italic">After the meeting, we were stuck.</p>
-                <p className="font-bold text-[#162347]">
+                <p className="text-[#183451]/70 italic">After the meeting, we were stuck.</p>
+                <p className="font-bold text-[#183451]">
                   We knew what we wanted to build, but we were not sure how to move forward.
                 </p>
               </div>
@@ -162,26 +174,26 @@ export default function About() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
             {/* Left: Story Content */}
             <div className="lg:col-span-7 space-y-2 order-2 lg:order-1">
-              <h2 className="font-writing font-bold text-base sm:text-lg text-[#162347] tracking-tight">
+              <h2 className="font-writing font-bold text-base sm:text-lg text-[#183451] tracking-tight">
                 03 — Finding the Way Forward
               </h2>
 
-              <div className="font-writing text-xs sm:text-sm text-[#162347] leading-relaxed space-y-1.5">
-                <p className="font-bold text-[#162347]">Then came our meeting with our mentor.</p>
+              <div className="font-writing text-xs sm:text-sm text-[#183451] leading-relaxed space-y-1.5">
+                <p className="font-bold text-[#183451]">Then came our meeting with our mentor.</p>
                 <p>
                   Instead of continuing to force our original approach, we reviewed the problems we were facing and discussed what could realistically work within our time and resources.
                 </p>
                 <p>
                   Our mentor recommended different components and helped us clarify the system.
                 </p>
-                <p className="font-bold text-[#162347]">That changed our direction.</p>
+                <p className="font-bold text-[#183451]">That changed our direction.</p>
                 <p>
                   We replaced some of our original ideas with components that were more suitable for the prototype. And this time, things started to work.
                 </p>
 
                 {/* Core Philosophy Highlight */}
                 <div className="pl-3.5 border-l-3 border-l-blue-600 py-1 my-1.5 bg-blue-50/60 rounded-r-xl pr-3">
-                  <p className="font-writing font-bold text-xs sm:text-sm text-[#162347]">
+                  <p className="font-writing font-bold text-xs sm:text-sm text-[#183451]">
                     “The project became clearer once we stopped trying to make the original plan perfect and started building what was actually possible.”
                   </p>
                 </div>
@@ -208,27 +220,27 @@ export default function About() {
           <div className="space-y-3">
             {/* Story Content */}
             <div className="space-y-1.5 max-w-3xl">
-              <h2 className="font-writing font-bold text-base sm:text-lg text-[#162347] tracking-tight">
+              <h2 className="font-writing font-bold text-base sm:text-lg text-[#183451] tracking-tight">
                 04 — Build, Test, Repeat
               </h2>
 
-              <div className="font-writing text-xs sm:text-sm text-[#162347] leading-relaxed space-y-1.5">
-                <p className="font-bold text-[#162347]">From there, the project became a race against time.</p>
+              <div className="font-writing text-xs sm:text-sm text-[#183451] leading-relaxed space-y-1.5">
+                <p className="font-bold text-[#183451]">From there, the project became a race against time.</p>
                 <p>
                   We had to connect the components, write the code, test the sensors, work on the camera, and build the dashboard — all while figuring things out along the way.
                 </p>
                 <p>There were problems everywhere.</p>
                 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 my-1.5 font-writing text-[11px] text-[#162347]">
-                  <div className="bg-[#FAF7F2] p-2 rounded-lg border border-[#162347]/20 shadow-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 my-1.5 font-writing text-[11px] text-[#183451]">
+                  <div className="bg-[#F3ECDE] p-2 rounded-lg border border-[#183451]/20 shadow-xs">
                     <span className="text-rose-600 block font-bold">FAILED TESTS</span>
                     <span>Required recoding</span>
                   </div>
-                  <div className="bg-[#FAF7F2] p-2 rounded-lg border border-[#162347]/20 shadow-xs">
+                  <div className="bg-[#F3ECDE] p-2 rounded-lg border border-[#183451]/20 shadow-xs">
                     <span className="text-amber-700 block font-bold">HW BEHAVIOR</span>
                     <span>Motors diverged</span>
                   </div>
-                  <div className="bg-[#FAF7F2] p-2 rounded-lg border border-[#162347]/20 shadow-xs">
+                  <div className="bg-[#F3ECDE] p-2 rounded-lg border border-[#183451]/20 shadow-xs">
                     <span className="text-blue-700 block font-bold">TIMELINES</span>
                     <span>Took longer</span>
                   </div>
@@ -237,7 +249,7 @@ export default function About() {
                 <p>We spent a lot of time debugging and rebuilding. But every problem gave us something to improve.</p>
 
                 <div className="pl-3.5 border-l-3 border-l-indigo-600 py-1 my-1.5 bg-indigo-50/60 rounded-r-xl pr-3">
-                  <p className="font-writing font-bold text-xs sm:text-sm text-[#162347]">
+                  <p className="font-writing font-bold text-xs sm:text-sm text-[#183451]">
                     “We were no longer just designing a robot. We were learning how to build one.”
                   </p>
                 </div>
@@ -276,11 +288,11 @@ export default function About() {
           <div className="space-y-4">
             {/* Story Text */}
             <div className="space-y-1.5 max-w-3xl">
-              <h2 className="font-writing font-bold text-base sm:text-lg text-[#162347] tracking-tight">
+              <h2 className="font-writing font-bold text-base sm:text-lg text-[#183451] tracking-tight">
                 05 — From the Workbench to the Real World
               </h2>
 
-              <div className="font-writing text-xs sm:text-sm text-[#162347] leading-relaxed space-y-1.5">
+              <div className="font-writing text-xs sm:text-sm text-[#183451] leading-relaxed space-y-1.5">
                 <p>
                   Eventually, we reached the point where we could take FloodScout outside the development environment and test it in a real setting.
                 </p>
@@ -293,12 +305,12 @@ export default function About() {
                 <p>These tests showed us something important:</p>
 
                 <div className="pl-3.5 border-l-3 border-l-cyan-600 py-1 my-1.5 bg-cyan-50/60 rounded-r-xl pr-3">
-                  <p className="font-writing font-bold text-xs sm:text-sm text-[#162347]">
+                  <p className="font-writing font-bold text-xs sm:text-sm text-[#183451]">
                     “A prototype doesn't need to be perfect to prove that an idea can work.”
                   </p>
                 </div>
 
-                <p className="font-bold text-[#162347]">
+                <p className="font-bold text-[#183451]">
                   It needs to work well enough for us to see what comes next.
                 </p>
               </div>
@@ -307,7 +319,7 @@ export default function About() {
             {/* Two Sections Side-by-Side: Seaside and Indoor */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
               <div>
-                <span className="text-xs font-writing font-bold text-[#162347] block mb-1.5">
+                <span className="text-xs font-writing font-bold text-[#183451] block mb-1.5">
                   Seaside Water Testing
                 </span>
                 <StoryPhotoCard
@@ -319,11 +331,11 @@ export default function About() {
               </div>
 
               <div>
-                <span className="text-xs font-writing font-bold text-[#162347] block mb-1.5">
+                <span className="text-xs font-writing font-bold text-[#183451] block mb-1.5">
                   Indoor Camera & AI Detection
                 </span>
                 <StoryPhotoCard
-                  src="https://images.unsplash.com/photo-1508614589041-895b88991e3e?q=80&w=800&auto=format&fit=crop"
+                  src="/indoor-camera-robot.png"
                   alt="Indoor Camera & AI Detection"
                   aspectRatio="aspect-[16/10]"
                   onZoom={openLightbox}
@@ -341,43 +353,43 @@ export default function About() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
             {/* Story Text */}
             <div className="lg:col-span-7 space-y-2 order-2 lg:order-1">
-              <h2 className="font-writing font-bold text-base sm:text-lg text-[#162347] tracking-tight">
+              <h2 className="font-writing font-bold text-base sm:text-lg text-[#183451] tracking-tight">
                 06 — From Pieces to a System
               </h2>
 
-              <div className="font-writing text-xs sm:text-sm text-[#162347] leading-relaxed space-y-1.5">
+              <div className="font-writing text-xs sm:text-sm text-[#183451] leading-relaxed space-y-1.5">
                 <p>
                   After all the discussions, changes, debugging, and testing, the individual parts finally started coming together.
                 </p>
 
                 {/* Subsystem Readiness Checklist */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 my-2 font-writing text-xs">
-                  <div className="flex items-center gap-2 bg-[#F6F0DC]/80 p-2.5 rounded-lg border border-[#162347]/30 shadow-xs">
+                  <div className="flex items-center gap-2 bg-[#F6F0DC]/80 p-2.5 rounded-lg border border-[#183451]/30 shadow-xs">
                     <CheckCircle2 size={15} className="text-emerald-600 shrink-0" />
-                    <span className="font-bold text-[#162347]">The robot could move.</span>
+                    <span className="font-bold text-[#183451]">The robot could move.</span>
                   </div>
-                  <div className="flex items-center gap-2 bg-[#F6F0DC]/80 p-2.5 rounded-lg border border-[#162347]/30 shadow-xs">
+                  <div className="flex items-center gap-2 bg-[#F6F0DC]/80 p-2.5 rounded-lg border border-[#183451]/30 shadow-xs">
                     <CheckCircle2 size={15} className="text-emerald-600 shrink-0" />
-                    <span className="font-bold text-[#162347]">Sensors could detect surroundings.</span>
+                    <span className="font-bold text-[#183451]">Sensors could detect surroundings.</span>
                   </div>
-                  <div className="flex items-center gap-2 bg-[#F6F0DC]/80 p-2.5 rounded-lg border border-[#162347]/30 shadow-xs">
+                  <div className="flex items-center gap-2 bg-[#F6F0DC]/80 p-2.5 rounded-lg border border-[#183451]/30 shadow-xs">
                     <CheckCircle2 size={15} className="text-emerald-600 shrink-0" />
-                    <span className="font-bold text-[#162347]">Camera could provide visual feed.</span>
+                    <span className="font-bold text-[#183451]">Camera could provide visual feed.</span>
                   </div>
-                  <div className="flex items-center gap-2 bg-[#F6F0DC]/80 p-2.5 rounded-lg border border-[#162347]/30 shadow-xs">
+                  <div className="flex items-center gap-2 bg-[#F6F0DC]/80 p-2.5 rounded-lg border border-[#183451]/30 shadow-xs">
                     <CheckCircle2 size={15} className="text-emerald-600 shrink-0" />
-                    <span className="font-bold text-[#162347]">Dashboard displayed what was happening.</span>
+                    <span className="font-bold text-[#183451]">Dashboard displayed what was happening.</span>
                   </div>
                 </div>
 
                 <p>Computer vision could assist with detecting people.</p>
-                <p className="font-bold text-[#162347]">What started as a draft had become a working prototype.</p>
+                <p className="font-bold text-[#183451]">What started as a draft had become a working prototype.</p>
                 <p>
                   And the wires, boards, sensors, motors, and code had finally become something more:
                 </p>
 
                 <div className="pl-3.5 border-l-3 border-l-emerald-600 py-1 my-1.5 bg-emerald-50/60 rounded-r-xl pr-3">
-                  <p className="font-writing font-bold text-xs sm:text-sm text-[#162347]">
+                  <p className="font-writing font-bold text-xs sm:text-sm text-[#183451]">
                     “a possible tool for helping people during floods.”
                   </p>
                 </div>
@@ -402,11 +414,11 @@ export default function About() {
         <section className="relative pt-6 text-center">
           <div className="relative z-10 max-w-3xl mx-auto">
             
-            <h2 className="font-writing font-bold text-xl sm:text-2xl md:text-3xl text-[#162347] tracking-tight mb-2">
+            <h2 className="font-writing font-bold text-xl sm:text-2xl md:text-3xl text-[#183451] tracking-tight mb-2">
               What Comes Next?
             </h2>
 
-            <p className="font-writing text-xs sm:text-sm text-[#162347]/85 max-w-xl mx-auto mb-6 leading-relaxed">
+            <p className="font-writing text-xs sm:text-sm text-[#183451]/85 max-w-xl mx-auto mb-6 leading-relaxed">
               FloodScout is still a prototype. There is still a lot we want to improve:
             </p>
 
@@ -420,16 +432,16 @@ export default function About() {
                 { title: 'Longer operating range', desc: 'High-density LiFePO4 cells and dual propulsion' },
                 { title: 'Autonomous rescue assistance', desc: 'Life-vest deployment & direct beacon guidance' },
               ].map((item, idx) => (
-                <div key={idx} className="bg-[#F6F0DC]/70 border border-[#162347]/30 rounded-xl p-2.5 hover:shadow-xs transition-shadow">
+                <div key={idx} className="bg-[#F6F0DC]/70 border border-[#183451]/30 rounded-xl p-2.5 hover:shadow-xs transition-shadow">
                   <div className="flex items-center gap-1.5 mb-1">
-                    <span className="w-4.5 h-4.5 rounded-full bg-[#162347] text-white font-writing font-bold text-[10px] flex items-center justify-center">
+                    <span className="w-4.5 h-4.5 rounded-full bg-[#183451] text-white font-writing font-bold text-[10px] flex items-center justify-center">
                       {idx + 1}
                     </span>
-                    <h4 className="font-writing font-bold text-xs text-[#162347]">
+                    <h4 className="font-writing font-bold text-xs text-[#183451]">
                       {item.title}
                     </h4>
                   </div>
-                  <p className="text-[11px] font-writing text-[#162347]/75 pl-6 leading-snug">
+                  <p className="text-[11px] font-writing text-[#183451]/75 pl-6 leading-snug">
                     {item.desc}
                   </p>
                 </div>
@@ -437,19 +449,19 @@ export default function About() {
             </div>
 
             {/* The Hard-Won Lesson */}
-            <div className="max-w-2xl mx-auto space-y-3.5 pt-4 border-t border-[#162347]/15 text-center font-writing text-xs sm:text-sm text-[#162347]/90 leading-relaxed">
+            <div className="max-w-2xl mx-auto space-y-3.5 pt-4 border-t border-[#183451]/15 text-center font-writing text-xs sm:text-sm text-[#183451]/90 leading-relaxed">
              
               <p>We spent hours testing and debugging.</p>
-              <p className="font-writing font-bold text-xs sm:text-sm text-[#162347]">
+              <p className="font-writing font-bold text-xs sm:text-sm text-[#183451]">
                 And eventually, we got it working.
               </p>
 
               <div className="py-2">
-                <p className="text-xs font-writing text-[#162347]/70 italic mb-1">
+                <p className="text-xs font-writing text-[#183451]/70 italic mb-1">
                   Innovation doesn't happen when the first idea works perfectly.
                 </p>
-                <div className="p-2.5 rounded-xl bg-[#F6F0DC] border border-[#162347] inline-block shadow-xs">
-                  <p className="font-writing font-bold text-xs sm:text-sm text-[#162347]">
+                <div className="p-2.5 rounded-xl bg-[#F6F0DC] border border-[#183451] inline-block shadow-xs">
+                  <p className="font-writing font-bold text-xs sm:text-sm text-[#183451]">
                     “It happens when you keep improving the idea until it works in the real world.”
                   </p>
                 </div>
@@ -457,20 +469,20 @@ export default function About() {
 
               {/* The 4-Step Manifesto */}
               <div className="py-4 space-y-1.5">
-                <h3 className="font-writing font-bold text-xs sm:text-sm text-[#162347]/70">
+                <h3 className="font-writing font-bold text-xs sm:text-sm text-[#183451]/70">
                   From a draft.
                 </h3>
-                <h3 className="font-writing font-bold text-xs sm:text-sm text-[#162347]/80">
+                <h3 className="font-writing font-bold text-xs sm:text-sm text-[#183451]/80">
                   To a discussion.
                 </h3>
-                <h3 className="font-writing font-bold text-sm sm:text-base text-[#162347]/90">
+                <h3 className="font-writing font-bold text-sm sm:text-base text-[#183451]/90">
                   To a prototype.
                 </h3>
-                <h3 className="font-writing font-bold text-base sm:text-lg text-[#162347]">
+                <h3 className="font-writing font-bold text-base sm:text-lg text-[#183451]">
                   To a real-world demo.
                 </h3>
                 <div className="pt-2">
-                  <h2 className="font-writing font-bold text-xl sm:text-3xl text-[#162347] tracking-tight">
+                  <h2 className="font-writing font-bold text-xl sm:text-3xl text-[#183451] tracking-tight">
                     This is FloodScout.
                   </h2>
                 </div>
@@ -480,14 +492,14 @@ export default function About() {
               <div className="pt-2 flex flex-wrap items-center justify-center gap-3">
                 <Link
                   to="/dashboard"
-                  className="px-5 py-2 rounded-full bg-[#162347] hover:bg-slate-900 text-white font-writing font-bold text-xs tracking-wider uppercase shadow-xs transition-all hover:scale-105 flex items-center gap-1.5"
+                  className="px-5 py-2 rounded-full bg-[#183451] hover:bg-slate-900 text-white font-writing font-bold text-xs tracking-wider uppercase shadow-xs transition-all hover:scale-105 flex items-center gap-1.5"
                 >
                   <span>Open Operations Dashboard</span>
                   <ArrowRight size={13} />
                 </Link>
                 <Link
                   to="/technology"
-                  className="px-5 py-2 rounded-full bg-white hover:bg-slate-50 text-[#162347] font-writing font-bold text-xs tracking-wider uppercase border border-[#162347] transition-all flex items-center gap-1.5"
+                  className="px-5 py-2 rounded-full bg-white hover:bg-slate-50 text-[#183451] font-writing font-bold text-xs tracking-wider uppercase border border-[#183451] transition-all flex items-center gap-1.5"
                 >
                   <span>Explore Robot Hardware Specs</span>
                   <ArrowUpRight size={13} />
@@ -503,11 +515,11 @@ export default function About() {
       {/* ─── Clean Lightbox Modal for Enlargeable Images (NO labels) ─── */}
       {lightbox.isOpen && (
         <div
-          className="fixed inset-0 z-50 bg-[#162347]/85 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-200"
+          className="fixed inset-0 z-50 bg-[#183451]/85 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-200"
           onClick={closeLightbox}
         >
           <div
-            className="relative max-w-4xl w-full bg-black border border-[#162347] rounded-2xl overflow-hidden shadow-2xl"
+            className="relative max-w-4xl w-full bg-black border border-[#183451] rounded-2xl overflow-hidden shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="relative aspect-[16/10] sm:aspect-[16/9] w-full bg-slate-950 flex items-center justify-center">

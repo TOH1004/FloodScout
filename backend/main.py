@@ -962,7 +962,7 @@ async def incident_websocket(websocket: WebSocket):
 
 
 # ─── ESP32 Wi-Fi Pan/Tilt Proxy (Enables mobile HTTPS clients to control ESP32) ───
-ESP32_PAN_TILT_URL = (os.getenv("ESP32_PAN_TILT_URL") or "http://10.133.81.149").rstrip("/")
+ESP32_PAN_TILT_URL = (os.getenv("ESP32_PAN_TILT_URL") or os.getenv("ESP32_BASE_URL") or "http://10.133.81.106").rstrip("/")
 
 @app.api_route("/api/esp32/config", methods=["GET", "POST"])
 def configure_esp32_url(ip: Optional[str] = Query(None), target: Optional[str] = Query(None)):

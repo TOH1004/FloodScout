@@ -76,8 +76,15 @@ export async function sendPanTiltCommand(command: string, customBaseUrl?: string
   const endpoint = command.toLowerCase().trim();
   const rootUrl = customBaseUrl || getEsp32BaseUrl();
 
+  // Route through backend proxy when:
+  // 1. HTTPS origin trying to reach HTTP ESP32 (mixed content), OR
+  // 2. Non-localhost origin (phone/remote device) — direct ESP32 reach is unreliable due to CORS
   const isHttpsOrigin = typeof window !== 'undefined' && window.location.protocol === 'https:';
-  const url = isHttpsOrigin && rootUrl.startsWith('http://')
+  const isRemoteOrigin = typeof window !== 'undefined' &&
+    window.location.hostname !== 'localhost' &&
+    window.location.hostname !== '127.0.0.1';
+  const useProxy = (isHttpsOrigin && rootUrl.startsWith('http://')) || isRemoteOrigin;
+  const url = useProxy
     ? `${getBackendBaseUrl()}/api/pan-tilt/${endpoint}?target=${encodeURIComponent(rootUrl)}`
     : `${rootUrl}/api/pan-tilt/${endpoint}`;
 
@@ -165,7 +172,11 @@ export async function sendPanTiltCommand(command: string, customBaseUrl?: string
 export async function fetchPanTiltStatus(customBaseUrl?: string): Promise<PanTiltResponse> {
   const rootUrl = customBaseUrl || getEsp32BaseUrl();
   const isHttpsOrigin = typeof window !== 'undefined' && window.location.protocol === 'https:';
-  const url = isHttpsOrigin && rootUrl.startsWith('http://')
+  const isRemoteOrigin = typeof window !== 'undefined' &&
+    window.location.hostname !== 'localhost' &&
+    window.location.hostname !== '127.0.0.1';
+  const useProxy = (isHttpsOrigin && rootUrl.startsWith('http://')) || isRemoteOrigin;
+  const url = useProxy
     ? `${getBackendBaseUrl()}/api/pan-tilt/status?target=${encodeURIComponent(rootUrl)}`
     : `${rootUrl}/api/pan-tilt/status`;
 

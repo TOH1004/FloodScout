@@ -21,6 +21,8 @@ import {
   pointerWithin,
   KeyboardSensor,
   PointerSensor,
+  TouchSensor,
+  MouseSensor,
   useSensor,
   useSensors,
   DragOverlay,
@@ -1610,25 +1612,27 @@ function PanelContent({
             </div>
 
             {/* D-Pad for Camera Servos */}
-            <div className="grid grid-cols-3 gap-2 w-40">
+            <div className="grid grid-cols-3 gap-3 w-48">
               <div />
               <button
                 onClick={() => panTilt.sendCommand('up')}
                 disabled={panTilt.isProcessing}
-                className="h-10 rounded bg-[#FAF7F2] hover:bg-[#162347] text-[#162347] hover:text-white border border-[#E6DFD5] flex items-center justify-center transition-all active:scale-95 shadow-sm disabled:opacity-75 cursor-pointer select-none"
+                style={{ touchAction: 'manipulation' }}
+                className="h-14 rounded-lg bg-[#FAF7F2] hover:bg-[#162347] text-[#162347] hover:text-white border border-[#E6DFD5] flex items-center justify-center transition-all active:scale-95 shadow-sm disabled:opacity-75 cursor-pointer select-none"
                 title="Tilt Camera Up (+10°)"
               >
-                <ArrowUp size={18} />
+                <ArrowUp size={22} />
               </button>
               <div />
 
               <button
                 onClick={() => panTilt.sendCommand('left')}
                 disabled={panTilt.isProcessing}
-                className="h-10 rounded bg-[#FAF7F2] hover:bg-[#162347] text-[#162347] hover:text-white border border-[#E6DFD5] flex items-center justify-center transition-all active:scale-95 shadow-sm disabled:opacity-75 cursor-pointer select-none"
+                style={{ touchAction: 'manipulation' }}
+                className="h-14 rounded-lg bg-[#FAF7F2] hover:bg-[#162347] text-[#162347] hover:text-white border border-[#E6DFD5] flex items-center justify-center transition-all active:scale-95 shadow-sm disabled:opacity-75 cursor-pointer select-none"
                 title="Pan Camera Left (-10°)"
               >
-                <ArrowLeft size={18} />
+                <ArrowLeft size={22} />
               </button>
               <button
                 onClick={(e) => {
@@ -1641,7 +1645,8 @@ function PanelContent({
                 }}
                 onDoubleClick={() => panTilt.sendCommand('center')}
                 disabled={panTilt.isProcessing}
-                className="h-10 rounded bg-[#162347] text-[#FAF7F2] font-mono text-[10px] font-bold active:scale-95 shadow-sm disabled:opacity-75 cursor-pointer select-none"
+                style={{ touchAction: 'manipulation' }}
+                className="h-14 rounded-lg bg-[#162347] text-[#FAF7F2] font-mono text-[11px] font-bold active:scale-95 shadow-sm disabled:opacity-75 cursor-pointer select-none"
                 title="Hold Camera Position (Double-click to Center 90°/90°)"
               >
                 STOP
@@ -1649,20 +1654,22 @@ function PanelContent({
               <button
                 onClick={() => panTilt.sendCommand('right')}
                 disabled={panTilt.isProcessing}
-                className="h-10 rounded bg-[#FAF7F2] hover:bg-[#162347] text-[#162347] hover:text-white border border-[#E6DFD5] flex items-center justify-center transition-all active:scale-95 shadow-sm disabled:opacity-75 cursor-pointer select-none"
+                style={{ touchAction: 'manipulation' }}
+                className="h-14 rounded-lg bg-[#FAF7F2] hover:bg-[#162347] text-[#162347] hover:text-white border border-[#E6DFD5] flex items-center justify-center transition-all active:scale-95 shadow-sm disabled:opacity-75 cursor-pointer select-none"
                 title="Pan Camera Right (+10°)"
               >
-                <ArrowRight size={18} />
+                <ArrowRight size={22} />
               </button>
 
               <div />
               <button
                 onClick={() => panTilt.sendCommand('down')}
                 disabled={panTilt.isProcessing}
-                className="h-10 rounded bg-[#FAF7F2] hover:bg-[#162347] text-[#162347] hover:text-white border border-[#E6DFD5] flex items-center justify-center transition-all active:scale-95 shadow-sm disabled:opacity-75 cursor-pointer select-none"
+                style={{ touchAction: 'manipulation' }}
+                className="h-14 rounded-lg bg-[#FAF7F2] hover:bg-[#162347] text-[#162347] hover:text-white border border-[#E6DFD5] flex items-center justify-center transition-all active:scale-95 shadow-sm disabled:opacity-75 cursor-pointer select-none"
                 title="Tilt Camera Down (-10°)"
               >
-                <ArrowDown size={18} />
+                <ArrowDown size={22} />
               </button>
               <div />
             </div>
@@ -2364,7 +2371,10 @@ export default function Dashboard() {
   }, [moveRobot, emergencyStop, panTilt]);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    // Mouse: require 8px movement before drag starts — clicks fire instantly
+    useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
+    // Touch: require 250ms hold before drag starts — taps always fire onClick
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 

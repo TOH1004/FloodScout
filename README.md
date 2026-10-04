@@ -16,6 +16,15 @@
 
 **Deploy → Navigate → Scan → Detect → Confirm → Localise → Inform Rescue Team**
 
+
+| Resource | Link |
+|---|---|
+| 📄 Documentation | [View Documentation](https://drive.google.com/file/d/1b0v3hBeZCKS2G16Wo0ZVKvWsUMepULTB/view?usp=sharing) |
+| 🎥 Demo Video | [Watch Demo Video](https://drive.google.com/file/d/1w0KB5JXJXWeRGugl_taHCY_Cb30htfpa/view?usp=drive_link) |
+| 💰 Financial Document | [View Financial Document](https://drive.google.com/file/d/1cxrFeNK1FRoSCJ-a3GuzziTtApQRbJx-/view?usp=sharing) |
+| 📝 Nexus Log | [View Nexus Log](YOUR_NEXUS_LOG_LINK) |
+| 🌐 Live Website | [Visit FloodScout Dashboard](https://flood-scout-ecru.vercel.app/) |
+
 </div>
 
 ---

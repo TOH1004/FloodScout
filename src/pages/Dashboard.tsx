@@ -502,7 +502,8 @@ function PanelContent({
 
   // GPS coordination for Operator Ground Control Station (PC)
   const isComputerJohorMock = computerLocation && Math.abs(computerLocation[0] - 1.5588) < 0.005 && Math.abs(computerLocation[1] - 103.6375) < 0.005;
-  const baseLocation: [number, number] = (!isComputerJohorMock && computerLocation) || robotLocation || [1.8642, 103.1142];
+  const isComputerBatuPahatMock = computerLocation && Math.abs(computerLocation[0] - 1.8642) < 0.005 && Math.abs(computerLocation[1] - 103.1142) < 0.005;
+  const baseLocation: [number, number] = (!isComputerJohorMock && !isComputerBatuPahatMock && computerLocation) || computerLocation || [1.5354, 103.6811];
 
   const getPersonGps = (personId: number, _base: [number, number]): [number, number] | null => {
     // Use frozenDetectionLocation so the marker is anchored at the detection spot, not live robot
@@ -1227,25 +1228,33 @@ function PanelContent({
                   if (robotLocation && onTrackPerson) onTrackPerson(robotLocation);
                   else if (baseLocation && onTrackPerson) onTrackPerson(baseLocation);
                 }}
-                className={`backdrop-blur-md px-3 py-1.5 rounded-md shadow-md border text-[11px] font-mono flex items-center gap-2 transition-all cursor-pointer active:scale-95 group ${
+                className={`backdrop-blur-md px-3 py-1.5 rounded-md shadow-md border text-[11px] font-mono flex items-center gap-2 transition-all active:scale-95 group ${
                   isPersonDetectedAtRobot
-                    ? 'bg-rose-950/95 hover:bg-rose-900 text-white border-rose-500 ring-1 ring-rose-400 animate-pulse'
-                    : 'bg-[#183451]/95 hover:bg-[#1f2f5c] text-[#F3ECDE] border-cyan-400/60'
+                    ? 'bg-rose-950/95 hover:bg-rose-900 text-white border-rose-500 ring-1 ring-rose-400 animate-pulse cursor-pointer'
+                    : robotLocation
+                    ? 'bg-[#183451]/95 hover:bg-[#1f2f5c] text-[#F3ECDE] border-cyan-400/60 cursor-pointer'
+                    : 'bg-slate-900/90 text-slate-400 border-slate-700/60 cursor-default'
                 }`}
-                title={isPersonDetectedAtRobot ? "🚨 Person detected at robot position! Click to center map" : "Click to Center Tactical Map on Robot"}
+                title={
+                  isPersonDetectedAtRobot
+                    ? "🚨 Person detected at robot position! Click to center map"
+                    : robotLocation
+                    ? "Click to Center Tactical Map on Robot"
+                    : "No Robot Detected / Awaiting Hardware GNSS Fix"
+                }
               >
                 <span className={`flex items-center gap-1 font-bold ${
-                  isPersonDetectedAtRobot ? 'text-rose-400' : 'text-cyan-400'
+                  isPersonDetectedAtRobot ? 'text-rose-400' : robotLocation ? 'text-cyan-400' : 'text-slate-400'
                 }`}>
                   {isPersonDetectedAtRobot ? (
                     <AlertTriangle size={13} className="text-rose-400 animate-bounce" />
                   ) : (
-                    <Navigation size={13} className="text-cyan-300 group-hover:scale-110 transition-transform" />
+                    <Navigation size={13} className={robotLocation ? "text-cyan-300 group-hover:scale-110 transition-transform" : "text-slate-500"} />
                   )}
                   ROBOT GPS:
                 </span>
-                <span className="font-bold text-white">
-                  {robotLocation ? 'Active' : 'No Signal / Awaiting Fix'}
+                <span className={`font-bold ${robotLocation ? 'text-white' : 'text-slate-400'}`}>
+                  {robotLocation ? 'Active' : 'No Robot Detected'}
                 </span>
                 {hardwareGps?.isValid && (
                   <span className="text-[9px] px-1.5 py-0.5 rounded font-sans font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
@@ -1253,13 +1262,19 @@ function PanelContent({
                     {hardwareGps.satellites} Sats • {hardwareGps.port || 'COM5'}
                   </span>
                 )}
-                <span className={`text-[9px] px-1.5 py-0.2 rounded font-sans font-bold uppercase tracking-wider ${
-                  isPersonDetectedAtRobot
-                    ? 'bg-rose-600 text-white border border-rose-400'
-                    : 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
-                }`}>
-                  {isPersonDetectedAtRobot ? '🚨 TARGET DETECTED' : `${robotSpeed} km/h • ${robotHeading}°`}
-                </span>
+                {robotLocation ? (
+                  <span className={`text-[9px] px-1.5 py-0.2 rounded font-sans font-bold uppercase tracking-wider ${
+                    isPersonDetectedAtRobot
+                      ? 'bg-rose-600 text-white border border-rose-400'
+                      : 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
+                  }`}>
+                    {isPersonDetectedAtRobot ? '🚨 TARGET DETECTED' : `${robotSpeed.toFixed(1)} km/h • ${robotHeading}°`}
+                  </span>
+                ) : (
+                  <span className="text-[9px] px-1.5 py-0.5 rounded font-sans font-bold uppercase tracking-wider bg-slate-800 text-slate-400 border border-slate-700">
+                    Offline
+                  </span>
+                )}
                 {isPersonDetectedAtRobot && (
                   <span
                     onClick={(e) => {
@@ -1272,34 +1287,42 @@ function PanelContent({
                     Manifest
                   </span>
                 )}
-                <span className={`text-[9px] font-sans font-bold px-1.5 py-0.5 rounded shadow-xs ml-0.5 flex items-center gap-1 ${
-                  isPersonDetectedAtRobot ? 'bg-rose-700 hover:bg-rose-600 text-white' : 'bg-cyan-600 hover:bg-cyan-500 text-white'
-                }`}>
-                  Locate
-                </span>
+                {robotLocation && (
+                  <span className={`text-[9px] font-sans font-bold px-1.5 py-0.5 rounded shadow-xs ml-0.5 flex items-center gap-1 ${
+                    isPersonDetectedAtRobot ? 'bg-rose-700 hover:bg-rose-600 text-white' : 'bg-cyan-600 hover:bg-cyan-500 text-white'
+                  }`}>
+                    Locate
+                  </span>
+                )}
               </button>
 
               {/* Live Thruster Motion Status on Tactical Map */}
               <div
-                className={`bg-[#183451]/95 backdrop-blur-md px-2.5 py-1.5 rounded-md shadow-md border text-[10px] font-mono flex items-center gap-1.5 transition-all ${
-                  motorTelemetry.motion.state.includes('FORWARD')
-                    ? 'border-emerald-500/60 text-emerald-300'
+                className={`backdrop-blur-md px-2.5 py-1.5 rounded-md shadow-md border text-[10px] font-mono flex items-center gap-1.5 transition-all ${
+                  !motorTelemetry.isConnected
+                    ? 'bg-slate-900/90 border-slate-700/60 text-slate-400'
+                    : motorTelemetry.motion.state.includes('FORWARD')
+                    ? 'bg-[#183451]/95 border-emerald-500/60 text-emerald-300'
                     : motorTelemetry.motion.state.includes('REVERSE')
-                    ? 'border-amber-500/60 text-amber-300'
+                    ? 'bg-[#183451]/95 border-amber-500/60 text-amber-300'
                     : motorTelemetry.motion.state.includes('SPIN')
-                    ? 'border-cyan-500/60 text-cyan-300'
-                    : 'border-slate-600/60 text-slate-400'
+                    ? 'bg-[#183451]/95 border-cyan-500/60 text-cyan-300'
+                    : 'bg-[#183451]/95 border-slate-600/60 text-slate-400'
                 }`}
-                title={`Vessel Thruster Status (Left: ${motorTelemetry.motion.left.status} | Right: ${motorTelemetry.motion.right.status})`}
+                title={
+                  motorTelemetry.isConnected
+                    ? `Vessel Thruster Status (Left: ${motorTelemetry.motion.left.status} | Right: ${motorTelemetry.motion.right.status})`
+                    : 'No Robot Thruster Connection Detected'
+                }
               >
                 <Compass
                   size={12}
-                  className={`text-sky-400 ${motorTelemetry.motion.state !== 'STOP' ? 'animate-spin' : ''}`}
+                  className={motorTelemetry.isConnected && motorTelemetry.motion.state !== 'STOP' ? 'text-sky-400 animate-spin' : 'text-slate-500'}
                 />
                 <span className="font-bold text-white uppercase tracking-wider text-[9px]">
-                  {motorTelemetry.motion.state}
+                  {motorTelemetry.isConnected ? motorTelemetry.motion.state : 'THRUSTERS: OFFLINE'}
                 </span>
-                {motorTelemetry.motion.state !== 'STOP' && (
+                {motorTelemetry.isConnected && motorTelemetry.motion.state !== 'STOP' && (
                   <span className="text-[9px] text-sky-300">
                     L:{motorTelemetry.motion.left.percent}% R:{motorTelemetry.motion.right.percent}%
                   </span>

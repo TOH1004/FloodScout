@@ -6,7 +6,7 @@ export default function Layout() {
   const isHome = location.pathname === '/';
 
   return (
-    <div className={`min-h-screen ${isHome ? 'bg-[#F3ECDE]' : 'bg-[#F3ECDE]'} text-[#183451] flex flex-col font-sans selection:bg-[#D4AF83] selection:text-[#183451]`}>
+    <div className={`min-h-screen ${isHome ? 'bg-white' : 'bg-[#F3ECDE]'} text-[#183451] flex flex-col font-sans ${isHome ? 'selection:bg-[#27b1ff]/20 selection:text-[#27b1ff]' : 'selection:bg-[#D4AF83] selection:text-[#183451]'}`}>
       {/* Main Page Content */}
       <main className="flex-grow">
         <Outlet />

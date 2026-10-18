@@ -198,7 +198,7 @@ export function RescueLocationAnalysis({
 
   // 1. Primary Location 1: PC Location (Ground Control Station)
   const pcLoc: [number, number] = useMemo(() => {
-    return baseLocation || [1.8642, 103.1142];
+    return baseLocation || [1.5354, 103.6811];
   }, [baseLocation]);
 
   // 2. Primary Location 2: Robot Location (FloodScout-01 Vessel)

@@ -9,6 +9,7 @@ interface ModelViewer3DProps {
   className?: string;
   autoRotateSpeed?: number;
   showControls?: boolean;
+  modelScale?: number;
 }
 
 export const ModelViewer3D: React.FC<ModelViewer3DProps> = ({
@@ -16,6 +17,7 @@ export const ModelViewer3D: React.FC<ModelViewer3DProps> = ({
   className = 'w-full h-full min-h-[380px]',
   autoRotateSpeed = 1.2,
   showControls = true,
+  modelScale = 4.5,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
@@ -24,7 +26,7 @@ export const ModelViewer3D: React.FC<ModelViewer3DProps> = ({
 
   // References to three objects for interaction
   const controlsRef = useRef<OrbitControls | null>(null);
-  const initialCamPos = useRef(new THREE.Vector3(2.6, 1.8, 3.2));
+  const initialCamPos = useRef(new THREE.Vector3(2.2, 1.4, 2.7));
   const modelGroupRef = useRef<THREE.Group | null>(null);
 
   useEffect(() => {
@@ -39,7 +41,7 @@ export const ModelViewer3D: React.FC<ModelViewer3DProps> = ({
 
     // 2. Camera setup
     const width = container.clientWidth || 400;
-    const height = container.clientHeight || 380;
+    const height = container.clientHeight || 480;
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
     camera.position.copy(initialCamPos.current);
 
@@ -62,9 +64,10 @@ export const ModelViewer3D: React.FC<ModelViewer3DProps> = ({
     controls.dampingFactor = 0.05;
     controls.autoRotate = true;
     controls.autoRotateSpeed = autoRotateSpeed;
-    controls.minDistance = 1.2;
-    controls.maxDistance = 7.0;
+    controls.minDistance = 0.8;
+    controls.maxDistance = 8.0;
     controls.maxPolarAngle = Math.PI / 2 + 0.15; // Don't flip under
+    controls.target.set(0, 0, 0);
     controlsRef.current = controls;
 
     // 5. Lighting Setup
@@ -130,15 +133,15 @@ export const ModelViewer3D: React.FC<ModelViewer3DProps> = ({
         if (isDisposed) return;
         const model = gltf.scene;
 
-        // 1. Scale model to standard bounding dimension of ~2.4 units
+        // 1. Scale model to standard bounding dimension based on modelScale (default 3.8 units)
         const initialBox = new THREE.Box3().setFromObject(model);
         const initialSize = initialBox.getSize(new THREE.Vector3());
         const maxDim = Math.max(initialSize.x, initialSize.y, initialSize.z);
-        const targetScale = 2.4 / (maxDim || 1);
+        const targetScale = (modelScale ?? 4.5) / (maxDim || 1);
         model.scale.set(targetScale, targetScale, targetScale);
         model.updateMatrixWorld(true);
 
-        // 2. Recompute box after scaling and center precisely at origin
+        // 2. Recompute box after scaling and center naturally
         const scaledBox = new THREE.Box3().setFromObject(model);
         const scaledCenter = scaledBox.getCenter(new THREE.Vector3());
         model.position.x = -scaledCenter.x;
@@ -167,7 +170,7 @@ export const ModelViewer3D: React.FC<ModelViewer3DProps> = ({
         modelGroup.add(model);
 
         // Position camera to look at center
-        camera.position.set(2.6, 1.8, 3.2);
+        camera.position.set(2.2, 1.4, 2.7);
         controls.target.set(0, 0, 0);
         controls.update();
 
@@ -278,35 +281,20 @@ export const ModelViewer3D: React.FC<ModelViewer3DProps> = ({
         </div>
       )}
 
-      {/* Top Left Badge: 3D Inspection Tag */}
-      <div className="absolute top-4 left-4 z-20 flex items-center gap-2 pointer-events-none">
-        <div className="bg-[#183451]/85 backdrop-blur-md border border-cyan-500/30 rounded-full px-3 py-1 text-[11px] font-mono text-cyan-300 flex items-center gap-2 shadow-lg">
-          <span className="w-2 h-2 rounded-full bg-[#22d3ee] animate-pulse" />
-          <span className="font-bold tracking-wider">3D INTERACTIVE USV-01</span>
-        </div>
-      </div>
-
       {/* Top Right: Status Badge */}
-      <div className="absolute top-4 right-4 z-20 flex items-center gap-2">
-        <div className="bg-[#183451]/85 backdrop-blur-md border border-emerald-500/30 rounded-full px-3 py-1 text-[10px] font-mono text-emerald-400 font-bold shadow-lg">
-          ● OPERATIONAL
-        </div>
-      </div>
+
 
       {/* Bottom Floating Control Bar */}
       {showControls && !loading && (
         <div className="absolute bottom-4 left-4 right-4 z-20 flex items-center justify-between pointer-events-auto">
-          <div className="bg-[#183451]/85 backdrop-blur-md border border-white/15 rounded-xl px-3 py-1.5 text-[10px] font-mono text-slate-200 shadow-xl hidden sm:flex items-center gap-2">
-            <Compass size={13} className="text-cyan-400" />
-            <span>Drag to rotate · Scroll to zoom</span>
-          </div>
+
 
           <div className="flex items-center gap-1.5 bg-[#183451]/85 backdrop-blur-md border border-white/15 rounded-xl p-1 shadow-xl ml-auto">
             <button
               onClick={toggleRotation}
               className={`p-1.5 rounded-lg text-xs transition-all cursor-pointer ${
                 isRotating
-                  ? 'bg-[#A9501C] text-white font-bold shadow'
+                  ? 'bg-[#e1f4ff] text-[#27b1ff] font-bold shadow'
                   : 'text-slate-300 hover:text-white'
               }`}
               title={isRotating ? 'Pause rotation' : 'Start rotation'}

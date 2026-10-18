@@ -47,10 +47,10 @@ const USVIllustration = () => (
     <path d="M170 73 L130 35 L210 35" stroke="#22d3ee" strokeWidth="0.8" strokeDasharray="3 3" opacity="0.4" />
 
     {/* Detection box */}
-    <rect x="148" y="18" width="44" height="34" rx="4" stroke="#A9501C" strokeWidth="2" fill="none" strokeDasharray="3 3" />
-    <rect x="150" y="20" width="40" height="30" rx="3" fill="#A9501C" opacity="0.08" />
-    <text x="170" y="40" textAnchor="middle" fill="#A9501C" fontSize="8" fontWeight="bold">PERSON</text>
-    <text x="170" y="50" textAnchor="middle" fill="#A9501C" fontSize="7">94%</text>
+    <rect x="148" y="18" width="44" height="34" rx="4" stroke="#27b1ff" strokeWidth="2" fill="none" strokeDasharray="3 3" />
+    <rect x="150" y="20" width="40" height="30" rx="3" fill="#27b1ff" opacity="0.1" />
+    <text x="170" y="40" textAnchor="middle" fill="#27b1ff" fontSize="8" fontWeight="bold">PERSON</text>
+    <text x="170" y="50" textAnchor="middle" fill="#27b1ff" fontSize="7">94%</text>
 
     {/* Signal waves */}
     <path d="M290 80 Q295 75 300 80" stroke="#22d3ee" strokeWidth="1.5" fill="none" opacity="0.6" />
@@ -83,7 +83,6 @@ export default function Home() {
   const [email, setEmail] = useState('');
   const [subscribed, setSubscribed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [heroPreviewTab, setHeroPreviewTab] = useState<'3d' | 'recon'>('3d');
 
   useEffect(() => {
     const handleScroll = () => {
@@ -128,25 +127,25 @@ export default function Home() {
   ];
 
   return (
-    <div className="w-full min-h-screen bg-[#F3ECDE] text-[#183451] font-sans selection:bg-[#A9501C]/30 selection:text-[#22d3ee]">
+    <div className="w-full min-h-screen bg-white text-[#183451] font-sans selection:bg-[#27b1ff]/20 selection:text-[#27b1ff]">
 
       {/* ── NAV ─────────────────────────────────────────────────────────── */}
-      <header className="sticky top-0 z-50 bg-[#183451] border-b border-[#1d3a5f]">
+      <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
 
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2.5 group shrink-0">
             <FloodScoutLogo />
-            <span className="font-extrabold text-white tracking-widest text-lg">FLOODSCOUT</span>
+            <span className="font-extrabold text-[#27b1ff] tracking-widest text-lg">FLOODSCOUT</span>
           </Link>
 
           {/* Center nav — desktop */}
-          <nav className="hidden md:flex items-center gap-7 text-sm font-medium text-slate-400">
+          <nav className="hidden md:flex items-center gap-7 text-sm font-medium text-slate-600">
             {navItems.map(item => (
               <button
                 key={item.id}
                 onClick={() => scrollTo(item.id)}
-                className="hover:text-white transition-colors cursor-pointer"
+                className="hover:text-[#27b1ff] transition-colors cursor-pointer"
               >
                 {item.label}
               </button>
@@ -157,12 +156,12 @@ export default function Home() {
           <div className="flex items-center gap-3">
             <Link
               to="/login"
-              className="bg-[#A9501C] hover:bg-[#8a4016] text-white text-sm font-bold px-5 py-2.5 rounded-full transition-all shadow-lg shadow-[#A9501C]/30 active:scale-95"
+              className="bg-[#e1f4ff] hover:bg-[#c8ecff] text-[#27b1ff] text-sm font-bold px-5 py-2.5 rounded-full transition-all shadow-sm hover:shadow active:scale-95"
             >
               Launch Dashboard →
             </Link>
             <button
-              className="md:hidden text-slate-400 hover:text-white transition-colors p-1"
+              className="md:hidden text-slate-700 hover:text-[#27b1ff] transition-colors p-1"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               aria-label="Toggle mobile menu"
             >
@@ -173,12 +172,12 @@ export default function Home() {
 
         {/* Mobile drawer */}
         {mobileMenuOpen && (
-          <div className="md:hidden border-t border-white/5 bg-[#183451] px-6 py-4 flex flex-col gap-2">
+          <div className="md:hidden border-t border-slate-200 bg-white px-6 py-4 flex flex-col gap-2 shadow-lg">
             {navItems.map(item => (
               <button
                 key={item.id}
                 onClick={() => scrollTo(item.id)}
-                className="text-left text-sm font-medium text-slate-400 hover:text-white py-2.5 border-b border-white/5 last:border-0 transition-colors"
+                className="text-left text-sm font-medium text-slate-600 hover:text-[#27b1ff] py-2.5 border-b border-slate-100 last:border-0 transition-colors"
               >
                 {item.label}
               </button>
@@ -188,98 +187,53 @@ export default function Home() {
       </header>
 
       {/* ── HERO ─────────────────────────────────────────────────────────── */}
-      <section id="hero" className="max-w-7xl mx-auto px-6 pt-20 pb-16 grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+      <section id="hero" className="max-w-7xl mx-auto px-6 pt-10 sm:pt-12 pb-14 grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-start">
 
         {/* Left: Headline */}
-        <div className="space-y-8">
-
+        <div className="space-y-6 pt-3 sm:pt-4">
 
           <h1 className="text-5xl sm:text-6xl lg:text-[68px] font-extrabold leading-[1.0] tracking-tight">
             Find people<br />
             in floodwater<br />
-            <span className="text-[#A9501C]">faster.</span>
+            <span className="text-[#27b1ff]">faster.</span>
           </h1>
 
-          <p className="text-[#183451]/70 text-lg leading-relaxed max-w-md">
+          <p className="text-slate-600 text-lg leading-relaxed max-w-md">
             FloodScout is an autonomous water-level rescue robot that streams live video, detects victims with AI, and transmits GPS coordinates to rescue teams — all from a vessel built from off-the-shelf parts.
           </p>
 
-          <div className="flex flex-wrap gap-4">
+          <div className="flex flex-wrap items-center gap-6 pt-1">
             <Link
               to="/login"
-              className="bg-[#A9501C] hover:bg-[#8a4016] text-white font-bold px-8 py-4 rounded-full transition-all text-sm shadow-xl shadow-[#A9501C]/30 active:scale-95 flex items-center gap-2"
+              className="bg-[#e1f4ff] hover:bg-[#c8ecff] text-[#27b1ff] font-bold px-8 py-4 rounded-full transition-all text-sm shadow-lg shadow-[#e1f4ff]/30 active:scale-95 flex items-center gap-2"
             >
               Open Robot Console
               <ArrowRight size={16} />
             </Link>
             <Link
               to="/login"
-              className="bg-[#183451]/10 hover:bg-[#183451]/15 border border-[#183451]/30 text-[#183451] font-semibold px-8 py-4 rounded-full transition-all text-sm flex items-center gap-2"
+              className="inline-flex items-center gap-1.5 text-[#27b1ff] hover:text-[#1a9fe6] font-bold text-sm hover:underline transition-all group"
             >
-              Operations Dashboard
-              <ArrowUpRight size={16} />
+              <span>Operations Dashboard</span>
+              <ArrowUpRight size={16} className="transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
             </Link>
           </div>
 
-
         </div>
 
-        {/* Right: USV preview with 3D Vessel View & AI Recon */}
-        <div className="relative flex flex-col items-center">
-          {/* Header bar with toggle */}
-          <div className="flex items-center justify-between w-full max-w-lg mb-3 px-2">
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#22d3ee] animate-pulse shadow-[0_0_8px_#22d3ee]" />
-              <span className="text-xs font-mono font-bold text-[#183451] tracking-wider uppercase">USV-01 · 3D TWIN</span>
-            </div>
-            <div className="flex items-center bg-[#183451]/10 p-1 rounded-full border border-[#183451]/20 text-[11px] font-mono">
-              <button
-                onClick={() => setHeroPreviewTab('3d')}
-                className={`px-3 py-1 rounded-full transition-all cursor-pointer font-bold ${
-                  heroPreviewTab === '3d'
-                    ? 'bg-[#A9501C] text-white shadow'
-                    : 'text-[#183451] hover:text-black'
-                }`}
-              >
-                3D Model
-              </button>
-              <button
-                onClick={() => setHeroPreviewTab('recon')}
-                className={`px-3 py-1 rounded-full transition-all cursor-pointer font-bold ${
-                  heroPreviewTab === 'recon'
-                    ? 'bg-[#A9501C] text-white shadow'
-                    : 'text-[#183451] hover:text-black'
-                }`}
-              >
-                AI Vision
-              </button>
-            </div>
+        {/* Right: USV 3D Vessel View */}
+        <div className="relative flex flex-col items-center w-full">
+          {/* 3D Model Preview */}
+          <div className="w-full max-w-xl xl:max-w-2xl h-[420px] sm:h-[460px] lg:h-[480px]">
+            <ModelViewer3D className="w-full h-full min-h-[420px]" autoRotateSpeed={1.5} showControls={true} modelScale={4.5} />
           </div>
 
-          {/* Preview content */}
-          {heroPreviewTab === '3d' ? (
-            <div className="w-full max-w-lg h-[360px] sm:h-[400px]">
-              <ModelViewer3D className="w-full h-full min-h-[360px]" autoRotateSpeed={1.5} showControls={true} />
-            </div>
-          ) : (
-            <div className="relative w-full max-w-lg h-[360px] sm:h-[400px] rounded-3xl overflow-hidden bg-gradient-to-b from-[#0a1929] to-[#071220] border border-[#1b2b3c] shadow-2xl">
-              <USVIllustration />
-              <div className="absolute top-4 right-4 bg-[#A9501C] text-white text-[10px] font-bold px-3 py-1.5 rounded-lg shadow-lg animate-pulse">
-                PERSON DETECTED · 94%
-              </div>
-              <div className="absolute bottom-4 left-4 bg-black/70 backdrop-blur-sm text-[10px] font-mono text-slate-300 px-3 py-2 rounded-lg border border-white/10">
-                4.2988°N · 100.7642°E · 2.45 m
-              </div>
-            </div>
-          )}
-
           {/* Status bar */}
-          <div className="flex items-center justify-between w-full max-w-lg mt-3 px-2 text-[11px] font-mono text-[#183451]/80">
+          <div className="flex items-center justify-between w-full max-w-xl xl:max-w-2xl mt-2 px-2 text-[11px] font-mono text-slate-600">
             <span className="text-emerald-700 font-semibold flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" /> Robot online
             </span>
-            <span className="text-[#183451] font-semibold">{heroPreviewTab === '3d' ? 'Interactive 3D GLTF' : 'OpenCV HOG+SVM · tracking'}</span>
-            <span className="text-[#183451]/60">{heroPreviewTab === '3d' ? '60 FPS' : '5.9 FPS'}</span>
+            <span className="text-slate-500 font-semibold">60 FPS</span>
           </div>
         </div>
       </section>
@@ -289,25 +243,25 @@ export default function Home() {
 
 
       {/* ── OUR STORY ─────────────────────────────────────────────────────── */}
-      <section id="our-story" className="border-t border-[#D4AF83]/40 py-24">
+      <section id="our-story" className="border-t border-slate-200 py-24">
         <div className="max-w-7xl mx-auto px-6">
           {/* Top row: Story text + Cross-Section Flooded Street Card */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-start mb-16">
             {/* Left: Headline & story */}
             <div className="lg:col-span-6 space-y-6">
               <div className="flex items-center gap-2 mb-2">
-                <span className="w-5 h-0.5 bg-[#A9501C] inline-block" />
-                <span className="text-[11px] font-mono uppercase tracking-[0.25em] text-[#A9501C] font-bold">
+                <span className="w-5 h-0.5 bg-[#27b1ff] inline-block" />
+                <span className="text-[11px] font-mono uppercase tracking-[0.25em] text-[#27b1ff] font-bold">
                   OUR STORY
                 </span>
               </div>
 
               <h2 className="text-4xl sm:text-5xl lg:text-[54px] font-extrabold tracking-tight leading-[1.08] text-[#183451]">
                 Rescue starts at<br />
-                <span className="text-[#22d3ee]">water level.</span>
+                <span className="text-[#27b1ff]">water level.</span>
               </h2>
 
-              <div className="space-y-5 text-[#183451]/70 text-sm sm:text-base leading-relaxed pt-2">
+              <div className="space-y-5 text-slate-600 text-sm sm:text-base leading-relaxed pt-2">
                 <p>
                   FloodScout was born from the monsoon flash floods across Southeast Asia. We saw drones fly over flooded neighbourhoods and miss the people sheltering beneath roofs, awnings and trees — while rescuers waded into fast currents to search by hand.
                 </p>
@@ -317,118 +271,118 @@ export default function Home() {
               </div>
 
               {/* Action Links */}
-              <div className="flex flex-wrap items-center gap-3 pt-2">
+              <div className="flex flex-wrap items-center gap-6 pt-3">
                 <Link
                   to="/our-story"
-                  className="bg-[#A9501C] hover:bg-[#8a4016] text-white font-bold px-6 py-3 rounded-full transition-all text-sm flex items-center gap-2 shadow-lg shadow-[#A9501C]/25 hover:scale-[1.02] active:scale-95"
+                  className="inline-flex items-center gap-2 bg-[#e1f4ff] hover:bg-[#c8ecff] text-[#27b1ff] font-bold px-7 py-3 rounded-full text-sm transition-all shadow-md shadow-[#e1f4ff]/30 active:scale-95 hover:scale-[1.02]"
                 >
                   The Story Behind It
                   <ArrowRight size={15} />
                 </Link>
                 <Link
                   to="/technology"
-                  className="bg-[#183451]/10 hover:bg-[#183451]/20 border border-[#183451]/30 text-[#183451] font-bold px-6 py-3 rounded-full transition-all text-sm flex items-center gap-2 hover:scale-[1.02] active:scale-95"
+                  className="inline-flex items-center gap-1.5 text-[#27b1ff] hover:text-[#1a9fe6] font-bold text-sm hover:underline transition-all group"
                 >
-                  Discover our Technology
-                  <ArrowUpRight size={15} />
+                  <span>Discover our Technology</span>
+                  <ArrowUpRight size={16} className="transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
                 </Link>
               </div>
             </div>
 
             {/* Right: Cross-Section Flooded Street Card */}
-            <div className="lg:col-span-6 bg-[#0b1622] border border-[#1b2b3c] rounded-2xl p-5 sm:p-6 shadow-2xl">
+            <div className="lg:col-span-6 bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-xl shadow-sky-100/80">
               {/* Card Header & Legend */}
-              <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-white/5 text-[10px] font-mono tracking-wider">
-                <span className="text-slate-400 uppercase font-semibold">CROSS-SECTION · FLOODED STREET</span>
+              <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-200 text-[10px] font-mono tracking-wider">
+                <span className="text-[#27b1ff] uppercase font-bold">CROSS-SECTION · FLOODED STREET</span>
                 <div className="flex items-center gap-4">
-                  <span className="flex items-center gap-1.5 text-red-400 font-semibold">
-                    <span className="w-3 h-0.5 bg-red-400 inline-block" />
+                  <span className="flex items-center gap-1.5 text-red-500 font-bold">
+                    <span className="w-3 h-0.5 bg-red-500 inline-block" />
                     Aerial view
                   </span>
-                  <span className="flex items-center gap-1.5 text-[#22d3ee] font-semibold">
-                    <span className="w-3 h-0.5 bg-[#A9501C] inline-block" />
+                  <span className="flex items-center gap-1.5 text-[#27b1ff] font-bold">
+                    <span className="w-3 h-0.5 bg-[#27b1ff] inline-block" />
                     Water-level view
                   </span>
                 </div>
               </div>
 
               {/* Graphic Diagram */}
-              <div className="my-4 overflow-hidden rounded-xl bg-[#07111c] border border-white/5">
-                <svg viewBox="0 0 640 330" className="w-full h-auto block" fill="none">
+              <div className="my-4 overflow-hidden rounded-xl bg-[#eaf6ff] border border-slate-200">
+                <svg viewBox="0 0 640 330" className="w-full h-auto block" style={{minHeight: '260px'}} fill="none">
                   {/* Sky background */}
-                  <rect width="640" height="330" fill="#07111c" />
+                  <rect width="640" height="330" fill="#eaf6ff" />
 
                   {/* Tree on left */}
-                  <rect x="88" y="160" width="16" height="75" fill="#1b2a38" rx="2" />
-                  <circle cx="96" cy="140" r="48" fill="#0f291e" />
-                  <circle cx="96" cy="140" r="40" fill="#16382b" />
-                  <circle cx="90" cy="132" r="26" fill="#1e4d3a" />
+                  <rect x="88" y="160" width="16" height="75" fill="#a16207" rx="2" />
+                  <circle cx="96" cy="140" r="48" fill="#86efac" opacity="0.6" />
+                  <circle cx="96" cy="140" r="40" fill="#4ade80" opacity="0.7" />
+                  <circle cx="90" cy="132" r="26" fill="#22c55e" />
 
                   {/* House wall & structure */}
-                  <rect x="290" y="110" width="250" height="125" fill="#152230" stroke="#1e3247" strokeWidth="1.5" />
+                  <rect x="290" y="110" width="250" height="125" fill="#e0eefe" stroke="#93c5fd" strokeWidth="1.5" />
                   {/* Window */}
-                  <rect x="360" y="135" width="46" height="50" rx="3" fill="#0e1823" stroke="#263d55" strokeWidth="1.5" />
-                  <line x1="383" y1="135" x2="383" y2="185" stroke="#263d55" strokeWidth="1" />
-                  <line x1="360" y1="160" x2="406" y2="160" stroke="#263d55" strokeWidth="1" />
+                  <rect x="360" y="135" width="46" height="50" rx="3" fill="#ffffff" stroke="#60a5fa" strokeWidth="1.5" />
+                  <line x1="383" y1="135" x2="383" y2="185" stroke="#60a5fa" strokeWidth="1" />
+                  <line x1="360" y1="160" x2="406" y2="160" stroke="#60a5fa" strokeWidth="1" />
 
                   {/* Pitched Roof */}
-                  <polygon points="270,110 415,38 560,110" fill="#1d2e3f" stroke="#2a425a" strokeWidth="2" />
+                  <polygon points="270,110 415,38 560,110" fill="#bfdbfe" stroke="#3b82f6" strokeWidth="2" />
 
                   {/* Porch overhang extending over the water */}
-                  <polygon points="180,140 290,110 290,125 180,148" fill="#192837" stroke="#263d55" strokeWidth="1" />
-                  <rect x="186" y="148" width="6" height="87" fill="#1f3347" />
+                  <polygon points="180,140 290,110 290,125 180,148" fill="#93c5fd" stroke="#60a5fa" strokeWidth="1" />
+                  <rect x="186" y="148" width="6" height="87" fill="#64748b" />
 
                   {/* Person Sheltering under the porch */}
-                  <rect x="215" y="152" width="38" height="66" rx="4" fill="#facc15" fillOpacity="0.08" stroke="#facc15" strokeWidth="1.5" />
+                  <rect x="215" y="152" width="38" height="66" rx="4" fill="#fef9c3" stroke="#eab308" strokeWidth="1.5" />
                   {/* Label above person */}
-                  <rect x="198" y="132" width="72" height="15" rx="3" fill="#162533" stroke="#eab308" strokeWidth="0.8" />
-                  <text x="234" y="143" fill="#facc15" fontSize="8" fontFamily="monospace" fontWeight="bold" textAnchor="middle">Person sheltering</text>
+                  <rect x="198" y="132" width="72" height="15" rx="3" fill="#ffffff" stroke="#eab308" strokeWidth="1" />
+                  <text x="234" y="143" fill="#a16207" fontSize="8" fontFamily="monospace" fontWeight="bold" textAnchor="middle">Person</text>
                   {/* Person silhouette */}
-                  <circle cx="234" cy="164" r="5" fill="#facc15" />
-                  <path d="M226 182 C226 172 242 172 242 182 L242 208 L226 208 Z" fill="#facc15" />
+                  <circle cx="234" cy="164" r="5" fill="#ca8a04" />
+                  <path d="M226 182 C226 172 242 172 242 182 L242 208 L226 208 Z" fill="#ca8a04" />
 
                   {/* Drone up in sky */}
                   <g transform="translate(420, 28)">
-                    <rect x="-14" y="8" width="28" height="8" rx="2" fill="#94a3b8" />
-                    <line x1="-30" y1="12" x2="30" y2="12" stroke="#64748b" strokeWidth="2" />
-                    <circle cx="0" cy="12" r="3" fill="#38bdf8" />
-                    <ellipse cx="-30" cy="8" rx="10" ry="2" fill="#cbd5e1" opacity="0.7" />
-                    <ellipse cx="30" cy="8" rx="10" ry="2" fill="#cbd5e1" opacity="0.7" />
-                    <text x="38" y="15" fill="#f87171" fontSize="9" fontFamily="monospace" fontWeight="bold">Drone: view blocked</text>
+                    <rect x="-14" y="8" width="28" height="8" rx="2" fill="#334155" />
+                    <line x1="-30" y1="12" x2="30" y2="12" stroke="#475569" strokeWidth="2" />
+                    <circle cx="0" cy="12" r="3" fill="#0284c7" />
+                    <ellipse cx="-30" cy="8" rx="10" ry="2" fill="#94a3b8" opacity="0.8" />
+                    <ellipse cx="30" cy="8" rx="10" ry="2" fill="#94a3b8" opacity="0.8" />
+                    <text x="38" y="15" fill="#dc2626" fontSize="9" fontFamily="monospace" fontWeight="bold">Drone: view blocked</text>
                   </g>
 
                   {/* Drone aerial cone (blocked by roof) */}
-                  <polygon points="420,44 330,110 510,110" fill="#ef4444" fillOpacity="0.06" />
-                  <line x1="420" y1="44" x2="330" y2="110" stroke="#f87171" strokeWidth="1.2" strokeDasharray="3 3" />
-                  <line x1="420" y1="44" x2="510" y2="110" stroke="#f87171" strokeWidth="1.2" strokeDasharray="3 3" />
-                  <line x1="330" y1="110" x2="245" y2="170" stroke="#ef4444" strokeWidth="1.2" strokeDasharray="3 3" opacity="0.4" />
-                  <text x="355" y="128" fill="#ef4444" fontSize="16" fontWeight="bold" fontFamily="sans-serif">✕</text>
+                  <polygon points="420,44 330,110 510,110" fill="#ef4444" fillOpacity="0.1" />
+                  <line x1="420" y1="44" x2="330" y2="110" stroke="#ef4444" strokeWidth="1.5" strokeDasharray="3 3" />
+                  <line x1="420" y1="44" x2="510" y2="110" stroke="#ef4444" strokeWidth="1.5" strokeDasharray="3 3" />
+                  <line x1="330" y1="110" x2="245" y2="170" stroke="#ef4444" strokeWidth="1.5" strokeDasharray="3 3" opacity="0.5" />
+                  <text x="355" y="128" fill="#dc2626" fontSize="16" fontWeight="bold" fontFamily="sans-serif">✕</text>
 
                   {/* Floodwater Body */}
-                  <path d="M0 235 Q160 231 320 235 T640 235 L640 330 L0 330 Z" fill="#082032" fillOpacity="0.9" />
-                  <path d="M0 235 Q160 231 320 235 T640 235" stroke="#0ea5e9" strokeWidth="2" fill="none" opacity="0.6" />
-                  <path d="M0 240 Q140 237 280 240 T640 240" stroke="#22d3ee" strokeWidth="1" fill="none" opacity="0.3" strokeDasharray="6 4" />
+                  <path d="M0 235 Q160 231 320 235 T640 235 L640 330 L0 330 Z" fill="#bae6fd" fillOpacity="0.65" />
+                  <path d="M0 235 Q160 231 320 235 T640 235" stroke="#0284c7" strokeWidth="2.5" fill="none" opacity="0.85" />
+                  <path d="M0 240 Q140 237 280 240 T640 240" stroke="#0284c7" strokeWidth="1" fill="none" opacity="0.5" strokeDasharray="6 4" />
 
                   {/* FloodScout Camera at water level */}
                   <g transform="translate(65, 233)">
-                    <rect x="-24" y="-4" width="48" height="12" rx="4" fill="#0c4a6e" stroke="#0284c7" strokeWidth="1" />
-                    <circle cx="0" cy="0" r="7" fill="#06121e" stroke="#22d3ee" strokeWidth="2.5" />
-                    <circle cx="0" cy="0" r="3" fill="#22d3ee" />
+                    <rect x="-24" y="-4" width="48" height="12" rx="4" fill="#27b1ff" stroke="#1590c5" strokeWidth="1" />
+                    <circle cx="0" cy="0" r="7" fill="#ffffff" stroke="#27b1ff" strokeWidth="2.5" />
+                    <circle cx="0" cy="0" r="3" fill="#27b1ff" />
 
-                    <text x="0" y="32" fill="#22d3ee" fontSize="11" fontFamily="monospace" fontWeight="bold">FloodScout camera</text>
-                    <text x="0" y="47" fill="#94a3b8" fontSize="8.5" fontFamily="monospace">sees under eaves, porches &amp; canopy</text>
+                    <text x="0" y="32" fill="#27b1ff" fontSize="11" fontFamily="monospace" fontWeight="bold">FloodScout camera</text>
+                    <text x="0" y="47" fill="#475569" fontSize="8.5" fontFamily="monospace">sees under eaves, porches &amp; canopy</text>
                   </g>
 
                   {/* Camera sightline shooting under porch directly to person */}
-                  <polygon points="72,233 215,158 215,208" fill="#22d3ee" fillOpacity="0.08" />
-                  <line x1="72" y1="233" x2="215" y2="183" stroke="#22d3ee" strokeWidth="2" />
-                  <line x1="72" y1="233" x2="215" y2="158" stroke="#22d3ee" strokeWidth="1" strokeDasharray="4 3" opacity="0.6" />
-                  <line x1="72" y1="233" x2="215" y2="208" stroke="#22d3ee" strokeWidth="1" strokeDasharray="4 3" opacity="0.6" />
+                  <polygon points="72,233 215,158 215,208" fill="#27b1ff" fillOpacity="0.12" />
+                  <line x1="72" y1="233" x2="215" y2="183" stroke="#27b1ff" strokeWidth="2" />
+                  <line x1="72" y1="233" x2="215" y2="158" stroke="#27b1ff" strokeWidth="1.2" strokeDasharray="4 3" opacity="0.7" />
+                  <line x1="72" y1="233" x2="215" y2="208" stroke="#27b1ff" strokeWidth="1.2" strokeDasharray="4 3" opacity="0.7" />
                 </svg>
               </div>
 
               {/* Caption */}
-              <p className="text-slate-400 text-xs sm:text-sm leading-relaxed mt-4">
+              <p className="text-slate-600 text-xs sm:text-sm leading-relaxed mt-4 font-medium">
                 Drones see rooftops. People shelter under them. A camera at water level sees what aerial search misses.
               </p>
             </div>
@@ -440,65 +394,43 @@ export default function Home() {
             <div className="border-t-2 border-red-500/80 pt-6">
               <span className="text-[11px] font-mono font-bold tracking-wider text-red-400 block mb-2">01 · THE PROBLEM</span>
               <h3 className="text-xl font-bold text-[#183451] mb-3">Search is slow and dangerous</h3>
-              <p className="text-[#183451]/70 text-sm leading-relaxed">
+              <p className="text-slate-600 text-sm leading-relaxed">
                 Aerial drones are blinded by corrugated roofs and tree cover. Responders on foot face swift currents and submerged hazards.
               </p>
             </div>
 
             {/* 02 */}
-            <div className="border-t-2 border-[#22d3ee] pt-6">
-              <span className="text-[11px] font-mono font-bold tracking-wider text-[#22d3ee] block mb-2">02 · OUR APPROACH</span>
+            <div className="border-t-2 border-[#27b1ff] pt-6">
+              <span className="text-[11px] font-mono font-bold tracking-wider text-[#27b1ff] block mb-2">02 · OUR APPROACH</span>
               <h3 className="text-xl font-bold text-[#183451] mb-3">Look from the water, not the sky</h3>
-              <p className="text-[#183451]/70 text-sm leading-relaxed">
+              <p className="text-slate-600 text-sm leading-relaxed">
                 A compact hull travels down inundated streets, scanning porches and peering under eaves where people take refuge.
               </p>
             </div>
 
             {/* 03 */}
-            <div className="border-t-2 border-orange-500/80 pt-6">
-              <span className="text-[11px] font-mono font-bold tracking-wider text-[#A9501C] block mb-2">03 · THE RESULT</span>
+            <div className="border-t-2 border-[#27b1ff] pt-6">
+              <span className="text-[11px] font-mono font-bold tracking-wider text-[#27b1ff] block mb-2">03 · THE RESULT</span>
               <h3 className="text-xl font-bold text-[#183451] mb-3">Crews go straight to people</h3>
-              <p className="text-[#183451]/70 text-sm leading-relaxed">
+              <p className="text-slate-600 text-sm leading-relaxed">
                 On-board AI flags human silhouettes, logs GPS coordinates and alerts the nearest rescue boat automatically.
               </p>
             </div>
           </div>
 
-          {/* Metrics bar */}
-          <div className="bg-[#0b1622] border border-[#1b2b3c] rounded-2xl p-6 sm:p-8 grid grid-cols-2 md:grid-cols-4 gap-6 mb-8">
-            <div className="md:border-r md:border-white/10 md:pr-6">
-              <div className="text-white font-extrabold font-mono text-3xl sm:text-4xl">&lt;120 <span className="text-lg font-normal text-slate-400">s</span></div>
-              <div className="text-xs text-slate-400 font-mono mt-1">from case to water</div>
-            </div>
-
-            <div className="md:border-r md:border-white/10 md:pr-6">
-              <div className="text-white font-extrabold font-mono text-3xl sm:text-4xl">15 <span className="text-lg font-normal text-slate-400">cm</span></div>
-              <div className="text-xs text-slate-400 font-mono mt-1">hull draft for shallow streets</div>
-            </div>
-
-            <div className="md:border-r md:border-white/10 md:pr-6">
-              <div className="text-white font-extrabold font-mono text-3xl sm:text-4xl">&lt;1 <span className="text-lg font-normal text-slate-400">s</span></div>
-              <div className="text-xs text-slate-400 font-mono mt-1">detection to alert</div>
-            </div>
-
-            <div>
-              <div className="text-[#A9501C] font-extrabold font-mono text-3xl sm:text-4xl">Remote</div>
-              <div className="text-xs text-slate-400 font-mono mt-1">operated from the bank, crew stays dry</div>
-            </div>
-          </div>
 
 
         </div>
       </section>
 
       {/* ── MISSION FLOW ─────────────────────────────────────────────────── */}
-      <section id="mission" className="border-t border-[#D4AF83]/40 py-24">
+      <section id="mission" className="border-t border-slate-200 py-24">
         <div className="max-w-7xl mx-auto px-6">
           <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-14 gap-4">
             <div>
               <div className="flex items-center gap-2 mb-4">
-                <span className="w-5 h-0.5 bg-[#A9501C] inline-block" />
-                <span className="text-[11px] font-mono uppercase tracking-[0.25em] text-[#A9501C] font-bold">
+                <span className="w-5 h-0.5 bg-[#27b1ff] inline-block" />
+                <span className="text-[11px] font-mono uppercase tracking-[0.25em] text-[#27b1ff] font-bold">
                   MISSION FLOW
                 </span>
               </div>
@@ -506,7 +438,7 @@ export default function Home() {
                 From launch to location<br />in six steps.
               </h2>
             </div>
-            <Link to="/login" className="flex items-center gap-1.5 text-[#22d3ee] text-sm font-semibold hover:underline shrink-0">
+            <Link to="/login" className="flex items-center gap-1.5 text-[#27b1ff] text-sm font-semibold hover:underline shrink-0">
               Open live console <ChevronRight size={16} />
             </Link>
           </div>
@@ -515,16 +447,16 @@ export default function Home() {
             {steps.map((step) => (
               <div
                 key={step.num}
-                className="bg-white/[0.03] border border-white/10 rounded-2xl p-6 hover:bg-white/[0.05] hover:border-[#22d3ee]/30 transition-all group"
+                className="bg-slate-50 border border-slate-200/80 rounded-2xl p-6 hover:bg-white hover:border-[#27b1ff]/40 hover:shadow-lg hover:shadow-[#27b1ff]/5 transition-all group"
               >
                 <div className="flex items-center gap-3 mb-4">
-                  <div className="w-8 h-8 rounded-full border border-[#22d3ee]/40 flex items-center justify-center text-[#22d3ee] group-hover:bg-[#A9501C]/10 transition-colors">
+                  <div className="w-8 h-8 rounded-full border border-[#27b1ff]/30 flex items-center justify-center text-[#27b1ff] group-hover:bg-[#27b1ff]/10 transition-colors">
                     {step.icon}
                   </div>
                   <span className="text-[11px] font-mono text-slate-500 uppercase tracking-widest">{step.num} / 6</span>
                 </div>
                 <h3 className="text-xl font-bold text-[#183451] mb-2">{step.label}</h3>
-                <p className="text-slate-500 text-sm leading-relaxed">{step.desc}</p>
+                <p className="text-slate-600 text-sm leading-relaxed">{step.desc}</p>
               </div>
             ))}
           </div>
@@ -532,13 +464,13 @@ export default function Home() {
       </section>
 
       {/* ── RESCUE TECHNOLOGY ────────────────────────────────────────────── */}
-      <section id="technology" className="border-t border-[#D4AF83]/40 py-24">
+      <section id="technology" className="border-t border-slate-200 py-24">
         <div className="max-w-7xl mx-auto px-6">
           {/* Header */}
           <div className="mb-12">
             <div className="flex items-center gap-2 mb-3">
-              <span className="w-5 h-0.5 bg-[#A9501C] inline-block" />
-              <span className="text-[11px] font-mono uppercase tracking-[0.25em] text-[#A9501C] font-bold">
+              <span className="w-5 h-0.5 bg-[#27b1ff] inline-block" />
+              <span className="text-[11px] font-mono uppercase tracking-[0.25em] text-[#27b1ff] font-bold">
                 RESCUE TECHNOLOGY
               </span>
             </div>
@@ -548,7 +480,7 @@ export default function Home() {
                 Four systems.<br />
                 One search loop.
               </h2>
-              <p className="text-[#183451]/70 text-sm sm:text-base leading-relaxed max-w-lg lg:mb-1">
+              <p className="text-slate-600 text-sm sm:text-base leading-relaxed max-w-lg lg:mb-1">
                 Live video streams over Wi-Fi to the operator laptop for YOLO-assisted person detection, while dual NodeMCU ESP32 controllers coordinate camera pan/tilt, ultrasonic sensing, GPS, and differential BLDC thrust.
               </p>
             </div>
@@ -597,7 +529,7 @@ export default function Home() {
                     Live camera stream processed using a lightweight YOLO-family model
                   </p>
                   <div className="flex items-center gap-2 mt-4">
-                    <span className="bg-[#A9501C] text-[#060d14] font-bold text-[10px] font-mono px-2.5 py-0.5 rounded">
+                    <span className="bg-[#27b1ff] text-white font-bold text-[10px] font-mono px-2.5 py-0.5 rounded">
                       Wi-Fi Stream
                     </span>
                     <span className="border border-[#22d3ee] text-[#22d3ee] font-semibold text-[10px] font-mono px-2.5 py-0.5 rounded">
@@ -628,8 +560,8 @@ export default function Home() {
                 </div>
 
                 {/* MOVE */}
-                <div className="bg-[#171419] border border-orange-500/40 rounded-xl p-4 relative group hover:border-orange-500 transition-colors">
-                  <span className="text-[9px] font-mono uppercase tracking-wider text-orange-400 block mb-1 font-semibold">MOVE</span>
+                <div className="bg-[#171419] border border-blue-600/40 rounded-xl p-4 relative group hover:border-[#27b1ff] transition-colors">
+                  <span className="text-[9px] font-mono uppercase tracking-wider text-blue-400 block mb-1 font-semibold">MOVE</span>
                   <h4 className="text-sm font-bold text-white">Twin BLDC Thrusters</h4>
                   <p className="text-xs text-slate-400 font-mono mt-0.5">
                     Two bidirectional 30 A ESCs enable differential steering
@@ -667,7 +599,7 @@ export default function Home() {
                 </div>
                 <div className="flex justify-between items-baseline">
                   <span className="text-slate-500">Output</span>
-                  <span className="text-[#A9501C] font-bold">Bounding box + confidence score</span>
+                  <span className="text-[#27b1ff] font-bold">Bounding box + confidence score</span>
                 </div>
               </div>
             </div>
@@ -698,7 +630,7 @@ export default function Home() {
                 </div>
                 <div className="flex justify-between items-baseline">
                   <span className="text-slate-500">Output</span>
-                  <span className="text-[#A9501C] font-bold">Live distance reading</span>
+                  <span className="text-[#27b1ff] font-bold">Live distance reading</span>
                 </div>
               </div>
             </div>
@@ -735,9 +667,9 @@ export default function Home() {
             </div>
 
             {/* Card 4: Differential BLDC Propulsion */}
-            <div className="bg-[#0b1622] border border-white/10 rounded-2xl p-6 shadow-xl hover:border-orange-500/30 transition-colors">
+            <div className="bg-[#0b1622] border border-white/10 rounded-2xl p-6 shadow-xl hover:border-blue-500/30 transition-colors">
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-9 h-9 rounded-xl bg-orange-500/10 border border-orange-500/30 flex items-center justify-center text-[#A9501C]">
+                <div className="w-9 h-9 rounded-xl bg-blue-500/10 border border-[#27b1ff]/30 flex items-center justify-center text-[#27b1ff]">
                   <Waves size={18} />
                 </div>
                 <h3 className="text-lg font-bold text-white">Differential BLDC Propulsion</h3>
@@ -760,7 +692,7 @@ export default function Home() {
                 </div>
                 <div className="flex justify-between items-baseline">
                   <span className="text-slate-500">Steering</span>
-                  <span className="text-[#A9501C] font-bold">Differential thrust</span>
+                  <span className="text-[#27b1ff] font-bold">Differential thrust</span>
                 </div>
               </div>
             </div>
@@ -769,34 +701,34 @@ export default function Home() {
       </section>
 
       {/* ── BUILT FROM PARTS ─────────────────────────────────────────────── */}
-      <section id="hardware" className="border-t border-[#D4AF83]/40 py-24">
+      <section id="hardware" className="border-t border-slate-200 py-24">
         <div className="max-w-7xl mx-auto px-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
 
             {/* Left: 3D interactive model stage */}
-            <div className="w-full">
-              <ModelViewer3D className="w-full h-[460px] min-h-[460px]" autoRotateSpeed={1.0} showControls={true} />
+            <div className="w-full h-[580px] min-h-[580px]">
+              <ModelViewer3D className="w-full h-full min-h-[580px]" autoRotateSpeed={1.0} showControls={true} modelScale={4.5} />
             </div>
 
             {/* Right: parts list */}
             <div>
               <div className="flex items-center gap-2 mb-4">
-                <span className="w-5 h-0.5 bg-[#A9501C] inline-block" />
-                <span className="text-[11px] font-mono uppercase tracking-[0.25em] text-[#A9501C] font-bold">
+                <span className="w-5 h-0.5 bg-[#27b1ff] inline-block" />
+                <span className="text-[11px] font-mono uppercase tracking-[0.25em] text-[#27b1ff] font-bold">
                   OPEN HARDWARE
                 </span>
               </div>
-              <h2 className="text-4xl sm:text-5xl font-extrabold tracking-tight mb-6">
+              <h2 className="text-4xl sm:text-5xl font-extrabold tracking-tight mb-6 text-[#183451]">
                 Built from parts any<br />team can source.
               </h2>
-              <p className="text-[#183451]/70 text-base leading-relaxed mb-8">
+              <p className="text-slate-600 text-base leading-relaxed mb-8">
                 Every major component is commercially available, and the final prototype remains within the RM700 hardware budget. The control system is split across dedicated modules for propulsion, sensing, camera positioning and vision processing. The control and AI software runs locally on the operator system and onboard microcontrollers.
               </p>
 
               <div>
                 <Link
                   to="/technology"
-                  className="inline-flex items-center gap-2 bg-[#A9501C] hover:bg-[#8a4016] text-white font-bold px-7 py-3.5 rounded-full text-sm transition-all shadow-lg shadow-[#A9501C]/30 active:scale-95 hover:scale-[1.02]"
+                  className="inline-flex items-center gap-2 bg-[#e1f4ff] hover:bg-[#c8ecff] text-[#27b1ff] font-bold px-7 py-3.5 rounded-full text-sm transition-all shadow-md shadow-[#e1f4ff]/30 active:scale-95 hover:scale-[1.02]"
                 >
                   Discover Hardware
                   <ArrowRight size={15} />
@@ -808,12 +740,12 @@ export default function Home() {
       </section>
 
       {/* ── DUAL DASHBOARD PREVIEW ───────────────────────────────────────── */}
-      <section id="command-interface" className="border-t border-[#D4AF83]/40 py-24">
+      <section id="command-interface" className="border-t border-slate-200 py-24">
         <div className="max-w-7xl mx-auto px-6">
           <div className="text-center mb-14">
             <div className="flex items-center justify-center gap-2 mb-4">
-              <span className="w-5 h-0.5 bg-[#A9501C] inline-block" />
-              <span className="text-[11px] font-mono uppercase tracking-[0.25em] text-[#A9501C] font-bold">
+              <span className="w-5 h-0.5 bg-[#27b1ff] inline-block" />
+              <span className="text-[11px] font-mono uppercase tracking-[0.25em] text-[#27b1ff] font-bold">
                 COMMAND INTERFACE
               </span>
             </div>
@@ -829,14 +761,14 @@ export default function Home() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
             {/* Robot Console card */}
-            <div className="bg-[#0e1722] border border-[#1b2b3c] rounded-2xl overflow-hidden group hover:border-[#22d3ee]/40 transition-all">
+            <div className="bg-[#0e1722] border border-[#1b2b3c] rounded-2xl overflow-hidden group hover:border-[#27b1ff]/40 transition-all">
               {/* Mock header */}
               <div className="bg-[#090f17] border-b border-white/5 px-5 py-3 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className="flex gap-1.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-[#f43f5e]" />
                     <span className="w-2.5 h-2.5 rounded-full bg-[#f59e0b]" />
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#A9501C]" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#27b1ff]" />
                   </div>
                   <span className="text-slate-400 font-mono text-[11px] ml-2">Robot console · dashboard</span>
                 </div>
@@ -853,8 +785,8 @@ export default function Home() {
                       <span className="text-[9px] font-mono text-slate-400">LIVE FEED</span>
                     </div>
                     <div className="flex items-center justify-center flex-1 py-2">
-                      <div className="border-2 border-dashed border-[#A9501C]/60 rounded-lg w-16 h-10 flex items-center justify-center">
-                        <span className="text-[#A9501C] text-[8px] font-mono">PERSON 94%</span>
+                      <div className="border-2 border-dashed border-[#27b1ff]/60 rounded-lg w-16 h-10 flex items-center justify-center">
+                        <span className="text-[#27b1ff] text-[8px] font-mono font-bold">PERSON 94%</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 text-[9px] font-mono text-slate-500">
@@ -865,7 +797,7 @@ export default function Home() {
                     <div className="text-[9px] font-mono text-slate-400">VICTIM #1 CONFIRMED</div>
                     <div className="text-[#22d3ee] font-extrabold text-2xl font-mono">2.45<span className="text-xs text-slate-500 ml-1">m</span></div>
                     <div className="grid grid-cols-2 gap-1">
-                      <button className="bg-[#A9501C] text-white text-[7px] font-bold py-1 rounded">Confirmed ✓</button>
+                      <button className="bg-[#e1f4ff] text-[#27b1ff] text-[7px] font-bold py-1 rounded">Confirmed ✓</button>
                       <button className="bg-white/10 text-slate-300 text-[7px] font-bold py-1 rounded">False alarm</button>
                     </div>
                   </div>
@@ -876,7 +808,7 @@ export default function Home() {
                   <div className="bg-slate-950 border border-[#192738] rounded-xl p-3 space-y-1.5">
                     <div className="text-[9px] font-mono text-slate-400">CAMERA ARM</div>
                     <div className="w-12 h-12 bg-[#0a1929] border border-[#1b2b3c] rounded-lg mx-auto flex items-center justify-center">
-                      <div className="w-2 h-2 rounded-full bg-[#A9501C] shadow-[0_0_6px_#22d3ee]" />
+                      <div className="w-2 h-2 rounded-full bg-[#27b1ff] shadow-[0_0_6px_#27b1ff]" />
                     </div>
                     <div className="text-[8px] font-mono text-slate-500 text-center">Pan 90° · Tilt 55°</div>
                   </div>
@@ -884,7 +816,7 @@ export default function Home() {
                     <div className="text-[9px] font-mono text-slate-400 mb-1">TACTICAL MAP</div>
                     <div className="bg-[#0a1929] rounded-lg w-full h-16 flex items-center justify-center relative overflow-hidden">
                       <div className="absolute inset-0 opacity-30" style={{backgroundImage: 'linear-gradient(#1e40af22 1px, transparent 1px), linear-gradient(90deg, #1e40af22 1px, transparent 1px)', backgroundSize: '8px 8px'}} />
-                      <div className="w-3 h-3 bg-[#A9501C] rotate-45 shadow-[0_0_8px_#22d3ee]" />
+                      <div className="w-3 h-3 bg-[#27b1ff] rotate-45 shadow-[0_0_8px_#27b1ff]" />
                     </div>
                   </div>
                   <div className="bg-slate-950 border border-[#192738] rounded-xl p-3 space-y-1">
@@ -901,21 +833,21 @@ export default function Home() {
 
               <div className="px-5 py-4 border-t border-white/5 flex items-center justify-between">
                 <span className="text-slate-500 text-xs">Robot console — pilot view</span>
-                <Link to="/login" className="text-[#22d3ee] text-xs font-semibold flex items-center gap-1 hover:gap-2 transition-all">
+                <Link to="/login" className="text-[#27b1ff] text-xs font-semibold flex items-center gap-1 hover:gap-2 transition-all">
                   Open Console <ArrowRight size={13} />
                 </Link>
               </div>
             </div>
 
             {/* Operations Dashboard card */}
-            <div className="bg-[#0e1722] border border-[#1b2b3c] rounded-2xl overflow-hidden group hover:border-[#A9501C]/40 transition-all">
+            <div className="bg-[#0e1722] border border-[#1b2b3c] rounded-2xl overflow-hidden group hover:border-[#27b1ff]/40 transition-all">
               {/* Mock header */}
               <div className="bg-[#090f17] border-b border-white/5 px-5 py-3 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className="flex gap-1.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-[#f43f5e]" />
                     <span className="w-2.5 h-2.5 rounded-full bg-[#f59e0b]" />
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#A9501C]" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#27b1ff]" />
                   </div>
                   <span className="text-slate-400 font-mono text-[11px] ml-2">Operations · FLOODSCOUT COMMAND</span>
                 </div>
@@ -942,17 +874,17 @@ export default function Home() {
                 <div className="bg-slate-950 border border-[#192738] rounded-xl overflow-hidden h-44 relative">
                   <div className="absolute inset-0 opacity-20" style={{backgroundImage: 'linear-gradient(#22d3ee15 1px, transparent 1px), linear-gradient(90deg, #22d3ee15 1px, transparent 1px)', backgroundSize: '14px 14px'}} />
                   <svg className="absolute inset-0 w-full h-full" viewBox="0 0 300 176" preserveAspectRatio="none">
-                    <polygon points="60,40 120,30 140,90 80,100" fill="#A9501C20" stroke="#A9501C" strokeWidth="1.5" />
+                    <polygon points="60,40 120,30 140,90 80,100" fill="#27b1ff20" stroke="#27b1ff" strokeWidth="1.5" />
                     <polygon points="150,50 210,45 220,105 155,110" fill="#f59e0b15" stroke="#f59e0b" strokeWidth="1.5" strokeDasharray="4 2" />
                     <polygon points="80,110 140,105 150,145 90,150" fill="#22d3ee10" stroke="#22d3ee" strokeWidth="1" strokeDasharray="4 2" />
                     <polygon points="100,68 108,88 100,82 92,88" fill="#22d3ee" />
                     <circle cx="100" cy="68" r="12" stroke="#22d3ee" strokeWidth="0.8" fill="none" opacity="0.4" />
-                    <circle cx="135" cy="62" r="5" fill="#A9501C" />
-                    <circle cx="135" cy="62" r="9" stroke="#A9501C" strokeWidth="0.8" fill="none" opacity="0.5" />
+                    <circle cx="135" cy="62" r="5" fill="#27b1ff" />
+                    <circle cx="135" cy="62" r="9" stroke="#27b1ff" strokeWidth="0.8" fill="none" opacity="0.5" />
                   </svg>
                   <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-sm rounded-lg px-3 py-1.5 text-[8px] font-mono space-y-0.5">
-                    <div className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 bg-[#A9501C] rotate-45 inline-block" />USV-01</div>
-                    <div className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#A9501C] inline-block" />Detected person</div>
+                    <div className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 bg-[#27b1ff] rotate-45 inline-block" />USV-01</div>
+                    <div className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#27b1ff] inline-block" />Detected person</div>
                   </div>
                   <div className="absolute top-2 right-2 bg-black/60 rounded-lg px-2 py-1 text-[8px] font-mono text-slate-400">[GOOGLE HYBRID]</div>
                 </div>
@@ -960,7 +892,7 @@ export default function Home() {
 
               <div className="px-5 py-4 border-t border-white/5 flex items-center justify-between">
                 <span className="text-slate-500 text-xs">Operations dashboard — commander view</span>
-                <Link to="/login" className="text-[#A9501C] text-xs font-semibold flex items-center gap-1 hover:gap-2 transition-all">
+                <Link to="/login" className="text-[#27b1ff] text-xs font-semibold flex items-center gap-1 hover:gap-2 transition-all">
                   Open Dashboard <ArrowRight size={13} />
                 </Link>
               </div>
@@ -972,18 +904,18 @@ export default function Home() {
 
       {/* ── FIELD TRIALS CTA BANNER ──────────────────────────────────────── */}
       <section id="contact" className="py-6 px-6 max-w-7xl mx-auto pb-16">
-        <div className="bg-[#A9501C] rounded-3xl p-10 sm:p-14 relative overflow-hidden">
+        <div className="bg-[#27b1ff] rounded-3xl p-10 sm:p-14 relative overflow-hidden shadow-2xl shadow-[#27b1ff]/20">
           {/* Background texture */}
           <div className="absolute inset-0 opacity-10" style={{backgroundImage: 'radial-gradient(circle at 80% 50%, #ffffff 0%, transparent 60%)'}} />
           <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -mr-20 -mt-20" />
 
           <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-8">
             <div className="space-y-4 max-w-2xl">
-              <span className="text-[11px] font-mono uppercase tracking-widest text-orange-200/80">Field trials</span>
+              <span className="text-[11px] font-mono uppercase tracking-widest text-blue-200">Field trials</span>
               <h2 className="text-4xl sm:text-5xl font-extrabold text-white leading-tight tracking-tight">
                 Work with us on<br />field trials.
               </h2>
-              <p className="text-orange-100/80 text-base leading-relaxed max-w-lg">
+              <p className="text-blue-100/90 text-base leading-relaxed max-w-lg">
                 We are looking for Civil Defence, Bomba, and engineering teams to run joint deployments. We bring the robot — you bring local knowledge. Together we make flood search faster.
               </p>
             </div>
@@ -991,7 +923,7 @@ export default function Home() {
             <div className="flex flex-col gap-4 shrink-0">
               <Link
                 to="/contact"
-                className="bg-[#0f172a] hover:bg-[#1e293b] text-white font-bold px-8 py-4 rounded-full transition-all text-sm flex items-center gap-2 shadow-xl active:scale-95"
+                className="bg-[#e1f4ff] hover:bg-[#c8ecff] text-[#27b1ff] font-bold px-8 py-4 rounded-full transition-all text-sm flex items-center gap-2 shadow-xl active:scale-95"
               >
                 Get in touch
                 <ArrowRight size={16} />
@@ -1003,11 +935,11 @@ export default function Home() {
                   onChange={e => setEmail(e.target.value)}
                   placeholder="Enter your email"
                   required
-                  className="bg-white/20 border border-white/30 text-white placeholder:text-white/60 text-xs rounded-full px-4 py-2.5 outline-none flex-1 min-w-0"
+                  className="bg-white/20 border border-white/30 text-white placeholder:text-white/70 text-xs rounded-full px-4 py-2.5 outline-none flex-1 min-w-0"
                 />
                 <button
                   type="submit"
-                  className="bg-white text-[#A9501C] font-bold text-xs px-5 py-2.5 rounded-full hover:bg-orange-50 active:scale-95 transition-all whitespace-nowrap"
+                  className="bg-[#e1f4ff] text-[#27b1ff] font-bold text-xs px-5 py-2.5 rounded-full hover:bg-[#c8ecff] active:scale-95 transition-all whitespace-nowrap shadow-sm"
                 >
                   {subscribed ? 'Sent ✓' : 'Stay updated'}
                 </button>
@@ -1018,14 +950,14 @@ export default function Home() {
       </section>
 
       {/* ── FOOTER ───────────────────────────────────────────────────────── */}
-      <footer className="border-t border-white/5 py-10">
+      <footer className="border-t border-slate-200 py-10">
         <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-6">
           <Link to="/" className="flex items-center gap-2.5">
             <FloodScoutLogo />
-            <span className="font-extrabold text-white tracking-widest">FLOODSCOUT</span>
+            <span className="font-extrabold text-[#183451] tracking-widest">FLOODSCOUT</span>
           </Link>
 
-          <div className="text-slate-600 text-xs font-mono text-center">
+          <div className="text-slate-500 text-xs font-mono text-center">
             © 2026 FloodScout Group · Ayer Tawar, Perak · All rights reserved
           </div>
 
@@ -1038,7 +970,7 @@ export default function Home() {
               <Link
                 key={i}
                 to={l.to}
-                className="text-slate-600 hover:text-slate-300 text-xs transition-colors"
+                className="text-slate-500 hover:text-[#27b1ff] text-xs transition-colors"
               >
                 {l.label}
               </Link>

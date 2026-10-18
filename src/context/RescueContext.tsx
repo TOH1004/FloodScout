@@ -109,16 +109,16 @@ interface RescueContextType {
 
 const RescueContext = createContext<RescueContextType | undefined>(undefined);
 
-// Default detected GPS coordinates from NEO-8M hardware module (Batu Pahat / Live Vessel area)
-const INITIAL_COORDS: [number, number] = [1.8642, 103.1142];
+// Reference Ground Control fallback coordinates (UTM Skudai Campus / Johor) if browser geolocation is acquiring
+const DEFAULT_GROUND_CONTROL_COORDS: [number, number] = [1.5354, 103.6811];
 
 export const RescueProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [robotOnline] = useState(true);
-  const [batteryLevel, setBatteryLevel] = useState(84);
-  const [connectionStatus] = useState<'Strong' | 'Moderate' | 'Unstable' | 'Offline'>('Strong');
-  const [waterDepth, setWaterDepth] = useState(1.85);
-  const [robotSpeed, setRobotSpeed] = useState(2.4);
-  const [robotLocation, setRobotLocation] = useState<[number, number] | null>(INITIAL_COORDS);
+  const [robotOnline, setRobotOnline] = useState(false);
+  const [batteryLevel, setBatteryLevel] = useState(0);
+  const [connectionStatus, setConnectionStatus] = useState<'Strong' | 'Moderate' | 'Unstable' | 'Offline'>('Offline');
+  const [waterDepth, setWaterDepth] = useState(0);
+  const [robotSpeed, setRobotSpeed] = useState(0);
+  const [robotLocation, setRobotLocation] = useState<[number, number] | null>(null);
 
   // Multi-tier Ground Control Computer Geolocation
   const [computerLocation, setComputerLocation] = useState<[number, number]>(() => {
@@ -127,9 +127,10 @@ export const RescueProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length === 2 && !isNaN(parsed[0]) && !isNaN(parsed[1])) {
-          // Reject stale mock Johor Bahru coords [1.5588, 103.6375]
+          // Reject stale mock Johor Bahru coords [1.5588, 103.6375] or Batu Pahat mock [1.8642, 103.1142]
           const isStaleJohor = Math.abs(parsed[0] - 1.5588) < 0.005 && Math.abs(parsed[1] - 103.6375) < 0.005;
-          if (!isStaleJohor) {
+          const isStaleBatuPahat = Math.abs(parsed[0] - 1.8642) < 0.005 && Math.abs(parsed[1] - 103.1142) < 0.005;
+          if (!isStaleJohor && !isStaleBatuPahat) {
             return [parsed[0], parsed[1]];
           }
         }
@@ -137,7 +138,7 @@ export const RescueProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     } catch {
       // ignore
     }
-    return INITIAL_COORDS;
+    return DEFAULT_GROUND_CONTROL_COORDS;
   });
   const [computerAccuracy, setComputerAccuracy] = useState<number | null>(null);
   const [locationStatus, setLocationStatus] = useState<'locating' | 'ready' | 'denied' | 'timeout' | 'error' | 'idle'>('idle');
@@ -313,10 +314,10 @@ export const RescueProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
     };
   }, [acquireLocation]);
-  const [robotHeading, setRobotHeading] = useState(65);
-  const [operatingMode, setOperatingModeState] = useState<RobotMode>('AUTO_SEARCH');
-  const [thrusterPwm, setThrusterPwm] = useState(48);
-  const [signalDbm] = useState(-58);
+  const [robotHeading, setRobotHeading] = useState(0);
+  const [operatingMode, setOperatingModeState] = useState<RobotMode>('STANDBY');
+  const [thrusterPwm, setThrusterPwm] = useState(0);
+  const [signalDbm] = useState(0);
   const [cameraMode, setCameraMode] = useState<CameraMode>('ai');
   const [confidenceThreshold, setConfidenceThreshold] = useState(80);
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -325,14 +326,14 @@ export const RescueProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [trajectory, setTrajectory] = useState<[number, number][]>([]);
 
   const [activeMission, setActiveMission] = useState<Mission>({
-    id: 'MISSION-024',
-    title: 'FloodScout Live Deployment',
-    zone: 'Live Operational Sector (GNSS Tracked)',
+    id: 'MISSION-001',
+    title: 'FloodScout Deployment',
+    zone: 'Operational Sector',
     status: 'ACTIVE',
-    startTime: '14:15:00',
-    durationSeconds: 1140, // 19 minutes
-    distanceTravelledKm: 0.12,
-    areaSurveyedSqM: 1200,
+    startTime: new Date().toLocaleTimeString(),
+    durationSeconds: 0,
+    distanceTravelledKm: 0,
+    areaSurveyedSqM: 0,
     robotName: 'FloodScout-01',
   });
 
@@ -351,23 +352,10 @@ export const RescueProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setActiveMission((prev) => ({
         ...prev,
         durationSeconds: prev.durationSeconds + 1,
-        distanceTravelledKm: parseFloat((prev.distanceTravelledKm + (robotSpeed > 0 ? 0.0006 : 0)).toFixed(2)),
-        areaSurveyedSqM: prev.areaSurveyedSqM + (robotSpeed > 0 ? 4 : 0),
       }));
-
-      // Subtle water depth oscillation
-      setWaterDepth(parseFloat((1.8 + Math.sin(Date.now() / 4000) * 0.25).toFixed(2)));
     }, 1000);
     return () => clearInterval(interval);
-  }, [activeMission.status, robotSpeed]);
-
-  // Battery Drain Simulation
-  useEffect(() => {
-    const batInterval = setInterval(() => {
-      setBatteryLevel((prev) => (prev > 5 ? prev - 1 : prev));
-    }, 35000);
-    return () => clearInterval(batInterval);
-  }, []);
+  }, [activeMission.status]);
 
   // Mode change handler
   const setOperatingMode = (mode: RobotMode) => {
@@ -400,16 +388,12 @@ export const RescueProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // Synchronize initial robot deployment near PC Ground Control only if hardware GPS is not active
   const isHardwareGpsActiveRef = useRef(false);
-  useEffect(() => {
-    if (isHardwareGpsActiveRef.current) return;
-    if (computerLocation) {
-      setRobotLocation(computerLocation);
-    }
-  }, [computerLocation]);
 
-  // Hardware GPS Integration (NEO-8M on ESP32 Serial2 / WebSerial)
+  // Hardware GPS Integration (NEO-8M on ESP32 Serial2 / WebSerial / Wi-Fi)
   const handleHardwareGpsFix = useCallback((coords: [number, number], telemetry: Partial<HardwareGpsState>) => {
     isHardwareGpsActiveRef.current = true;
+    setRobotOnline(true);
+    setConnectionStatus('Strong');
     setRobotLocation(coords);
     setTrajectory((prev) => {
       const last = prev[prev.length - 1];
@@ -422,61 +406,31 @@ export const RescueProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (telemetry.heading && telemetry.heading > 0) {
       setRobotHeading(telemetry.heading);
     }
-    if (telemetry.speedKmh && telemetry.speedKmh > 0) {
+    if (telemetry.speedKmh !== undefined && telemetry.speedKmh >= 0) {
       setRobotSpeed(telemetry.speedKmh);
     }
   }, []);
 
   const { gpsState: hardwareGps, connectWebSerial } = useHardwareGps(handleHardwareGpsFix);
 
-  // Real-time autonomous robot movement and trajectory update on tactical map
+  // Synchronize robot connection status with real hardware telemetry
   useEffect(() => {
-    // If real hardware GPS fix is active, the live NEO-8M stream drives robot location directly!
-    if (hardwareGps.isValid) return;
+    if (hardwareGps.isValid && hardwareGps.latitude !== null && hardwareGps.longitude !== null) {
+      setRobotOnline(true);
+      setConnectionStatus('Strong');
+    } else if (!hardwareGps.connected && !isHardwareGpsActiveRef.current) {
+      setRobotOnline(false);
+      setConnectionStatus('Offline');
+      setRobotSpeed(0);
+    }
+  }, [hardwareGps.isValid, hardwareGps.connected, hardwareGps.latitude, hardwareGps.longitude]);
 
-    if (activeMission.status !== 'ACTIVE' || robotSpeed <= 0) return;
-
-    const interval = setInterval(() => {
-      setRobotHeading((prevHeading) => {
-        // Course variation (+/- 2.5 degrees sinusoidal) to simulate realistic water navigation
-        const headingWobble = Math.sin(Date.now() / 3500) * 3.5;
-        const newHeading = Math.round((prevHeading + headingWobble + 360) % 360);
-
-        setRobotLocation((current) => {
-          if (!current) return null;
-          const [lat, lng] = current;
-          // Speed: km/h to lat/lng step. e.g. 2.4 km/h -> ~0.67 m/s -> in 1.5s is ~1.0 meter ~ 0.000009 deg
-          const metersInInterval = (robotSpeed * (1000 / 3600)) * 1.5;
-          const degPerMeter = 1 / 111320;
-          const rad = (newHeading * Math.PI) / 180;
-          const dLat = Math.cos(rad) * metersInInterval * degPerMeter;
-          const cosLat = Math.cos((lat * Math.PI) / 180) || 1;
-          const dLng = (Math.sin(rad) * metersInInterval * degPerMeter) / cosLat;
-
-          const newLat = parseFloat((lat + dLat).toFixed(6));
-          const newLng = parseFloat((lng + dLng).toFixed(6));
-          const newPos: [number, number] = [newLat, newLng];
-
-          setTrajectory((prevTraj) => {
-            return [...prevTraj.slice(-150), newPos];
-          });
-
-          return newPos;
-        });
-
-        return newHeading;
-      });
-    }, 1500);
-
-    return () => clearInterval(interval);
-  }, [activeMission.status, robotSpeed]);
-
-  // Move robot manually or along path
+  // Move robot manually (only if robot already has a valid localized position)
   const moveRobot = (dx: number, dy: number, heading: number) => {
     setRobotLocation((current) => {
-      const base = current || computerLocation;
-      const newLat = parseFloat((base[0] + dy).toFixed(6));
-      const newLng = parseFloat((base[1] + dx).toFixed(6));
+      if (!current) return null;
+      const newLat = parseFloat((current[0] + dy).toFixed(6));
+      const newLng = parseFloat((current[1] + dx).toFixed(6));
       const newPos: [number, number] = [newLat, newLng];
       setTrajectory((prev) => [...prev.slice(-150), newPos]);
       return newPos;

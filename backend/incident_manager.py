@@ -17,6 +17,7 @@ Note on detection scores:
 
 import os
 import cv2
+import numpy as np
 import time
 import datetime
 import threading
@@ -47,6 +48,17 @@ class IncidentManager:
 
         # Ensure captures directory exists
         os.makedirs(self.captures_dir, exist_ok=True)
+
+        # Load Haar cascades for smart face-centered person cropping
+        self.face_cascades = []
+        for cascade_name in [
+            "haarcascade_frontalface_default.xml",
+            "haarcascade_frontalface_alt2.xml",
+            "haarcascade_profileface.xml",
+        ]:
+            cascade_path = cv2.data.haarcascades + cascade_name
+            if os.path.exists(cascade_path):
+                self.face_cascades.append(cv2.CascadeClassifier(cascade_path))
 
         self.lock = threading.Lock()
         self.incidents: List[Dict[str, Any]] = []
@@ -252,40 +264,147 @@ class IncidentManager:
         annotated_path = os.path.join(self.captures_dir, annotated_filename)
         cv2.imwrite(annotated_path, annotated_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
 
+    def extract_centered_person_crop(
+        self,
+        frame: np.ndarray,
+        det: Dict[str, Any]
+    ) -> Tuple[np.ndarray, List[int]]:
+        """Extracts a well-centered, high-detail portrait / upper-body crop of a detected person.
+
+        Overcomes the HOG issue where tall, narrow (1:2) pedestrian bounding boxes latch
+        onto the left background edge (e.g. wall/door), leaving the person's face cut off
+        on the right edge.
+
+        Algorithm:
+          1. Detects face/head within or aligned with the person detection.
+          2. If a face is found:
+             - Centers the crop horizontally directly on the face.
+             - Adds natural headroom above forehead and frames down through shoulders/torso.
+          3. If no face is found:
+             - Expands the narrow HOG box to a balanced portrait aspect ratio (3:4/4:3).
+             - Analyzes horizontal gradient/texture variance to shift the center of mass off
+               blank background onto the actual person.
+          4. Returns the centered crop and clamped bounding box [x, y, w, h].
+        """
+        frame_h, frame_w = frame.shape[:2]
+        x = int(det.get("x", 0))
+        y = int(det.get("y", 0))
+        w = int(det.get("width", 0))
+        h = int(det.get("height", 0))
+
+        if w <= 0 or h <= 0 or frame is None or frame.size == 0:
+            return frame, [0, 0, frame_w, frame_h]
+
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+        # 1. Search for face in and around detection
+        matched_face = None
+        for casc in self.face_cascades:
+            faces = casc.detectMultiScale(
+                gray,
+                scaleFactor=1.05,
+                minNeighbors=3,
+                minSize=(35, 35)
+            )
+            for fx, fy, fw, fh in faces:
+                fcx = fx + fw // 2
+                dcx = x + w // 2
+                # Face must be reasonably aligned with this person detection
+                if abs(fcx - dcx) < max(w * 2.0, 160) and fy < (y + h * 0.85):
+                    matched_face = (fx, fy, fw, fh)
+                    break
+            if matched_face is not None:
+                break
+
+        if matched_face is not None:
+            fx, fy, fw, fh = matched_face
+            center_x = fx + fw // 2
+            # Generous width and height to capture full head, shoulders and upper body details
+            crop_w = max(int(fw * 2.2), int(w * 1.6), 220)
+            crop_h = max(int(fh * 2.6), int(h * 1.2), 260)
+            top_y = max(0, fy - int(fh * 0.35))
+            bottom_y = min(frame_h, top_y + crop_h)
+            left_x = max(0, center_x - crop_w // 2)
+            right_x = min(frame_w, left_x + crop_w)
+        else:
+            # Fallback: edge/texture center or horizontal expansion
+            crop_w = max(int(h * 0.85), int(w * 1.8), 220)
+            crop_h = max(int(h * 1.15), 260)
+
+            # Check if right half of HOG has more gradient than left half (i.e. wall on left)
+            roi = gray[y:min(frame_h, y + h), x:min(frame_w, x + w)]
+            if roi.size > 0:
+                left_half = roi[:, :max(1, w // 2)]
+                right_half = roi[:, max(1, w // 2):]
+                std_l = float(np.std(left_half)) if left_half.size > 0 else 0.0
+                std_r = float(np.std(right_half)) if right_half.size > 0 else 0.0
+                if std_r > std_l * 1.3:
+                    center_x = x + int(w * 0.85)
+                else:
+                    center_x = x + w // 2
+            else:
+                center_x = x + w // 2
+
+            top_y = max(0, y - int(h * 0.08))
+            bottom_y = min(frame_h, top_y + crop_h)
+            left_x = max(0, center_x - crop_w // 2)
+            right_x = min(frame_w, left_x + crop_w)
+
+        # Boundary clamping while preserving full crop dimensions
+        if left_x < 0:
+            right_x = min(frame_w, right_x - left_x)
+            left_x = 0
+        if right_x > frame_w:
+            left_x = max(0, left_x - (right_x - frame_w))
+            right_x = frame_w
+        if top_y < 0:
+            bottom_y = min(frame_h, bottom_y - top_y)
+            top_y = 0
+        if bottom_y > frame_h:
+            top_y = max(0, top_y - (bottom_y - frame_h))
+            bottom_y = frame_h
+
+        left_x = max(0, int(left_x))
+        top_y = max(0, int(top_y))
+        right_x = min(frame_w, int(right_x))
+        bottom_y = min(frame_h, int(bottom_y))
+
+        final_w = right_x - left_x
+        final_h = bottom_y - top_y
+
+        if final_w > 10 and final_h > 10:
+            crop = frame[top_y:bottom_y, left_x:right_x]
+            return crop, [left_x, top_y, final_w, final_h]
+
+        return frame, [0, 0, frame_w, frame_h]
+
         # 3. Save Person Crop(s) — tag each as new or returning
         person_images = []
         person_details = []
-        frame_h, frame_w = original_frame.shape[:2]
 
         for i, det in enumerate(detections, start=1):
             try:
-                x = max(0, det["x"])
-                y = max(0, det["y"])
-                w = det["width"]
-                h = det["height"]
-                x2 = min(frame_w, x + w)
-                y2 = min(frame_h, y + h)
-
                 pid = det.get("id", i)
                 score = det.get("confidence", 0.0)
                 is_returning = pid in returning_ids
 
-                if (x2 > x) and (y2 > y):
-                    crop = original_frame[y:y2, x:x2]
-                    if crop.size > 0:
-                        crop_filename = f"{incident_id}_person_{pid}.jpg"
-                        crop_path = os.path.join(self.captures_dir, crop_filename)
-                        cv2.imwrite(crop_path, crop, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
-                        crop_url = f"/captures/{crop_filename}"
-                        person_images.append(crop_url)
-                        person_details.append({
-                            "id": pid,
-                            "label": f"Person #{pid}",
-                            "imageUrl": crop_url,
-                            "score": round(score, 2),
-                            "box": [x, y, w, h],
-                            "isReturning": is_returning,
-                        })
+                # Extract centered person crop with full details
+                crop, crop_box = self.extract_centered_person_crop(original_frame, det)
+
+                if crop is not None and crop.size > 0:
+                    crop_filename = f"{incident_id}_person_{pid}.jpg"
+                    crop_path = os.path.join(self.captures_dir, crop_filename)
+                    cv2.imwrite(crop_path, crop, [int(cv2.IMWRITE_JPEG_QUALITY), 92])
+                    crop_url = f"/captures/{crop_filename}"
+                    person_images.append(crop_url)
+                    person_details.append({
+                        "id": pid,
+                        "label": f"Person #{pid}",
+                        "imageUrl": crop_url,
+                        "score": round(score, 2),
+                        "box": crop_box,
+                        "isReturning": is_returning,
+                    })
             except Exception as e:
                 logger.warning(f"Failed to crop person {i} for incident {incident_id}: {e}")
 

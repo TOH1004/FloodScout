@@ -175,12 +175,12 @@ state = PipelineState()
 
 # ── Forward Obstacle Detection State (HC-SR04 / JSN-SR04T) ───────────────────
 _obstacle_state: Dict[str, Any] = {
-    "distanceM": 2.45,
-    "distanceCm": 245.0,
+    "distanceM": None,
+    "distanceCm": None,
     "isObstacleDetected": False,
     "warningThresholdM": 1.50,
     "criticalThresholdM": 0.60,
-    "status": "CLEAR",
+    "status": "OFFLINE",
     "hardwareConnected": False,
     "sensor_model": "HC-SR04 Ultrasonic Distance Sensor",
     "last_updated": None
@@ -201,11 +201,11 @@ def _on_hardware_distance(dist_cm: float):
         _obstacle_state["status"] = "DANGER" if dist_m <= crit else ("CAUTION" if dist_m <= warn else "CLEAR")
         _obstacle_state["isObstacleDetected"] = dist_m <= warn
     else:
-        _obstacle_state["distanceM"] = 4.0
-        _obstacle_state["distanceCm"] = 400.0
-        _obstacle_state["status"] = "CLEAR"
+        _obstacle_state["distanceM"] = None
+        _obstacle_state["distanceCm"] = None
+        _obstacle_state["status"] = "OFFLINE"
         _obstacle_state["isObstacleDetected"] = False
-        _obstacle_state["hardwareConnected"] = True
+        _obstacle_state["hardwareConnected"] = False
         _obstacle_state["last_updated"] = now
 
 
@@ -1112,8 +1112,10 @@ def proxy_esp32_sensors(target: Optional[str] = Query(None)):
             content={
                 "success": False,
                 "error": f"ESP32 Wi-Fi offline ({target_url}): {e}",
-                "distance_cm": _obstacle_state["distanceCm"],
-                "distance_m": _obstacle_state["distanceM"],
+                "distance_cm": None,
+                "distance_m": None,
+                "hardwareConnected": False,
+                "status": "OFFLINE",
                 "gps": {
                     "fix": gps_status.get("is_valid", False),
                     "lat": gps_status.get("latitude") or 0.0,
@@ -1147,13 +1149,17 @@ def get_motor_telemetry():
 def get_obstacle_sensor_data():
     """Retrieve the latest forward obstacle sensor distance and threat status."""
     dist_m = _obstacle_state["distanceM"]
-    crit = _obstacle_state["criticalThresholdM"]
-    warn = _obstacle_state["warningThresholdM"]
-    status = "DANGER" if dist_m <= crit else ("CAUTION" if dist_m <= warn else "CLEAR")
-    _obstacle_state["status"] = status
-    _obstacle_state["isObstacleDetected"] = dist_m <= warn
+    if dist_m is None or not _obstacle_state.get("hardwareConnected"):
+        _obstacle_state["status"] = "OFFLINE"
+        _obstacle_state["isObstacleDetected"] = False
+    else:
+        crit = _obstacle_state["criticalThresholdM"]
+        warn = _obstacle_state["warningThresholdM"]
+        status = "DANGER" if dist_m <= crit else ("CAUTION" if dist_m <= warn else "CLEAR")
+        _obstacle_state["status"] = status
+        _obstacle_state["isObstacleDetected"] = dist_m <= warn
     return {
-        "success": True,
+        "success": bool(_obstacle_state.get("hardwareConnected")),
         **_obstacle_state
     }
 

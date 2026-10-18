@@ -47,9 +47,10 @@ export function ObstacleSensorSection() {
 
   // Calculate obstacle position in the 60° forward cone
   const obstacleRadiusPx = useMemo(() => {
+    if (!isHardwareConnected || distanceM === null) return 0;
     const clampedDist = Math.max(minRangeM, Math.min(maxRangeM, distanceM));
     return (clampedDist / maxRangeM) * maxRadiusPx;
-  }, [distanceM, minRangeM, maxRangeM]);
+  }, [distanceM, minRangeM, maxRangeM, isHardwareConnected]);
 
   // SVG Radar Path generator for forward 60° arc (-30° to +30° from top)
   const arcPath = useMemo(() => {
@@ -88,7 +89,7 @@ export function ObstacleSensorSection() {
 
   // Rolling History Sparkline Path
   const sparklineD = useMemo(() => {
-    if (history.length < 2) return '';
+    if (!isHardwareConnected || history.length < 2) return '';
     const width = 280;
     const height = 45;
     const stepX = width / (history.length - 1);
@@ -99,7 +100,7 @@ export function ObstacleSensorSection() {
       const y = height - Math.max(0, Math.min(height, (pt.distanceM / 4.0) * height));
       return idx === 0 ? `M ${x} ${y}` : `${acc} L ${x} ${y}`;
     }, '');
-  }, [history]);
+  }, [history, isHardwareConnected]);
 
   return (
     <div className="h-full flex flex-col bg-[#FAF7F2] text-[#162347] overflow-y-auto select-none p-3.5 space-y-3.5 min-h-0 font-sans">
@@ -107,7 +108,9 @@ export function ObstacleSensorSection() {
       <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-[#E6DFD5]">
         <div className="flex items-center gap-2">
           <div className={`w-7 h-7 rounded-lg flex items-center justify-center shadow-xs transition-colors ${
-            status === 'DANGER'
+            !isHardwareConnected || status === 'OFFLINE'
+              ? 'bg-slate-600 text-slate-200'
+              : status === 'DANGER'
               ? 'bg-rose-600 text-white animate-pulse'
               : status === 'CAUTION'
               ? 'bg-amber-500 text-white'
@@ -148,11 +151,11 @@ export function ObstacleSensorSection() {
                       setEsp32BaseUrl(input.trim());
                     }
                   }}
-                  className="text-[9px] font-mono font-bold bg-amber-100 text-amber-900 border border-amber-300 px-1.5 py-0.5 rounded flex items-center gap-1 cursor-pointer hover:bg-amber-200 transition-colors"
+                  className="text-[9px] font-mono font-bold bg-slate-200 text-slate-800 border border-slate-300 px-1.5 py-0.5 rounded flex items-center gap-1 cursor-pointer hover:bg-slate-300 transition-colors"
                   title="Click to configure ESP32 IP address"
                 >
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                  CONNECTING ({getEsp32BaseUrl().replace('http://', '')}) - Set IP
+                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                  NO SENSOR DETECTED ({getEsp32BaseUrl().replace('http://', '')}) - Set IP
                 </button>
               )}
             </h3>
@@ -194,7 +197,9 @@ export function ObstacleSensorSection() {
 
       {/* ─── Hero Obstacle Alert Banner ────────────────────────────────────────── */}
       <div className={`p-3 rounded-xl border flex items-center justify-between gap-3 shadow-xs transition-all ${
-        status === 'DANGER'
+        !isHardwareConnected || status === 'OFFLINE'
+          ? 'bg-slate-100 border-slate-300 text-slate-700'
+          : status === 'DANGER'
           ? 'bg-rose-50 border-rose-400 text-rose-950 ring-2 ring-rose-500/20 animate-pulse'
           : status === 'CAUTION'
           ? 'bg-amber-50 border-amber-300 text-amber-950'
@@ -202,13 +207,17 @@ export function ObstacleSensorSection() {
       }`}>
         <div className="flex items-center gap-3">
           <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
-            status === 'DANGER'
+            !isHardwareConnected || status === 'OFFLINE'
+              ? 'bg-slate-500 text-white'
+              : status === 'DANGER'
               ? 'bg-rose-600 text-white shadow-md'
               : status === 'CAUTION'
               ? 'bg-amber-500 text-white'
               : 'bg-emerald-600 text-white'
           }`}>
-            {status === 'DANGER' ? (
+            {!isHardwareConnected || status === 'OFFLINE' ? (
+              <XCircle size={20} />
+            ) : status === 'DANGER' ? (
               <ShieldAlert size={20} className="animate-bounce" />
             ) : status === 'CAUTION' ? (
               <AlertTriangle size={20} />
@@ -218,34 +227,59 @@ export function ObstacleSensorSection() {
           </div>
           <div>
             <div className="text-xs font-mono font-bold tracking-wider uppercase flex items-center gap-2">
-              <span>{status === 'DANGER' ? 'CRITICAL PROXIMITY HAZARD' : status === 'CAUTION' ? 'OBSTACLE DETECTED IN FRONT' : 'FORWARD SECTOR CLEAR'}</span>
+              <span>
+                {!isHardwareConnected || status === 'OFFLINE'
+                  ? 'NO SENSOR DETECTED'
+                  : status === 'DANGER'
+                  ? 'CRITICAL PROXIMITY HAZARD'
+                  : status === 'CAUTION'
+                  ? 'OBSTACLE DETECTED IN FRONT'
+                  : 'FORWARD SECTOR CLEAR'}
+              </span>
               <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-extrabold ${
-                status === 'DANGER'
+                !isHardwareConnected || status === 'OFFLINE'
+                  ? 'bg-slate-600 text-white'
+                  : status === 'DANGER'
                   ? 'bg-rose-600 text-white'
                   : status === 'CAUTION'
                   ? 'bg-amber-500 text-white'
                   : 'bg-emerald-600 text-white'
               }`}>
-                {status}
+                {!isHardwareConnected || status === 'OFFLINE' ? 'OFFLINE' : status}
               </span>
             </div>
             <p className="text-[11px] font-sans mt-0.5 opacity-85">
-              {status === 'DANGER'
-                ? `Obstacle at ${distanceCm.toFixed(1)} cm! Collision threshold (<${Math.round(criticalThresholdM * 100)} cm) breached. ${autoBrakeArmed ? 'Auto-halt thruster interlock active.' : 'Manual avoidance required immediately.'}`
+              {!isHardwareConnected || status === 'OFFLINE'
+                ? 'No ultrasonic obstacle sensor connected or receiving telemetry from ESP32. Distance measurement unavailable.'
+                : status === 'DANGER'
+                ? `Obstacle at ${distanceCm?.toFixed(1)} cm! Collision threshold (<${Math.round(criticalThresholdM * 100)} cm) breached. ${autoBrakeArmed ? 'Auto-halt thruster interlock active.' : 'Manual avoidance required immediately.'}`
                 : status === 'CAUTION'
-                ? `Object identified directly in front of vessel at ${distanceCm.toFixed(1)} cm (${distanceM.toFixed(2)} m). Vessel slowing down.`
+                ? `Object identified directly in front of vessel at ${distanceCm?.toFixed(1)} cm (${distanceM?.toFixed(2)} m). Vessel slowing down.`
                 : `No obstructions detected within ${Math.round(warningThresholdM * 100)} cm safety zone. Clear water path ahead.`}
             </p>
           </div>
         </div>
 
         <div className="text-right shrink-0 font-mono">
-          <div className="text-3xl font-black font-sans leading-none tracking-tight">
-            {distanceCm > 0 && distanceCm <= 450 ? distanceCm.toFixed(1) : '> 400'} <span className="text-sm font-mono font-normal">cm</span>
-          </div>
-          <div className="text-[10px] text-slate-500 font-bold mt-0.5">
-            {distanceM.toFixed(2)} m
-          </div>
+          {!isHardwareConnected || distanceCm === null || distanceM === null ? (
+            <div>
+              <div className="text-sm sm:text-base font-bold font-mono text-slate-500 uppercase tracking-tight">
+                No Sensor Detected
+              </div>
+              <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                Telemetry Offline
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="text-3xl font-black font-sans leading-none tracking-tight">
+                {distanceCm > 0 && distanceCm <= 450 ? distanceCm.toFixed(1) : '> 400'} <span className="text-sm font-mono font-normal">cm</span>
+              </div>
+              <div className="text-[10px] text-slate-500 font-bold mt-0.5">
+                {distanceM.toFixed(2)} m
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -331,8 +365,18 @@ export function ObstacleSensorSection() {
                 strokeOpacity="0.4"
               />
 
+              {/* No Sensor Detected Overlay in Radar */}
+              {!isHardwareConnected && (
+                <g transform={`translate(${originX}, ${originY - 80})`}>
+                  <rect x="-80" y="-13" width="160" height="26" rx="5" fill="#0B1329" stroke="#334155" strokeWidth="1" />
+                  <text x="0" y="4" fill="#64748B" fontSize="9" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
+                    NO SENSOR DETECTED
+                  </text>
+                </g>
+              )}
+
               {/* Real-time Measured Obstacle Blip & Target Bar */}
-              {isObstacleDetected && (
+              {isObstacleDetected && distanceCm !== null && (
                 <>
                   {/* Acoustic Beam Line from Vessel to Obstacle */}
                   <line
@@ -409,45 +453,77 @@ export function ObstacleSensorSection() {
               <span className="text-[9px] font-mono uppercase font-bold text-slate-500 block mb-0.5">
                 Front Distance
               </span>
-              <div className="font-sans font-black text-2xl text-[#162347] leading-none">
-                {distanceCm > 0 && distanceCm <= 450 ? distanceCm.toFixed(1) : '> 400'} <span className="text-xs font-mono font-normal">cm</span>
-              </div>
-              <span className="text-[10px] font-mono text-slate-500 mt-1 block">
-                {distanceM.toFixed(2)} meters
-              </span>
+              {!isHardwareConnected || distanceCm === null || distanceM === null ? (
+                <div>
+                  <div className="font-mono font-bold text-base text-slate-500 leading-tight mt-1">
+                    No Sensor Detected
+                  </div>
+                  <span className="text-[10px] font-mono text-slate-400 mt-1 block">
+                    Sensor Disconnected
+                  </span>
+                </div>
+              ) : (
+                <>
+                  <div className="font-sans font-black text-2xl text-[#162347] leading-none">
+                    {distanceCm > 0 && distanceCm <= 450 ? distanceCm.toFixed(1) : '> 400'} <span className="text-xs font-mono font-normal">cm</span>
+                  </div>
+                  <span className="text-[10px] font-mono text-slate-500 mt-1 block">
+                    {distanceM.toFixed(2)} meters
+                  </span>
+                </>
+              )}
             </div>
 
             <div className="bg-white border border-[#E6DFD5] p-3 rounded-xl shadow-xs">
               <span className="text-[9px] font-mono uppercase font-bold text-slate-500 block mb-0.5">
                 Obstacle In Path
               </span>
-              <div className={`font-mono font-black text-lg leading-none mt-1 flex items-center gap-1 ${
-                isObstacleDetected ? 'text-rose-600' : 'text-emerald-700'
-              }`}>
-                {isObstacleDetected ? (
-                  <>
-                    <XCircle size={16} /> YES (DETECTED)
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 size={16} /> NO (CLEAR)
-                  </>
-                )}
-              </div>
-              <span className="text-[10px] font-mono text-slate-500 mt-1 block">
-                Within {Math.round(warningThresholdM * 100)} cm Cone
-              </span>
+              {!isHardwareConnected ? (
+                <div>
+                  <div className="font-mono font-bold text-sm text-slate-500 leading-none mt-1 flex items-center gap-1">
+                    <XCircle size={15} className="text-slate-400" /> NO SENSOR
+                  </div>
+                  <span className="text-[10px] font-mono text-slate-400 mt-1 block">
+                    Sensor Disconnected
+                  </span>
+                </div>
+              ) : (
+                <>
+                  <div className={`font-mono font-black text-lg leading-none mt-1 flex items-center gap-1 ${
+                    isObstacleDetected ? 'text-rose-600' : 'text-emerald-700'
+                  }`}>
+                    {isObstacleDetected ? (
+                      <>
+                        <XCircle size={16} /> YES (DETECTED)
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 size={16} /> NO (CLEAR)
+                      </>
+                    )}
+                  </div>
+                  <span className="text-[10px] font-mono text-slate-500 mt-1 block">
+                    Within {Math.round(warningThresholdM * 100)} cm Cone
+                  </span>
+                </>
+              )}
             </div>
 
             <div className="bg-white border border-[#E6DFD5] p-3 rounded-xl shadow-xs">
               <span className="text-[9px] font-mono uppercase font-bold text-slate-500 block mb-0.5">
                 Ping Frequency
               </span>
-              <div className="font-sans font-bold text-lg text-sky-800 leading-none">
-                {pingRateHz} <span className="text-xs font-mono font-normal">Hz</span>
+              <div className="font-sans font-bold text-lg text-slate-600 leading-none">
+                {isHardwareConnected ? (
+                  <>
+                    <span className="text-sky-800">{pingRateHz}</span> <span className="text-xs font-mono font-normal">Hz</span>
+                  </>
+                ) : (
+                  <span className="text-slate-400 text-sm font-mono">OFFLINE</span>
+                )}
               </div>
               <span className="text-[10px] font-mono text-slate-500 mt-1 block">
-                ~50ms Sonar Interval
+                {isHardwareConnected ? '~50ms Sonar Interval' : 'Standby / Disconnected'}
               </span>
             </div>
 
@@ -456,9 +532,9 @@ export function ObstacleSensorSection() {
                 Collision Interlock
               </span>
               <div className={`font-mono font-bold text-xs leading-none mt-1 ${
-                status === 'DANGER' && autoBrakeArmed ? 'text-rose-600 animate-pulse' : 'text-emerald-700'
+                !isHardwareConnected ? 'text-slate-500' : status === 'DANGER' && autoBrakeArmed ? 'text-rose-600 animate-pulse' : 'text-emerald-700'
               }`}>
-                {status === 'DANGER' && autoBrakeArmed ? 'AUTO-HALT ENGAGED' : autoBrakeArmed ? 'ARMED & READY' : 'BYPASS'}
+                {!isHardwareConnected ? 'STANDBY (NO SENSOR)' : status === 'DANGER' && autoBrakeArmed ? 'AUTO-HALT ENGAGED' : autoBrakeArmed ? 'ARMED & READY' : 'BYPASS'}
               </div>
               <span className="text-[10px] font-mono text-slate-500 mt-1 block">
                 Threshold: &lt;{Math.round(criticalThresholdM * 100)} cm
@@ -476,25 +552,32 @@ export function ObstacleSensorSection() {
               <span className="text-slate-400">Real-time Trend</span>
             </div>
 
-            <div className="bg-slate-900 rounded-lg p-2 flex items-center justify-center">
-              <svg width="100%" height="45" viewBox="0 0 280 45" className="overflow-visible">
-                {/* Critical line */}
-                <line x1="0" y1={45 - (criticalThresholdM / 4.0) * 45} x2="280" y2={45 - (criticalThresholdM / 4.0) * 45} stroke="#EF4444" strokeWidth="1" strokeDasharray="3 3" opacity="0.6" />
-                {/* Warning line */}
-                <line x1="0" y1={45 - (warningThresholdM / 4.0) * 45} x2="280" y2={45 - (warningThresholdM / 4.0) * 45} stroke="#F59E0B" strokeWidth="1" strokeDasharray="3 3" opacity="0.5" />
+            <div className="bg-slate-900 rounded-lg p-2 flex items-center justify-center min-h-[50px] relative">
+              {!isHardwareConnected || history.length === 0 ? (
+                <div className="text-[10px] font-mono text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-slate-600" />
+                  No sensor detected — waiting for hardware telemetry
+                </div>
+              ) : (
+                <svg width="100%" height="45" viewBox="0 0 280 45" className="overflow-visible">
+                  {/* Critical line */}
+                  <line x1="0" y1={45 - (criticalThresholdM / 4.0) * 45} x2="280" y2={45 - (criticalThresholdM / 4.0) * 45} stroke="#EF4444" strokeWidth="1" strokeDasharray="3 3" opacity="0.6" />
+                  {/* Warning line */}
+                  <line x1="0" y1={45 - (warningThresholdM / 4.0) * 45} x2="280" y2={45 - (warningThresholdM / 4.0) * 45} stroke="#F59E0B" strokeWidth="1" strokeDasharray="3 3" opacity="0.5" />
 
-                {/* Distance trail line */}
-                {sparklineD && (
-                  <path
-                    d={sparklineD}
-                    fill="none"
-                    stroke={status === 'DANGER' ? '#EF4444' : status === 'CAUTION' ? '#F59E0B' : '#06B6D4'}
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                )}
-              </svg>
+                  {/* Distance trail line */}
+                  {sparklineD && (
+                    <path
+                      d={sparklineD}
+                      fill="none"
+                      stroke={status === 'DANGER' ? '#EF4444' : status === 'CAUTION' ? '#F59E0B' : '#06B6D4'}
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  )}
+                </svg>
+              )}
             </div>
           </div>
         </div>
@@ -511,8 +594,12 @@ export function ObstacleSensorSection() {
 
           <div className="flex items-center gap-2 text-[10px] font-mono">
             <span className="text-slate-500">Source:</span>
-            <span className="px-2 py-0.5 rounded bg-emerald-50 border border-emerald-300 text-emerald-800 font-bold">
-              ESP32 HTTP Wi-Fi (/api/sensors)
+            <span className={`px-2 py-0.5 rounded border font-bold ${
+              isHardwareConnected
+                ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                : 'bg-slate-100 border-slate-300 text-slate-600'
+            }`}>
+              {isHardwareConnected ? 'ESP32 HTTP Wi-Fi (/api/sensors)' : 'No Sensor Detected'}
             </span>
           </div>
         </div>

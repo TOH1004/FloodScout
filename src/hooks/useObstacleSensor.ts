@@ -12,8 +12,8 @@ export interface DistanceRecord {
 }
 
 export interface ObstacleSensorState {
-  distanceM: number;
-  distanceCm: number;
+  distanceM: number | null;
+  distanceCm: number | null;
   isObstacleDetected: boolean;
   status: ObstacleStatus;
   warningThresholdM: number;
@@ -38,13 +38,13 @@ export interface ObstacleSensorState {
 
 export function useObstacleSensor(): ObstacleSensorState {
   // Live hardware state from ESP32 HC-SR04 ultrasonic sensor
-  const [distanceM, setDistanceM] = useState<number>(0.17);
-  const [distanceCm, setDistanceCm] = useState<number>(17.0);
+  const [distanceM, setDistanceM] = useState<number | null>(null);
+  const [distanceCm, setDistanceCm] = useState<number | null>(null);
   const [warningThresholdM, setWarningThresholdM] = useState<number>(1.50);
   const [criticalThresholdM, setCriticalThresholdM] = useState<number>(0.60);
   const [autoBrakeArmed, setAutoBrakeArmed] = useState<boolean>(true);
   const [buzzerEnabled, setBuzzerEnabled] = useState<boolean>(false);
-  const [isHardwareConnected, setIsHardwareConnected] = useState<boolean>(true);
+  const [isHardwareConnected, setIsHardwareConnected] = useState<boolean>(false);
   const [dataSource, setDataSource] = useState<'live' | 'simulation'>('live');
   const [history, setHistory] = useState<DistanceRecord[]>([]);
 
@@ -52,8 +52,8 @@ export function useObstacleSensor(): ObstacleSensorState {
   const nextBeepTimeRef = useRef<number>(0);
 
   // Play proximity beep based on real measured distance
-  const playProximityBeep = useCallback((dist: number) => {
-    if (dist > warningThresholdM) return;
+  const playProximityBeep = useCallback((dist: number | null) => {
+    if (dist === null || dist > warningThresholdM) return;
     try {
       if (!audioContextRef.current) {
         const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
@@ -93,13 +93,15 @@ export function useObstacleSensor(): ObstacleSensorState {
 
   // Determine obstacle status based on real distance
   const status: ObstacleStatus =
-    distanceM <= criticalThresholdM
+    !isHardwareConnected || distanceM === null
+      ? 'OFFLINE'
+      : distanceM <= criticalThresholdM
       ? 'DANGER'
       : distanceM <= warningThresholdM
       ? 'CAUTION'
       : 'CLEAR';
 
-  const isObstacleDetected = distanceM <= warningThresholdM;
+  const isObstacleDetected = isHardwareConnected && distanceM !== null && distanceM <= warningThresholdM;
 
 
   // Poll ESP32 hardware directly and via backend proxy
@@ -118,19 +120,15 @@ export function useObstacleSensor(): ObstacleSensorState {
         });
         if (directRes.ok && isMounted) {
           const directData = await directRes.json();
-          if (directData && typeof directData.distance_cm === 'number') {
+          if (directData && directData.success && typeof directData.distance_cm === 'number') {
             const rawCm = directData.distance_cm;
             if (rawCm > 0 && rawCm <= 450.0) {
               setDistanceM(parseFloat((rawCm / 100.0).toFixed(2)));
               setDistanceCm(parseFloat(rawCm.toFixed(1)));
-            } else {
-              // -1.0 or >450cm indicates clear path beyond 4 meters
-              setDistanceM(4.0);
-              setDistanceCm(400.0);
+              setIsHardwareConnected(true);
+              setDataSource('live');
+              gotReading = true;
             }
-            setIsHardwareConnected(true);
-            setDataSource('live');
-            gotReading = true;
           }
         }
       } catch {
@@ -147,18 +145,15 @@ export function useObstacleSensor(): ObstacleSensorState {
         });
         if (proxyRes.ok && isMounted) {
           const proxyData = await proxyRes.json();
-          if (proxyData && typeof proxyData.distance_cm === 'number') {
+          if (proxyData && proxyData.success && typeof proxyData.distance_cm === 'number' && proxyData.distance_cm !== null) {
             const rawCm = proxyData.distance_cm;
             if (rawCm > 0 && rawCm <= 450.0) {
               setDistanceM(parseFloat((rawCm / 100.0).toFixed(2)));
               setDistanceCm(parseFloat(rawCm.toFixed(1)));
-            } else {
-              setDistanceM(4.0);
-              setDistanceCm(400.0);
+              setIsHardwareConnected(true);
+              setDataSource('live');
+              gotReading = true;
             }
-            setIsHardwareConnected(Boolean(proxyData.success));
-            setDataSource('live');
-            gotReading = true;
           }
         }
       } catch {
@@ -174,18 +169,15 @@ export function useObstacleSensor(): ObstacleSensorState {
         });
         if (vRes.ok && isMounted) {
           const vData = await vRes.json();
-          if (vData && typeof vData.distance_cm === 'number') {
+          if (vData && vData.success && typeof vData.distance_cm === 'number') {
             const rawCm = vData.distance_cm;
             if (rawCm > 0 && rawCm <= 450.0) {
               setDistanceM(parseFloat((rawCm / 100.0).toFixed(2)));
               setDistanceCm(parseFloat(rawCm.toFixed(1)));
-            } else {
-              setDistanceM(4.0);
-              setDistanceCm(400.0);
+              setIsHardwareConnected(true);
+              setDataSource('live');
+              gotReading = true;
             }
-            setIsHardwareConnected(true);
-            setDataSource('live');
-            gotReading = true;
           }
         }
       } catch {
@@ -194,6 +186,8 @@ export function useObstacleSensor(): ObstacleSensorState {
 
       if (!gotReading && isMounted) {
         setIsHardwareConnected(false);
+        setDistanceM(null);
+        setDistanceCm(null);
       }
     };
 
@@ -216,6 +210,10 @@ export function useObstacleSensor(): ObstacleSensorState {
 
   // Record history & trigger audio from real measurements
   useEffect(() => {
+    if (!isHardwareConnected || distanceM === null) {
+      return;
+    }
+
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
@@ -233,11 +231,13 @@ export function useObstacleSensor(): ObstacleSensorState {
     if (buzzerEnabled) {
       playProximityBeep(distanceM);
     }
-  }, [distanceM, status, buzzerEnabled, playProximityBeep]);
+  }, [distanceM, status, buzzerEnabled, playProximityBeep, isHardwareConnected]);
 
   const setManualDistance = useCallback((distM: number) => {
-    setDistanceM(Math.max(0.05, Math.min(4.5, parseFloat(distM.toFixed(2)))));
-    setDistanceCm(Math.round(distM * 100));
+    const clamped = Math.max(0.05, Math.min(4.5, parseFloat(distM.toFixed(2))));
+    setDistanceM(clamped);
+    setDistanceCm(Math.round(clamped * 100));
+    setIsHardwareConnected(true);
   }, []);
 
   return {

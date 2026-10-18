@@ -5,7 +5,8 @@ import {
   Camera, X, Cpu, Target, FileText,
   GripVertical, Eye, User, Users, ArrowUpDown,
   Navigation, Laptop, Maximize2, Minimize2, Wifi, Settings, Check, RefreshCw, Globe, Edit3, Radio,
-  History as HistoryIcon, AlertTriangle, Radar, Layers, ChevronDown
+  History as HistoryIcon, AlertTriangle, Radar, Layers, ChevronDown,
+  Battery, Play, Pause, RotateCcw, Shield, Download, Trash2, ZoomIn
 } from 'lucide-react';
 import { useDetectionApi, type RescueIncident } from '../hooks/useDetectionApi';
 import { RescueLocationAnalysis } from '../components/RescueLocationAnalysis';
@@ -17,6 +18,7 @@ import { WifiCameraModal } from '../components/WifiCameraModal';
 import { extractCameraHost } from '../config/camera';
 import FloodScoutLogo from '../components/common/FloodScoutLogo';
 import { useMotorTelemetry } from '../hooks/useMotorTelemetry';
+import { useObstacleSensor } from '../hooks/useObstacleSensor';
 import {
   DndContext,
   pointerWithin,
@@ -1718,38 +1720,38 @@ function PanelContent({
       const hasEntries = victimSortBy === 'person' ? manifestPersons.length > 0 : incidentsByTime.length > 0;
 
       return (
-        <div className="h-full overflow-y-auto p-4 space-y-3">
+        <div className="h-full overflow-y-auto p-4 space-y-3 bg-[#070c14] text-white">
           {/* Header & Arrangement Controls */}
-          <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-[#E6DFD5]">
-            <div className="flex items-center gap-1.5">
-              <User size={14} className="text-rose-600" />
-              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#183451]">
+          <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-white/10">
+            <div className="flex items-center gap-2">
+              <User size={15} className="text-rose-400" />
+              <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-white">
                 Victim Manifest ({victimSortBy === 'person' ? manifestPersons.length : incidentsByTime.length})
               </span>
             </div>
 
             {/* Arrangement Selector: By Person vs By TIME */}
-            <div className="flex items-center gap-1 bg-[#F3ECDE] p-0.5 rounded border border-[#E6DFD5] text-[10px] font-mono font-bold">
-              <span className="text-[9px] text-[#183451]/50 px-1 uppercase flex items-center gap-1">
+            <div className="flex items-center gap-1 bg-white/5 p-0.5 rounded-lg border border-white/10 text-[10px] font-mono font-bold">
+              <span className="text-[9px] text-white/50 px-1 uppercase flex items-center gap-1">
                 <ArrowUpDown size={10} /> Sort:
               </span>
               <button
                 onClick={() => setVictimSortBy('person')}
-                className={`px-2.5 py-0.5 rounded transition-all cursor-pointer ${
+                className={`px-2.5 py-1 rounded transition-all cursor-pointer ${
                   victimSortBy === 'person'
-                    ? 'bg-[#183451] text-white shadow-xs'
-                    : 'text-[#183451]/70 hover:text-[#183451] hover:bg-[#E6DFD5]'
+                    ? 'bg-[#27b1ff] text-white shadow-xs'
+                    : 'text-white/60 hover:text-white hover:bg-white/10'
                 }`}
-                title="Arrange by Person ID (highest number like Person #8 on top with cropped photo)"
+                title="Arrange by Person ID (highest number on top with cropped photo)"
               >
                 By Person
               </button>
               <button
                 onClick={() => setVictimSortBy('time')}
-                className={`px-2.5 py-0.5 rounded transition-all cursor-pointer ${
+                className={`px-2.5 py-1 rounded transition-all cursor-pointer ${
                   victimSortBy === 'time'
-                    ? 'bg-[#183451] text-white shadow-xs'
-                    : 'text-[#183451]/70 hover:text-[#183451] hover:bg-[#E6DFD5]'
+                    ? 'bg-[#27b1ff] text-white shadow-xs'
+                    : 'text-white/60 hover:text-white hover:bg-white/10'
                 }`}
                 title="Arrange by Time (original incident INC-... on top with cropped pictures)"
               >
@@ -1761,12 +1763,12 @@ function PanelContent({
           {/* Manifest Content */}
           {hasEntries ? (
             <div className="space-y-3">
-              {/* ── VIEW 1: BY PERSON (Person #8 on top with cropped picture) ── */}
+              {/* ── VIEW 1: BY PERSON ── */}
               {victimSortBy === 'person' &&
                 manifestPersons.map((v) => (
                   <div
                     key={v.personId}
-                    className="p-3 rounded bg-white border border-[#E6DFD5] hover:border-emerald-400 shadow-xs transition-all space-y-2.5"
+                    className="p-3.5 rounded-xl bg-[#0b121e] border border-white/10 hover:border-[#27b1ff]/40 shadow-lg transition-all space-y-2.5"
                   >
                     <div className="flex items-center justify-between gap-2.5">
                       {/* Left: Cropped Picture + Person ID Info */}
@@ -1774,7 +1776,7 @@ function PanelContent({
                         {v.cropUrl ? (
                           <div
                             onClick={() => onInspectIncident(v.incident, v.personId)}
-                            className="w-14 h-14 rounded-md overflow-hidden bg-black shrink-0 border border-slate-300 shadow-xs cursor-pointer hover:border-emerald-500 transition-all group relative"
+                            className="w-14 h-14 rounded-lg overflow-hidden bg-black shrink-0 border border-white/20 shadow-md cursor-pointer hover:border-emerald-400 transition-all group relative"
                             title={`Inspect ${v.label}`}
                           >
                             <img
@@ -1782,30 +1784,30 @@ function PanelContent({
                               alt={v.label}
                               className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                             />
-                            <div className="absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity">
-                              <Eye size={12} />
+                            <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity">
+                              <Eye size={14} />
                             </div>
                           </div>
                         ) : (
-                          <div className="w-12 h-12 rounded-full bg-[#183451] text-[#F3ECDE] font-mono font-bold text-xs flex items-center justify-center shadow-xs shrink-0">
+                          <div className="w-12 h-12 rounded-full bg-[#27b1ff]/20 text-[#27b1ff] border border-[#27b1ff]/40 font-mono font-bold text-xs flex items-center justify-center shadow-xs shrink-0">
                             #{v.personId}
                           </div>
                         )}
 
                         <div>
-                          <div className="font-mono font-bold text-sm text-[#183451] flex items-center gap-1.5">
+                          <div className="font-mono font-bold text-sm text-white flex items-center gap-2">
                             <span>{v.label}</span>
-                            <span className="text-[9px] font-mono text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded font-bold">
+                            <span className="text-[9px] font-mono text-emerald-300 bg-emerald-500/20 border border-emerald-500/30 px-1.5 py-0.5 rounded font-bold">
                               Score: {v.score.toFixed(2)}
                             </span>
                           </div>
-                          <div className="text-[10px] font-mono text-[#183451]/60 flex items-center gap-1.5 mt-0.5">
+                          <div className="text-[10px] font-mono text-white/60 flex items-center gap-1.5 mt-0.5">
                             <span>{v.incident.id}</span>
                             <span>•</span>
-                            <span className="flex items-center gap-0.5 text-[#183451]/80 font-semibold">
+                            <span className="flex items-center gap-0.5 text-white/80 font-semibold">
                               <Clock size={10} /> {v.time}
                             </span>
-                            <span className="text-[9px] bg-sky-100 text-sky-800 border border-sky-300 px-1.5 py-0.5 rounded font-bold font-mono">
+                            <span className="text-[9px] bg-sky-500/20 text-sky-300 border border-sky-500/30 px-1.5 py-0.5 rounded font-bold font-mono">
                               {v.captureCount} {v.captureCount === 1 ? 'photo' : 'photos'}
                             </span>
                           </div>
@@ -1815,16 +1817,16 @@ function PanelContent({
                       {/* Right: Inspect Button */}
                       <button
                         onClick={() => onInspectIncident(v.incident, v.personId)}
-                        className="bg-[#183451] hover:bg-[#1d3a5f] text-white px-2.5 py-1.5 rounded text-[10px] font-mono font-bold flex items-center gap-1 transition-colors shrink-0 cursor-pointer"
+                        className="bg-[#27b1ff] hover:bg-[#1a9fe6] text-white px-2.5 py-1.5 rounded-lg text-[10px] font-mono font-bold flex items-center gap-1.5 transition-all shadow-md shrink-0 cursor-pointer active:scale-95"
                       >
                         <Eye size={12} /> Inspect
                       </button>
                     </div>
 
                     {/* Person GPS Coordination & Track on Map */}
-                    <div className="flex items-center justify-between text-[11px] font-mono bg-rose-50 border border-rose-200/80 px-2.5 py-1.5 rounded text-rose-800">
+                    <div className="flex items-center justify-between text-[11px] font-mono bg-rose-500/10 border border-rose-500/25 px-2.5 py-1.5 rounded-lg text-rose-300">
                       <div className="flex items-center gap-1.5 font-bold">
-                        <MapPin size={12} className="text-rose-600 animate-pulse shrink-0" />
+                        <MapPin size={12} className="text-rose-400 animate-pulse shrink-0" />
                         <span>
                           {v.location ? `GPS: ${v.location[0].toFixed(6)}° N, ${v.location[1].toFixed(6)}° E` : 'GPS: No Location Detected'}
                         </span>
@@ -1832,7 +1834,7 @@ function PanelContent({
                       {v.location && onTrackPerson && (
                         <button
                           onClick={() => onTrackPerson(v.location!)}
-                          className="bg-[#183451] hover:bg-[#1d3a5f] text-[#F3ECDE] text-[10px] font-mono font-bold px-2 py-1 rounded flex items-center gap-1 transition-colors cursor-pointer shadow-xs active:scale-95"
+                          className="bg-white/10 hover:bg-white/20 text-white text-[10px] font-mono font-bold px-2 py-1 rounded flex items-center gap-1 transition-colors cursor-pointer border border-white/15 active:scale-95"
                           title="Locate person on Tactical Map"
                         >
                           <Navigation size={10} /> Track on Map
@@ -1841,14 +1843,14 @@ function PanelContent({
                     </div>
 
                     {v.description && (
-                      <p className="text-[11px] text-[#183451]/80 line-clamp-2 leading-tight bg-slate-50 p-2 rounded border border-slate-100 font-sans">
+                      <p className="text-[11px] text-white/80 line-clamp-2 leading-tight bg-white/5 p-2 rounded-lg border border-white/10 font-sans">
                         {v.description}
                       </p>
                     )}
                   </div>
                 ))}
 
-              {/* ── VIEW 2: BY TIME (Original INC-... with cropped pictures by time) ── */}
+              {/* ── VIEW 2: BY TIME ── */}
               {victimSortBy === 'time' &&
                 incidentsByTime.map((inc, incIdx) => {
                   const personList = inc.personDetails && inc.personDetails.length > 0
@@ -1863,25 +1865,25 @@ function PanelContent({
                   return (
                     <div
                       key={inc.id}
-                      className="p-3.5 rounded bg-white border border-[#E6DFD5] hover:border-emerald-400 shadow-xs transition-all space-y-3"
+                      className="p-3.5 rounded-xl bg-[#0b121e] border border-white/10 hover:border-[#27b1ff]/40 shadow-lg transition-all space-y-3"
                     >
                       {/* Incident Header: INC-... and Time */}
                       <div className="flex items-center justify-between text-xs">
                         <div className="flex items-center gap-2">
-                          <span className="font-mono font-bold text-sm text-[#183451]">{inc.id}</span>
-                          <span className="text-[9px] font-mono px-1.5 py-0.5 rounded font-bold uppercase bg-rose-100 text-rose-800 border border-rose-200">
+                          <span className="font-mono font-bold text-sm text-white">{inc.id}</span>
+                          <span className="text-[9px] font-mono px-1.5 py-0.5 rounded font-bold uppercase bg-rose-500/20 text-rose-300 border border-rose-500/30">
                             {inc.personCount} Person{inc.personCount > 1 ? 's' : ''}
                           </span>
                         </div>
-                        <div className="flex items-center gap-1 text-[11px] font-mono text-[#183451]/70 font-semibold">
-                          <Clock size={12} className="text-[#183451]/60" /> {inc.time}
+                        <div className="flex items-center gap-1 text-[11px] font-mono text-white/60 font-semibold">
+                          <Clock size={12} className="text-white/40" /> {inc.time}
                         </div>
                       </div>
 
                       {/* Incident GPS Coordination */}
-                      <div className="flex items-center justify-between text-[11px] font-mono bg-rose-50 border border-rose-200/80 px-2.5 py-1.5 rounded text-rose-800">
+                      <div className="flex items-center justify-between text-[11px] font-mono bg-rose-500/10 border border-rose-500/25 px-2.5 py-1.5 rounded-lg text-rose-300">
                         <div className="flex items-center gap-1.5 font-bold">
-                          <MapPin size={12} className="text-rose-600 animate-pulse shrink-0" />
+                          <MapPin size={12} className="text-rose-400 animate-pulse shrink-0" />
                           <span>
                             {incLocation ? `GPS: ${incLocation[0].toFixed(6)}° N, ${incLocation[1].toFixed(6)}° E` : 'GPS: No Location Detected'}
                           </span>
@@ -1889,7 +1891,7 @@ function PanelContent({
                         {incLocation && onTrackPerson && (
                           <button
                             onClick={() => onTrackPerson(incLocation)}
-                            className="bg-[#183451] hover:bg-[#1d3a5f] text-[#F3ECDE] text-[10px] font-mono font-bold px-2 py-1 rounded flex items-center gap-1 transition-colors cursor-pointer shadow-xs active:scale-95"
+                            className="bg-white/10 hover:bg-white/20 text-white text-[10px] font-mono font-bold px-2 py-1 rounded flex items-center gap-1 transition-colors cursor-pointer border border-white/15 active:scale-95"
                             title="Locate incident on Tactical Map"
                           >
                             <Navigation size={10} /> Track on Map
@@ -1900,12 +1902,12 @@ function PanelContent({
                       {/* Original Scene Image (INC-... full frame) */}
                       {inc.originalImageUrl && (
                         <div className="space-y-1">
-                          <div className="text-[10px] font-mono font-semibold uppercase text-[#183451]/70 flex items-center gap-1">
-                            <Eye size={11} className="text-blue-500" /> Original Capture:
+                          <div className="text-[10px] font-mono font-semibold uppercase text-white/60 flex items-center gap-1">
+                            <Eye size={11} className="text-sky-400" /> Original Capture:
                           </div>
                           <div
                             onClick={() => onInspectIncident(inc)}
-                            className="w-full rounded-md overflow-hidden border border-slate-200 bg-black cursor-pointer hover:border-emerald-400 transition-all group relative"
+                            className="w-full rounded-lg overflow-hidden border border-white/15 bg-black cursor-pointer hover:border-emerald-400 transition-all group relative"
                             style={{ maxHeight: '140px' }}
                           >
                             <img
@@ -1914,7 +1916,7 @@ function PanelContent({
                               className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform"
                               style={{ maxHeight: '140px', objectFit: 'cover' }}
                             />
-                            <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity">
+                            <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity">
                               <Eye size={16} />
                             </div>
                           </div>
@@ -1924,17 +1926,17 @@ function PanelContent({
                       {/* Cropped Pictures Row by Time */}
                       {personList.length > 0 && (
                         <div className="space-y-1.5">
-                          <div className="text-[10px] font-mono font-semibold uppercase text-[#183451]/70 flex items-center gap-1">
-                            <User size={11} className="text-emerald-600" /> Cropped Persons:
+                          <div className="text-[10px] font-mono font-semibold uppercase text-white/60 flex items-center gap-1">
+                            <User size={11} className="text-emerald-400" /> Cropped Persons:
                           </div>
                           <div className="flex flex-wrap gap-2">
                             {personList.map((p, idx) => (
                               <div
                                 key={idx}
                                 onClick={() => onInspectIncident(inc, p.id)}
-                                className="flex items-center gap-2 p-1.5 rounded bg-slate-50 border border-slate-200 hover:border-emerald-400 cursor-pointer transition-all group"
+                                className="flex items-center gap-2 p-1.5 rounded-lg bg-white/5 border border-white/10 hover:border-[#27b1ff]/50 cursor-pointer transition-all group"
                               >
-                                <div className="w-12 h-12 rounded overflow-hidden bg-black shrink-0 border border-slate-300">
+                                <div className="w-12 h-12 rounded overflow-hidden bg-black shrink-0 border border-white/20">
                                   <img
                                     src={`${detectionApi.apiBaseUrl}${p.imageUrl}`}
                                     alt={p.label}
@@ -1942,15 +1944,15 @@ function PanelContent({
                                   />
                                 </div>
                                 <div className="font-mono pr-1">
-                                  <div className="text-[11px] font-bold text-[#183451] flex items-center gap-1">
+                                  <div className="text-[11px] font-bold text-white flex items-center gap-1">
                                     <span>{p.label}</span>
                                     {(p as any).isReturning && (
-                                      <span className="text-[8px] bg-amber-100 text-amber-800 border border-amber-300 px-1 py-0.2 rounded font-bold uppercase tracking-wider">
+                                      <span className="text-[8px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1 py-0.2 rounded font-bold uppercase tracking-wider">
                                         Returning
                                       </span>
                                     )}
                                   </div>
-                                  <div className="text-[9px] text-emerald-700 font-semibold">
+                                  <div className="text-[9px] text-emerald-400 font-semibold">
                                     Score: {p.score !== undefined ? p.score.toFixed(2) : inc.highestConfidence.toFixed(2)}
                                   </div>
                                 </div>
@@ -1962,20 +1964,20 @@ function PanelContent({
 
                       {/* AI Description */}
                       {inc.description && (
-                        <p className="text-[11px] text-[#183451]/80 line-clamp-2 leading-tight bg-slate-50 p-2 rounded border border-slate-100 font-sans">
+                        <p className="text-[11px] text-white/80 line-clamp-2 leading-tight bg-white/5 p-2 rounded-lg border border-white/10 font-sans">
                           {inc.description}
                         </p>
                       )}
 
                       {/* Footer Actions */}
-                      <div className="flex items-center justify-between pt-1.5 border-t border-[#E6DFD5] text-[10px] font-mono">
+                      <div className="flex items-center justify-between pt-1.5 border-t border-white/10 text-[10px] font-mono">
                         <span
-                          className={`px-1.5 py-0.5 rounded uppercase font-bold text-[9px] ${
+                          className={`px-2 py-0.5 rounded uppercase font-bold text-[9px] border ${
                             inc.descriptionStatus === 'completed'
-                              ? 'bg-emerald-100 text-emerald-800'
+                              ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
                               : inc.descriptionStatus === 'pending'
-                              ? 'bg-amber-100 text-amber-800 animate-pulse'
-                              : 'bg-slate-100 text-slate-700'
+                              ? 'bg-amber-500/20 text-amber-300 border-amber-500/30 animate-pulse'
+                              : 'bg-white/5 text-white/50 border-white/10'
                           }`}
                         >
                           {inc.descriptionStatus === 'completed'
@@ -1986,7 +1988,7 @@ function PanelContent({
                         </span>
                         <button
                           onClick={() => onInspectIncident(inc)}
-                          className="bg-[#183451] hover:bg-[#1d3a5f] text-white px-2.5 py-1 rounded text-[10px] flex items-center gap-1 font-bold transition-colors cursor-pointer"
+                          className="bg-[#27b1ff] hover:bg-[#1a9fe6] text-white px-2.5 py-1 rounded text-[10px] flex items-center gap-1 font-bold transition-all shadow-sm cursor-pointer active:scale-95"
                         >
                           <Eye size={12} /> Inspect Incident
                         </button>
@@ -1998,14 +2000,14 @@ function PanelContent({
           ) : (
             /* Clean Empty State when no real victims have been detected */
             <div className="h-full flex flex-col items-center justify-center p-6 text-center space-y-3 my-auto">
-              <div className="w-12 h-12 rounded-full bg-[#183451]/5 border border-[#183451]/15 flex items-center justify-center text-[#183451]/60">
-                <Users size={24} />
+              <div className="w-14 h-14 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-[#27b1ff]">
+                <Users size={26} />
               </div>
               <div>
-                <h4 className="font-mono text-xs font-bold text-[#183451] uppercase tracking-wider">
+                <h4 className="font-mono text-sm font-bold text-white uppercase tracking-wider">
                   No Victims Currently Detected
                 </h4>
-                <p className="text-[11px] text-[#183451]/60 mt-1 max-w-xs leading-relaxed">
+                <p className="text-xs text-white/60 mt-1 max-w-sm leading-relaxed">
                   OpenCV HOG + SVM person detector is actively monitoring the live video stream. Detected persons (Person #1, Person #2) will appear here in real-time.
                 </p>
               </div>
@@ -2269,11 +2271,522 @@ function LayoutRenderer({
   );
 }
 
+// ─── High-Tech Obstacle Sensor Line (Below Tactical Map) ─────────────────────
+function ObstacleSensorLine({ sensor }: { sensor: ReturnType<typeof useObstacleSensor> }) {
+  const {
+    distanceM,
+    distanceCm,
+    status,
+    isHardwareConnected,
+    autoBrakeArmed,
+  } = sensor;
+
+  const isDanger = status === 'DANGER';
+  const isCaution = status === 'CAUTION';
+  const isClear = status === 'CLEAR';
+
+  const badgeStyle = isDanger
+    ? 'bg-rose-500 text-white border-rose-600 animate-pulse font-bold shadow-[0_0_10px_rgba(244,63,94,0.6)]'
+    : isCaution
+    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 font-bold'
+    : isClear
+    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 font-bold'
+    : 'bg-slate-800 text-slate-400 border-slate-700';
+
+  const clampedDist = distanceM !== null ? Math.max(0.2, Math.min(4.0, distanceM)) : 4.0;
+  const pct = ((clampedDist - 0.2) / 3.8) * 100;
+
+  return (
+    <div className="bg-[#080d14] border-t border-white/10 px-4 py-3 min-h-[68px] sm:min-h-[74px] flex items-center justify-between gap-4 font-mono shrink-0 select-none">
+      {/* Sensor Status */}
+      <div className="flex items-center gap-2.5 shrink-0">
+        <div className="relative flex items-center justify-center w-8 h-8 rounded-lg bg-white/5 border border-white/10">
+          <Radar size={18} className={isDanger ? 'text-rose-400 animate-spin' : isCaution ? 'text-amber-400' : 'text-[#27b1ff]'} />
+          {isDanger && (
+            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping" />
+          )}
+        </div>
+        <div className="flex flex-col">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-white/80">
+            Obstacle Sensor
+          </span>
+          <span className={`text-[9px] px-2 py-0.5 rounded-full border tracking-wider uppercase inline-block text-center mt-0.5 ${badgeStyle}`}>
+            {isHardwareConnected ? status : 'STANDBY'}
+          </span>
+        </div>
+      </div>
+
+      {/* Proximity Gauge Line (Taller & High-Tech) */}
+      <div className="flex-1 max-w-sm hidden sm:flex flex-col gap-1">
+        <div className="flex justify-between text-[9px] text-white/50 font-mono font-semibold">
+          <span className="text-rose-400 font-bold">0.6m CRITICAL</span>
+          <span className="text-amber-400 font-bold">1.5m WARNING</span>
+          <span>4.0m MAX</span>
+        </div>
+        <div className="h-3 w-full bg-slate-950 border border-white/15 rounded-full overflow-hidden relative shadow-inner">
+          <div className="absolute left-0 top-0 bottom-0 w-[15%] bg-rose-500/30 border-r border-rose-500/60" />
+          <div className="absolute left-[15%] top-0 bottom-0 w-[25%] bg-amber-500/25 border-r border-amber-500/50" />
+          <div
+            className={`h-full rounded-full transition-all duration-150 ${
+              isDanger
+                ? 'bg-rose-500 shadow-[0_0_12px_#f43f5e]'
+                : isCaution
+                ? 'bg-amber-400 shadow-[0_0_10px_#fbbf24]'
+                : 'bg-emerald-400 shadow-[0_0_8px_#34d399]'
+            }`}
+            style={{ width: `${Math.max(4, Math.min(100, pct))}%` }}
+          />
+        </div>
+      </div>
+
+      {/* Range Readout & Brake Status */}
+      <div className="flex items-center gap-3 shrink-0">
+        <div className="flex flex-col items-end">
+          <span className="text-[9px] text-white/40 uppercase tracking-widest font-semibold">Detection Range</span>
+          <div className="flex items-baseline gap-1">
+            <span className={`text-xl font-black font-mono leading-none ${
+              isDanger ? 'text-rose-400 animate-pulse' : isCaution ? 'text-amber-300' : distanceM !== null ? 'text-emerald-300' : 'text-white/40'
+            }`}>
+              {distanceM !== null ? `${distanceM.toFixed(2)}m` : '—'}
+            </span>
+            {distanceCm !== null && (
+              <span className="text-[10px] text-white/40 font-mono">({distanceCm}cm)</span>
+            )}
+          </div>
+        </div>
+
+        <span className={`text-[10px] px-2 py-1 rounded-lg font-bold uppercase tracking-wider hidden lg:inline border shadow-xs ${
+          autoBrakeArmed ? 'bg-sky-500/20 text-sky-300 border-sky-500/40' : 'bg-slate-800 text-slate-500 border-slate-700'
+        }`}>
+          {autoBrakeArmed ? 'Brake: Armed' : 'Brake: Off'}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ─── DroneSense Cockpit Telemetry HUD ─────────────────────────────────────────
+function DroneSenseHudCluster({
+  panTilt,
+  motorTelemetry,
+  robotSpeed,
+  robotHeading,
+  waterDepth,
+  batteryLevel,
+  departureTime,
+  elapsedMin,
+  operatingMode,
+  onToggleMode,
+  onPauseMission,
+  onReturnHome,
+  onEmergencyStop,
+}: {
+  panTilt: UsePanTiltReturn;
+  motorTelemetry: ReturnType<typeof useMotorTelemetry>;
+  robotSpeed: number;
+  robotHeading: number;
+  waterDepth: number;
+  batteryLevel: number;
+  departureTime: string;
+  elapsedMin: number;
+  operatingMode: string;
+  onToggleMode: () => void;
+  onPauseMission: () => void;
+  onReturnHome: () => void;
+  onEmergencyStop: () => void;
+}) {
+  const pct = Math.round(Math.max(0, Math.min(100, batteryLevel)));
+  const barCount = 5;
+  const activeBars = Math.ceil((pct / 100) * barCount);
+  const batteryColor = pct > 50 ? 'bg-emerald-400' : pct > 20 ? 'bg-amber-400' : 'bg-rose-400';
+  const batteryTextColor = pct > 50 ? 'text-emerald-400' : pct > 20 ? 'text-amber-400' : 'text-rose-400';
+
+  return (
+    <div className="bg-[#070b10] border-t border-white/10 shrink-0 select-none flex flex-col">
+      {/* 5-Column Flight Instrument Cockpit */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 divide-x divide-white/10 py-2.5 px-3">
+
+        {/* 1. DUAL GIMBAL (PAN 360° & TILT 90°) */}
+        <div className="flex flex-col items-center justify-center gap-1 px-1 py-1 font-mono">
+          <span className="text-[9px] uppercase tracking-widest text-white/40">Gimbal (Pan &amp; Tilt)</span>
+          <div className="flex items-center justify-center gap-3">
+            {/* PAN GIMBAL (0 - 360°) */}
+            <div className="flex flex-col items-center gap-0.5">
+              <div className="relative w-9 h-9">
+                <svg className="w-9 h-9" viewBox="0 0 36 36">
+                  {/* Dial Circle */}
+                  <circle cx="18" cy="18" r="16" fill="#0b1320" stroke="rgba(255,255,255,0.2)" strokeWidth="1.5" />
+                  {/* Cardinal Ticks */}
+                  <line x1="18" y1="2" x2="18" y2="5" stroke="rgba(255,255,255,0.4)" strokeWidth="1" />
+                  <line x1="34" y1="18" x2="31" y2="18" stroke="rgba(255,255,255,0.4)" strokeWidth="1" />
+                  <line x1="18" y1="34" x2="18" y2="31" stroke="rgba(255,255,255,0.4)" strokeWidth="1" />
+                  <line x1="2" y1="18" x2="5" y2="18" stroke="rgba(255,255,255,0.4)" strokeWidth="1" />
+                  {/* Pointer attached directly to center dot */}
+                  <g transform={`rotate(${panTilt.panAngle ?? 180}, 18, 18)`}>
+                    <line x1="18" y1="18" x2="18" y2="6" stroke="#27b1ff" strokeWidth="2.5" strokeLinecap="round" />
+                    <polygon points="18,3 15,7.5 21,7.5" fill="#27b1ff" />
+                  </g>
+                  {/* Center Dot */}
+                  <circle cx="18" cy="18" r="2.5" fill="#ffffff" stroke="#070c14" strokeWidth="0.5" />
+                </svg>
+              </div>
+              <div className="flex items-baseline gap-0.5 text-[9px]">
+                <span className="text-white/40">PAN:</span>
+                <span className="font-bold text-[#27b1ff]">{panTilt.panAngle ?? 180}°</span>
+              </div>
+            </div>
+
+            {/* TILT GIMBAL (0 - 90° ONLY) */}
+            <div className="flex flex-col items-center gap-0.5">
+              <div className="relative w-9 h-9">
+                <svg className="w-9 h-9" viewBox="0 0 36 36">
+                  {/* Dashed Inactive Boundary */}
+                  <circle cx="18" cy="18" r="16" fill="#0b1320" stroke="rgba(255,255,255,0.12)" strokeWidth="1" strokeDasharray="2,2" />
+                  {/* 90° Active Sector Arc (from 12 o'clock / 0° to 3 o'clock / 90°) */}
+                  <path
+                    d="M 18 2 A 16 16 0 0 1 34 18"
+                    fill="none"
+                    stroke="#f59e0b"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                  />
+                  {/* 0° and 90° Limits */}
+                  <line x1="18" y1="2" x2="18" y2="6" stroke="#f59e0b" strokeWidth="1.5" />
+                  <line x1="34" y1="18" x2="30" y2="18" stroke="#f59e0b" strokeWidth="1.5" />
+                  {/* Pointer attached directly to center dot, sweeps right when pressing UP */}
+                  <g transform={`rotate(${panTilt.tiltAngle ?? 45}, 18, 18)`}>
+                    <line x1="18" y1="18" x2="18" y2="6" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round" />
+                    <polygon points="18,3 15,7.5 21,7.5" fill="#f59e0b" />
+                  </g>
+                  {/* Center Dot */}
+                  <circle cx="18" cy="18" r="2.5" fill="#ffffff" stroke="#070c14" strokeWidth="0.5" />
+                </svg>
+              </div>
+              <div className="flex items-baseline gap-0.5 text-[9px]">
+                <span className="text-white/40">TILT:</span>
+                <span className="font-bold text-amber-400">{panTilt.tiltAngle ?? 45}°</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 2. VESSEL SPEED & DYNAMICS */}
+        <div className="flex flex-col items-center justify-center gap-0.5 px-2 py-1 font-mono">
+          <span className="text-[9px] uppercase tracking-widest text-white/40">Vessel Dynamics</span>
+          <div className="flex items-baseline gap-1">
+            <span className="text-xl font-black text-white">{robotSpeed.toFixed(1)}</span>
+            <span className="text-[9px] text-white/40">KM/H</span>
+            <span className="text-xs text-white/30 ml-1">({(robotSpeed * 0.621371).toFixed(1)} MPH)</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-[9px] text-white/60">
+            <span className="text-amber-300 font-bold">{motorTelemetry.motion.state}</span>
+            <span>•</span>
+            <span>L:{motorTelemetry.motion.left.percent}% R:{motorTelemetry.motion.right.percent}%</span>
+          </div>
+        </div>
+
+
+
+        {/* 4. DUAL BATTERY SYSTEM (THRUSTER & CAMERA) — VERTICAL */}
+        <div className="flex flex-col items-center justify-center gap-1 px-2 py-1 font-mono">
+          <span className="text-[9px] uppercase tracking-widest text-white/40 text-center">Dual Battery</span>
+          <div className="flex items-end justify-center gap-4">
+
+            {/* --- THRUSTER BATTERY (vertical) --- */}
+            <div className="flex flex-col items-center gap-1">
+              {/* Percentage label */}
+              <span className={`text-[9px] font-black ${batteryTextColor}`}>{pct}%</span>
+              {/* Battery body */}
+              <div className="flex flex-col items-center">
+                {/* Tip nub */}
+                <div className="w-3 h-1 rounded-t-sm bg-white/20 border border-white/20 border-b-0" />
+                {/* Segments container */}
+                <div className="w-6 h-8 bg-black/50 border border-white/20 rounded-b-sm rounded-t-none overflow-hidden flex flex-col-reverse relative">
+                  {/* Fill bar */}
+                  <div
+                    className={`w-full transition-all duration-700 ${batteryColor}`}
+                    style={{ height: `${pct}%` }}
+                  />
+                  {/* Segment dividers */}
+                  {[25, 50, 75].map((s) => (
+                    <div
+                      key={s}
+                      className="absolute left-0 right-0 border-t border-black/40"
+                      style={{ bottom: `${s}%` }}
+                    />
+                  ))}
+                </div>
+              </div>
+              <span className="text-[8px] text-white/40">Thrust</span>
+              <span className="text-[7px] text-white/30">{(10.8 + (pct / 100) * 1.8).toFixed(1)}V</span>
+            </div>
+
+            {/* --- CAMERA BATTERY (vertical) --- */}
+            <div className="flex flex-col items-center gap-1">
+              <span className="text-[9px] font-black text-[#27b1ff]">92%</span>
+              <div className="flex flex-col items-center">
+                <div className="w-3 h-1 rounded-t-sm bg-[#27b1ff]/30 border border-[#27b1ff]/40 border-b-0" />
+                <div className="w-6 h-8 bg-black/50 border border-[#27b1ff]/30 rounded-b-sm rounded-t-none overflow-hidden flex flex-col-reverse relative">
+                  <div
+                    className="w-full bg-[#27b1ff] shadow-[0_0_8px_#27b1ff80] transition-all duration-700"
+                    style={{ height: '92%' }}
+                  />
+                  {[25, 50, 75].map((s) => (
+                    <div
+                      key={s}
+                      className="absolute left-0 right-0 border-t border-black/40"
+                      style={{ bottom: `${s}%` }}
+                    />
+                  ))}
+                </div>
+              </div>
+              <span className="text-[8px] text-[#27b1ff]/80">Cam</span>
+              <span className="text-[7px] text-white/30">5.1V</span>
+            </div>
+
+          </div>
+        </div>
+
+        {/* 5. ESTIMATE OPERATION TIME (TO PC & UNTIL 20% BATTERY) */}
+        <div className="flex flex-col justify-center gap-1.5 px-3 py-1 font-mono col-span-2 sm:col-span-1">
+          <span className="text-[9px] uppercase tracking-widest text-white/40 text-center">Est Operation Time</span>
+          <div className="space-y-1 w-full text-[10px]">
+            {/* Section 1: To PC */}
+            <div className="flex items-center justify-between gap-1.5">
+              <span className="text-[9px] text-white/50 font-bold uppercase">To PC:</span>
+              <div className="flex items-baseline gap-1">
+                <span className="text-xs font-black text-sky-300">14m 20s</span>
+                <span className="text-[8px] text-white/40">(180m dist)</span>
+              </div>
+            </div>
+
+            {/* Section 2: Until 20% Battery */}
+            <div className="flex items-center justify-between gap-1.5">
+              <span className="text-[9px] text-amber-400 font-bold uppercase">Until 20% Batt:</span>
+              <div className="flex items-baseline gap-1">
+                <span className={`text-xs font-black ${pct > 30 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {Math.max(0, Math.round((pct - 20) * 0.45))}m 15s
+                </span>
+                <span className="text-[8px] text-white/40">({pct > 20 ? `${pct - 20}% safe` : 'LOW'})</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 6. HARDWARE STATUS */}
+        <div className="flex flex-col items-center justify-center gap-1.5 px-3 py-1 font-mono">
+          <span className="text-[9px] uppercase tracking-widest text-white/40 text-center">Hardware Status</span>
+          <div className="flex flex-col gap-1.5 w-full">
+            {([
+              { label: 'Sensor',  color: 'bg-emerald-400', glow: 'shadow-[0_0_6px_#34d399]', status: 'ONLINE' },
+              { label: 'Camera',  color: 'bg-[#27b1ff]',   glow: 'shadow-[0_0_6px_#27b1ff]', status: 'ONLINE' },
+              { label: 'Arm',   color: 'bg-amber-400',   glow: 'shadow-[0_0_6px_#fbbf24]', status: 'STANDBY' },
+              { label: 'GPS',     color: 'bg-emerald-400', glow: 'shadow-[0_0_6px_#34d399]', status: 'LOCK' },
+            ] as const).map(({ label, color, glow, status }) => (
+              <div key={label} className="flex items-center justify-between gap-2">
+                <span className="text-[9px] text-white/50 font-bold uppercase tracking-wider w-12">{label}</span>
+                <div className="flex items-center gap-1.5">
+                  <span className={`inline-block w-2 h-2 rounded-full ${color} ${glow} animate-pulse`} />
+                  <span className={`text-[9px] font-black tracking-wider ${
+                    status === 'ONLINE' || status === 'LOCK' ? 'text-emerald-400' :
+                    status === 'STANDBY' ? 'text-amber-400' : 'text-rose-400'
+                  }`}>{status}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Flight Action Strip (Matching DroneSense Bottom Bar) */}
+      <div className="bg-[#05080c] border-t border-white/10 px-4 py-2 flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
+        <div className="flex items-center gap-2">
+          {/* Autonomy / Control Toggle Button (Magenta vibrant styling) */}
+          <button
+            onClick={onToggleMode}
+            className={`px-3 py-1 rounded font-bold uppercase tracking-wider text-[10px] flex items-center gap-1.5 transition-all cursor-pointer shadow-md active:scale-95 ${
+              operatingMode === 'AUTO_SEARCH'
+                ? 'bg-fuchsia-600 hover:bg-fuchsia-500 text-white shadow-fuchsia-600/30'
+                : 'bg-[#27b1ff] hover:bg-[#1a9fe6] text-white shadow-[#27b1ff]/30'
+            }`}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
+            <span>YOU HAVE CONTROL • {operatingMode === 'AUTO_SEARCH' ? 'AUTONOMOUS' : 'MANUAL'}</span>
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onPauseMission}
+            className="px-2.5 py-1 rounded bg-white/5 hover:bg-white/10 text-white/70 hover:text-white border border-white/10 text-[10px] font-bold uppercase tracking-wider transition-colors flex items-center gap-1 cursor-pointer"
+          >
+            <Pause size={11} /> Pause Flight
+          </button>
+          <button
+            onClick={onReturnHome}
+            className="px-2.5 py-1 rounded bg-sky-500/10 hover:bg-sky-500/20 text-sky-300 border border-sky-500/30 text-[10px] font-bold uppercase tracking-wider transition-colors flex items-center gap-1 cursor-pointer"
+          >
+            <RotateCcw size={11} /> Return to Home
+          </button>
+          <button
+            onClick={onEmergencyStop}
+            className="px-2.5 py-1 rounded bg-rose-500/15 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-[10px] font-bold uppercase tracking-wider transition-colors flex items-center gap-1 cursor-pointer"
+          >
+            <X size={11} /> Emergency Stop
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Compact Navigation & Pan/Tilt Controls ──────────────────────────────────
+function NavigationControls({
+  panTilt,
+}: {
+  panTilt: UsePanTiltReturn;
+}) {
+  const pan = panTilt.panAngle ?? 180;
+  const tilt = panTilt.tiltAngle ?? 45;
+
+  return (
+    <div className="h-full flex flex-col bg-[#080d14] border-l border-white/10 overflow-y-auto p-3 text-white select-none">
+      <div className="flex items-center justify-between pb-2 border-b border-white/10 mb-3">
+        <span className="text-[10px] font-mono uppercase tracking-widest text-[#27b1ff] font-bold flex items-center gap-1.5">
+          <Compass size={12} /> Camera Pan &amp; Tilt Arm
+        </span>
+        <span className={`text-[8px] font-mono px-1.5 py-0.5 rounded font-bold uppercase tracking-wider ${
+          panTilt.connected ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-white/10 text-white/40'
+        }`}>
+          {panTilt.connected ? 'ESP32 Linked' : 'Simulated'}
+        </span>
+      </div>
+
+      {/* Live Readouts */}
+      <div className="grid grid-cols-2 gap-2 mb-3 font-mono">
+        <div className="bg-white/5 border border-white/10 rounded-lg p-2 flex flex-col">
+          <span className="text-[9px] text-white/40 uppercase tracking-wider">Pan Angle</span>
+          <div className="flex items-baseline gap-1 mt-0.5">
+            <span className="text-lg font-black text-[#27b1ff]">{pan}°</span>
+            <span className="text-[9px] text-white/30">/ 360°</span>
+          </div>
+        </div>
+        <div className="bg-white/5 border border-white/10 rounded-lg p-2 flex flex-col">
+          <span className="text-[9px] text-white/40 uppercase tracking-wider">Tilt Angle</span>
+          <div className="flex items-baseline gap-1 mt-0.5">
+            <span className="text-lg font-black text-amber-300">{tilt}°</span>
+            <span className="text-[9px] text-white/30">/ 90°</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Directional D-Pad */}
+      <div className="mb-4">
+        <div className="text-[9px] font-mono uppercase text-white/40 tracking-wider mb-2 text-center">
+          D-Pad (Tilt: 0-90° • Pan: 0-360°)
+        </div>
+        <div className="grid grid-cols-3 gap-2 max-w-[220px] mx-auto">
+          <div />
+          <button
+            onClick={() => panTilt.sendCommand('up')}
+            disabled={panTilt.isProcessing || tilt >= 90}
+            className="h-14 rounded-xl bg-white/5 hover:bg-[#27b1ff]/30 text-white border border-white/15 flex items-center justify-center transition-all active:scale-95 cursor-pointer disabled:opacity-40 shadow-inner"
+            title="Tilt Up (+5°, max 90°)"
+          >
+            <ArrowUp size={24} />
+          </button>
+          <div />
+
+          <button
+            onClick={() => panTilt.sendCommand('left')}
+            disabled={panTilt.isProcessing || pan <= 0}
+            className="h-14 rounded-xl bg-white/5 hover:bg-[#27b1ff]/30 text-white border border-white/15 flex items-center justify-center transition-all active:scale-95 cursor-pointer disabled:opacity-40 shadow-inner"
+            title="Pan Left (-10°, min 0°)"
+          >
+            <ArrowLeft size={24} />
+          </button>
+          <button
+            onClick={() => panTilt.sendCommand('center')}
+            disabled={panTilt.isProcessing}
+            className="h-14 rounded-xl bg-[#27b1ff]/20 hover:bg-[#27b1ff]/40 text-[#27b1ff] border border-[#27b1ff]/40 font-mono text-[10px] font-bold flex items-center justify-center active:scale-95 cursor-pointer shadow-inner"
+            title="Center 180° / 45°"
+          >
+            CTR
+          </button>
+          <button
+            onClick={() => panTilt.sendCommand('right')}
+            disabled={panTilt.isProcessing || pan >= 360}
+            className="h-14 rounded-xl bg-white/5 hover:bg-[#27b1ff]/30 text-white border border-white/15 flex items-center justify-center transition-all active:scale-95 cursor-pointer disabled:opacity-40 shadow-inner"
+            title="Pan Right (+10°, max 360°)"
+          >
+            <ArrowRight size={24} />
+          </button>
+
+          <div />
+          <button
+            onClick={() => panTilt.sendCommand('down')}
+            disabled={panTilt.isProcessing || tilt <= 0}
+            className="h-14 rounded-xl bg-white/5 hover:bg-[#27b1ff]/30 text-white border border-white/15 flex items-center justify-center transition-all active:scale-95 cursor-pointer disabled:opacity-40 shadow-inner"
+            title="Tilt Down (-5°, min 0°)"
+          >
+            <ArrowDown size={24} />
+          </button>
+          <div />
+        </div>
+      </div>
+
+      <div className="h-px bg-white/10 my-2" />
+
+
+
+      {/* Quick Presets */}
+      <div className="mt-auto pt-2 border-t border-white/10">
+        <div className="text-[8px] font-mono uppercase text-white/40 tracking-wider mb-1.5 text-center">
+          Quick Arm Presets
+        </div>
+        <div className="grid grid-cols-3 gap-1 text-[9px] font-mono">
+          <button
+            onClick={() => panTilt.setAngles(0, 45)}
+            className="py-1 rounded bg-white/5 hover:bg-white/10 text-white/70 hover:text-white border border-white/10 transition-colors cursor-pointer text-center"
+          >
+            Left 0°
+          </button>
+          <button
+            onClick={() => panTilt.setAngles(180, 45)}
+            className="py-1 rounded bg-[#27b1ff]/20 hover:bg-[#27b1ff]/30 text-[#27b1ff] border border-[#27b1ff]/30 transition-colors cursor-pointer text-center font-bold"
+          >
+            Center
+          </button>
+          <button
+            onClick={() => panTilt.setAngles(360, 45)}
+            className="py-1 rounded bg-white/5 hover:bg-white/10 text-white/70 hover:text-white border border-white/10 transition-colors cursor-pointer text-center"
+          >
+            Right 360°
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 export default function Dashboard() {
-  const { robotOnline, moveRobot, emergencyStop } = useRescue();
+  const {
+    robotOnline,
+    batteryLevel,
+    waterDepth,
+    robotSpeed,
+    robotHeading,
+    operatingMode,
+    setOperatingMode,
+    emergencyStop,
+    moveRobot,
+  } = useRescue();
   const detectionApi = useDetectionApi();
   const panTilt = usePanTilt();
+  const motorTelemetry = useMotorTelemetry();
+  const obstacleSensor = useObstacleSensor();
+  const [showWifiCameraModal, setShowWifiCameraModal] = useState<boolean>(false);
   const [inspectedIncident, setInspectedIncident] = useState<RescueIncident | null>(null);
   const [inspectedPersonId, setInspectedPersonId] = useState<number | null>(null);
   const [focusedLocation, setFocusedLocation] = useState<[number, number] | null>(null);
@@ -2478,32 +2991,104 @@ export default function Dashboard() {
 
   const activeDragDef = activeDrag ? PANEL_DEFS.find(p => p.id === activeDrag.panelId) : null;
 
-  return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={pointerWithin}
-      onDragStart={handleDragStart}
-      onDragOver={handleDragOver}
-      onDragEnd={handleDragEnd}
-    >
-    <div className="h-screen flex flex-col bg-[#F3ECDE] text-[#183451] font-sans overflow-hidden">
+  const [activeSection, setActiveSection] = useState<'camera' | 'victim' | 'operations'>('camera');
+  const [capturedPhotos, setCapturedPhotos] = useState<{ url: string; time: string; label: string }[]>([]);
+  const [photoPreview, setPhotoPreview] = useState<{ url: string; time: string; label: string } | null>(null);
+  const [cameraControlOpen, setCameraControlOpen] = useState(false);
+  const [missionStartTime] = useState(() => new Date());
+  const [departureTime] = useState(() => new Date().toLocaleTimeString());
+  const [takePhotoToast, setTakePhotoToast] = useState<string | null>(null);
 
-      {/* Header */}
-      <header className="bg-[#183451] text-[#F3ECDE] border-b border-[#1d3a5f] px-6 py-3.5 flex items-center justify-between gap-4 shrink-0 z-[999]">
-        <div className="flex items-center gap-4">
-          <Link to="/" className="flex items-center gap-2 text-xs font-semibold tracking-[0.2em] uppercase text-white hover:text-white bg-white/10 px-3.5 py-1.5 rounded-full transition-colors">
-            <ArrowLeft size={14} /> Back
+  const handleTakePhoto = () => {
+    const { videoFeedUrl, feedMode, cameraStreamUrl, backendOnline } = detectionApi;
+    const src = feedMode === 'direct' ? cameraStreamUrl : backendOnline ? videoFeedUrl : null;
+
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString();
+
+    // Try canvas capture for frozen snapshot if available
+    let snapshotUrl = src;
+    try {
+      const img = (document.querySelector('img[alt="FloodScout Live Stream"]') ||
+                   document.querySelector('img[alt="FloodScout Direct Wi-Fi Cam"]')) as HTMLImageElement;
+      if (img && img.naturalWidth > 0 && img.naturalHeight > 0) {
+        const cvs = document.createElement('canvas');
+        cvs.width = img.naturalWidth;
+        cvs.height = img.naturalHeight;
+        const ctx = cvs.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0);
+          snapshotUrl = cvs.toDataURL('image/jpeg', 0.9);
+        }
+      }
+    } catch {
+      // CORS fallback to live src
+    }
+
+    if (!snapshotUrl) return;
+
+    const newPhoto = {
+      url: snapshotUrl,
+      time: timeStr,
+      label: `Capture #${capturedPhotos.length + 1}`
+    };
+    setCapturedPhotos(prev => [newPhoto, ...prev]);
+
+    // Show only the words "Photo saved" without blanking the screen
+    setTakePhotoToast('Photo saved');
+    setTimeout(() => setTakePhotoToast(null), 2200);
+  };
+
+  const handleDeletePhoto = (idx: number) => {
+    setCapturedPhotos(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleDownloadPhoto = (photo: { url: string; label: string }) => {
+    const link = document.createElement('a');
+    link.href = photo.url;
+    link.download = `${photo.label.replace(/\s+/g, '_')}.jpg`;
+    link.target = '_blank';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const elapsedMin = Math.floor((Date.now() - missionStartTime.getTime()) / 60000);
+
+  const sidebarItems: { id: 'camera' | 'victim' | 'operations'; icon: React.ElementType; label: string }[] = [
+    { id: 'camera',     icon: Camera,   label: 'Camera'     },
+    { id: 'victim',     icon: Target,   label: 'Victim'     },
+    { id: 'operations', icon: FileText, label: 'Operations' },
+  ];
+
+  return (
+    <div className="h-screen flex flex-col bg-[#070b11] text-white font-sans overflow-hidden relative">
+
+      {/* Photo Capture Toast Notification (Shows only words 'Photo saved', no blanking screen) */}
+      {takePhotoToast && (
+        <div className="absolute top-16 right-6 z-[1050] bg-black/85 backdrop-blur-md text-emerald-300 font-mono text-xs font-bold px-4 py-2 rounded-lg shadow-2xl border border-emerald-500/40 flex items-center gap-2 animate-in fade-in duration-150">
+          <Check size={14} className="text-emerald-400" />
+          <span>{takePhotoToast}</span>
+        </div>
+      )}
+
+      {/* ── TOP HEADER ─────────────────────────────────────────────── */}
+      <header className="bg-[#090e16] border-b border-white/10 px-4 py-2.5 flex items-center justify-between gap-4 shrink-0 z-[999]">
+        <div className="flex items-center gap-3">
+          <Link to="/" className="flex items-center gap-1.5 text-xs font-semibold tracking-widest uppercase text-white/70 hover:text-white bg-white/10 px-3 py-1.5 rounded-full transition-colors">
+            <ArrowLeft size={13} /> Back
           </Link>
-          <div className="border-l border-white/20 pl-4 flex items-center gap-2.5">
-            <FloodScoutLogo className="w-7 h-7" />
-            <span className="font-extrabold text-white tracking-widest text-lg uppercase font-sans">FloodScout</span>
-            <span className="ml-3 text-[11px] tracking-[0.25em] text-white/80 uppercase font-semibold hidden sm:inline">
-              Operations Command &amp; Control
+          <div className="border-l border-white/15 pl-3 flex items-center gap-2">
+            <FloodScoutLogo className="w-6 h-6" />
+            <span className="font-extrabold text-white tracking-widest text-base uppercase">FloodScout</span>
+            <span className="text-[10px] tracking-[0.2em] text-[#27b1ff] uppercase font-bold hidden sm:inline ml-2">
+              Operations Command
             </span>
           </div>
         </div>
+
         <div className="flex items-center gap-3">
-          {/* AI Vision Status Indicator (Clickable to configure AI Backend / ESP32 URLs) */}
+          {/* AI Backend status button */}
           <button
             type="button"
             onClick={() => {
@@ -2511,190 +3096,469 @@ export default function Dashboard() {
               setEsp32Input(panTilt.esp32Url);
               setShowConnectionModal(true);
             }}
-            className={`flex items-center gap-1.5 text-[11px] font-mono px-3 py-1 rounded-full border transition-all hover:opacity-90 active:scale-95 cursor-pointer ${
+            className={`flex items-center gap-1.5 text-[10px] font-mono px-2.5 py-1 rounded-full border transition-all cursor-pointer ${
               detectionApi.backendOnline && detectionApi.cameraStatus.connected
                 ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
                 : detectionApi.backendOnline
                 ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
-                : 'bg-slate-500/20 text-slate-300 border-slate-500/30'
+                : 'bg-red-500/20 text-red-300 border-red-500/30'
             }`}
-            title="Configure AI Backend & ESP32 connection URLs"
           >
-            <span className={`w-2 h-2 rounded-full shrink-0 ${detectionApi.backendOnline && detectionApi.cameraStatus.connected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${detectionApi.backendOnline && detectionApi.cameraStatus.connected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
             <span className="hidden sm:inline">
-              {detectionApi.backendOnline && detectionApi.cameraStatus.connected
-                ? 'AI VISION: ACTIVE'
-                : detectionApi.backendOnline
-                ? 'CAM DISCONNECTED'
-                : 'AI BACKEND: OFFLINE'}
+              {detectionApi.backendOnline && detectionApi.cameraStatus.connected ? 'AI VISION: ACTIVE' : detectionApi.backendOnline ? 'CAM DISCONNECTED' : 'AI BACKEND: OFFLINE'}
             </span>
-            <span className="sm:hidden font-bold">
-              {detectionApi.backendOnline ? 'AI: ON' : 'AI: OFF'}
-            </span>
-            <Settings size={12} className="opacity-75 ml-0.5" />
+            <Settings size={11} className="opacity-60 ml-0.5" />
           </button>
 
-          <div className={`flex items-center gap-2 text-[11px] font-mono px-3 py-1 rounded-full border ${robotOnline ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-rose-500/20 text-rose-300 border-rose-500/30'}`}>
-            <span className={`w-2 h-2 rounded-full ${robotOnline ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`} />
+          {/* Wi-Fi Setup Button */}
+          <button
+            type="button"
+            onClick={() => setShowWifiCameraModal(true)}
+            className="hidden md:flex items-center gap-1.5 text-[10px] font-mono px-2.5 py-1 rounded-full border border-sky-500/30 bg-sky-500/10 text-sky-300 hover:bg-sky-500/20 transition-all cursor-pointer"
+          >
+            <Wifi size={11} /> Wi-Fi Setup
+          </button>
+
+          {/* Robot Online */}
+          <div className={`flex items-center gap-1.5 text-[10px] font-mono px-2.5 py-1 rounded-full border ${robotOnline ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-rose-500/20 text-rose-300 border-rose-500/30'}`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${robotOnline ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`} />
             {robotOnline ? 'ONLINE' : 'OFFLINE'}
           </div>
-          <div className="font-mono text-white flex items-center gap-1.5 text-xs">
-            <Clock size={13} /> {time}
+
+          {/* Clock */}
+          <div className="font-mono text-white/60 flex items-center gap-1 text-xs">
+            <Clock size={12} /> {time}
           </div>
         </div>
       </header>
 
-      {/* Feature Dock + Layout Selector
-           Dock buttons are DRAGGABLE — drag them into the workspace to add/reorder panels */}
-      <div className="bg-white border-b border-[#E6DFD5] px-4 py-2.5 flex items-center justify-between shrink-0 overflow-x-auto">
-        <div className="flex items-center gap-1.5">
-          {PANEL_DEFS.map(p => (
-            <DockButton
-              key={p.id}
-              def={p}
-              isActive={hasPanel(layout, p.id)}
-              onToggle={() => togglePanel(p.id)}
-            />
+      {/* ── BODY: LEFT SIDEBAR + CONTENT ───────────────────────────── */}
+      <div className="flex flex-1 overflow-hidden min-h-0">
+
+        {/* ── LEFT ICON SIDEBAR ──────────────────────────────────────── */}
+        <aside className="w-16 bg-[#080c14] border-r border-white/10 flex flex-col items-center py-4 gap-2 shrink-0 select-none">
+          {sidebarItems.map(item => (
+            <button
+              key={item.id}
+              onClick={() => setActiveSection(item.id)}
+              title={item.label}
+              className={`w-11 h-11 flex flex-col items-center justify-center rounded-xl gap-1 transition-all text-[8px] font-bold uppercase tracking-wider cursor-pointer ${
+                activeSection === item.id
+                  ? 'bg-[#27b1ff]/20 text-[#27b1ff] border border-[#27b1ff]/40 shadow-sm shadow-[#27b1ff]/20'
+                  : 'text-white/40 hover:text-white/80 hover:bg-white/5'
+              }`}
+            >
+              <item.icon size={18} />
+              <span>{item.label}</span>
+            </button>
           ))}
-        </div>
+
+          {/* Divider */}
+          <div className="w-8 h-px bg-white/10 my-2" />
+
+          {/* Emergency Stop */}
+          <button
+            onClick={() => emergencyStop()}
+            title="Emergency Stop All Motors"
+            className="w-11 h-11 flex flex-col items-center justify-center rounded-xl gap-1 text-[8px] font-bold uppercase tracking-wider bg-rose-500/10 hover:bg-rose-500/30 text-rose-400 border border-rose-500/20 transition-all cursor-pointer"
+          >
+            <X size={18} />
+            <span>STOP</span>
+          </button>
+        </aside>
+
+        {/* ── MAIN CONTENT AREA ──────────────────────────────────────── */}
+        <main className="flex-1 overflow-hidden min-h-0 min-w-0">
+
+          {/* ══════════════════════ CAMERA SECTION ══════════════════════ */}
+          {activeSection === 'camera' && (
+            <div className="h-full flex flex-col overflow-hidden min-h-0">
+
+              {/* Camera top bar */}
+              <div className="bg-[#090e16] border-b border-white/10 px-4 py-2 flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-3">
+                  <span className="text-[10px] font-mono uppercase tracking-widest text-[#27b1ff] font-bold flex items-center gap-1.5">
+                    <Camera size={13} /> Camera View
+                  </span>
+                  {/* Feed mode toggle */}
+                  <div className="flex items-center bg-white/5 border border-white/10 rounded-md p-0.5 text-[9px] font-mono font-bold">
+                    <button
+                      onClick={() => detectionApi.setFeedMode('ai')}
+                      className={`px-2 py-0.5 rounded transition-all cursor-pointer flex items-center gap-1 ${detectionApi.feedMode === 'ai' ? 'bg-[#27b1ff] text-white shadow-xs' : 'text-white/40 hover:text-white'}`}
+                    >
+                      <Cpu size={10} /> AI Feed
+                    </button>
+                    <button
+                      onClick={() => detectionApi.setFeedMode('direct')}
+                      className={`px-2 py-0.5 rounded transition-all cursor-pointer flex items-center gap-1 ${detectionApi.feedMode === 'direct' ? 'bg-emerald-500 text-white shadow-xs' : 'text-white/40 hover:text-white'}`}
+                    >
+                      <Radio size={10} /> Direct Wi-Fi
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {/* Camera Controls Dropdown Toggle */}
+                  <button
+                    onClick={() => setCameraControlOpen(o => !o)}
+                    className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-[10px] font-mono font-bold transition-all cursor-pointer border ${cameraControlOpen ? 'bg-white/10 border-white/20 text-white' : 'border-white/10 text-white/50 hover:text-white'}`}
+                  >
+                    <Settings size={11} /> Controls {cameraControlOpen ? '▲' : '▼'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Camera Controls Dropdown (Upside camera section) */}
+              {cameraControlOpen && (
+                <div className="bg-[#0b121e] border-b border-white/10 px-4 py-3 shrink-0">
+                  <CameraSettingsPanel
+                    xiaoStatus={detectionApi.xiaoStatus}
+                    cameraSettings={detectionApi.cameraSettings}
+                    settingFeedback={detectionApi.settingFeedback}
+                    isUpdatingSetting={detectionApi.isUpdatingSetting}
+                    onUpdateSetting={detectionApi.updateCameraSetting}
+                  />
+                </div>
+              )}
+
+              {/* Main Camera Workspace: LEFT = Map + Obstacle Line | RIGHT = Cam Feed + Nav + HUD */}
+              <div className="flex-1 flex overflow-hidden min-h-0">
+
+                {/* ── LEFT COLUMN: Tactical Map + Obstacle Sensor Line ── */}
+                <div className="w-[40%] flex flex-col border-r border-white/10 overflow-hidden min-h-0 shrink-0">
+
+                  {/* Tactical Map */}
+                  <div className="flex-1 relative min-h-0 overflow-hidden">
+                    <div className="absolute top-2 left-2 z-10 bg-black/70 backdrop-blur-sm text-[9px] font-mono font-bold text-[#27b1ff] uppercase tracking-wider px-2 py-1 rounded border border-white/10">
+                      Tactical Map
+                    </div>
+                    <PanelContent
+                      id="map"
+                      detectionApi={detectionApi}
+                      panTilt={panTilt}
+                      onInspectIncident={handleInspectIncident}
+                      focusedLocation={focusedLocation}
+                      onTrackPerson={handleTrackPerson}
+                      onShowVictimManifest={handleShowVictimManifest}
+                    />
+                  </div>
+
+                  {/* Detected Obstacle in a Line (Information in Obstacle Sensor) */}
+                  <ObstacleSensorLine sensor={obstacleSensor} />
+                </div>
+
+                {/* ── RIGHT COLUMN: Water-Level Camera + Navigation + DroneSense HUD ── */}
+                <div className="flex-1 flex flex-col overflow-hidden min-h-0">
+
+                  {/* Camera feed + Navigation side-by-side */}
+                  <div className="flex-1 flex overflow-hidden min-h-0">
+
+                    {/* Water-level camera (main) */}
+                    <div className="flex-1 relative bg-slate-950 overflow-hidden">
+                      <div className="absolute top-2 left-2 z-10 flex items-center gap-1.5 bg-black/60 backdrop-blur-sm text-[9px] font-mono font-bold text-emerald-400 uppercase tracking-wider px-2 py-1 rounded border border-white/10">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        Water-Level Cam
+                      </div>
+
+                      {/* Right Camera Side Shutter Button (Circular DJI / DroneSense style) */}
+                      <div className="absolute right-3.5 top-1/2 -translate-y-1/2 z-20 flex flex-col items-center">
+                        <button
+                          type="button"
+                          onClick={handleTakePhoto}
+                          title="Take Photo (Capture Snapshot)"
+                          className="group relative w-12 h-12 rounded-full bg-[#141b26]/90 border-2 border-white/70 shadow-2xl flex items-center justify-center transition-all hover:scale-110 active:scale-95 cursor-pointer hover:border-white hover:shadow-[0_0_20px_rgba(255,255,255,0.45)]"
+                        >
+                          {/* Inner Solid White Shutter Disc */}
+                          <div className="w-7 h-7 rounded-full bg-white group-hover:bg-slate-100 group-active:bg-slate-300 transition-colors shadow-inner" />
+                        </button>
+                      </div>
+
+                      <PanelContent
+                        id="camera"
+                        detectionApi={detectionApi}
+                        panTilt={panTilt}
+                        onInspectIncident={handleInspectIncident}
+                        onShowVictimManifest={handleShowVictimManifest}
+                      />
+                    </div>
+
+                    {/* Navigation & Controls Section (Pan/Tilt Arm Only) */}
+                    <div className="w-[260px] shrink-0 overflow-hidden">
+                      <NavigationControls
+                        panTilt={panTilt}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Bottom Cockpit Flight Telemetry HUD (matching reference image) */}
+                  <DroneSenseHudCluster
+                    panTilt={panTilt}
+                    motorTelemetry={motorTelemetry}
+                    robotSpeed={robotSpeed}
+                    robotHeading={robotHeading}
+                    waterDepth={waterDepth}
+                    batteryLevel={batteryLevel}
+                    departureTime={departureTime}
+                    elapsedMin={elapsedMin}
+                    operatingMode={operatingMode}
+                    onToggleMode={() => {
+                      setOperatingMode(operatingMode === 'AUTO_SEARCH' ? 'MANUAL' : 'AUTO_SEARCH');
+                    }}
+                    onPauseMission={() => {
+                      setOperatingMode('MANUAL');
+                    }}
+                    onReturnHome={() => {
+                      setOperatingMode('RETURN_TO_BASE');
+                    }}
+                    onEmergencyStop={() => emergencyStop()}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ══════════════════════ VICTIM SECTION ══════════════════════ */}
+          {activeSection === 'victim' && (
+            <div className="h-full flex overflow-hidden min-h-0">
+
+              {/* Left: Tactical Map */}
+              <div className="w-[42%] flex flex-col border-r border-white/10 overflow-hidden min-h-0 shrink-0">
+                <div className="bg-[#090e16] border-b border-white/10 px-4 py-2 shrink-0 flex items-center gap-2">
+                  <MapPin size={12} className="text-[#27b1ff]" />
+                  <span className="text-[10px] font-mono uppercase tracking-widest text-[#27b1ff] font-bold">Tactical Map</span>
+                </div>
+                <div className="flex-1 overflow-hidden min-h-0">
+                  <PanelContent
+                    id="map"
+                    detectionApi={detectionApi}
+                    panTilt={panTilt}
+                    onInspectIncident={handleInspectIncident}
+                    focusedLocation={focusedLocation}
+                    onTrackPerson={handleTrackPerson}
+                    onShowVictimManifest={handleShowVictimManifest}
+                  />
+                </div>
+              </div>
+
+              {/* Right column: Victim Manifest + Detection Log */}
+              <div className="flex-1 flex flex-col overflow-hidden min-h-0">
+
+                {/* Victim Manifest */}
+                <div className="flex-1 overflow-hidden min-h-0 flex flex-col">
+                  <div className="bg-[#090e16] border-b border-white/10 px-4 py-2 shrink-0 flex items-center gap-2">
+                    <Users size={12} className="text-rose-400" />
+                    <span className="text-[10px] font-mono uppercase tracking-widest text-rose-400 font-bold">Victim Manifest</span>
+                    {detectionApi.detectionStatus.personCount != null && (
+                      <span className="ml-auto bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[9px] font-mono font-bold px-2 py-0.5 rounded-full">
+                        {detectionApi.detectionStatus.personCount} detected
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex-1 overflow-hidden min-h-0">
+                    <PanelContent
+                      id="victims"
+                      detectionApi={detectionApi}
+                      panTilt={panTilt}
+                      onInspectIncident={handleInspectIncident}
+                      focusedLocation={focusedLocation}
+                      onTrackPerson={handleTrackPerson}
+                      onShowVictimManifest={handleShowVictimManifest}
+                    />
+                  </div>
+                </div>
+
+                {/* Divider */}
+                <div className="h-px bg-white/10 shrink-0" />
+
+                {/* Detection Log (right down side) */}
+                <div className="h-[220px] shrink-0 flex flex-col overflow-hidden">
+                  <div className="bg-[#090e16] border-b border-white/10 px-4 py-2 shrink-0 flex items-center gap-2">
+                    <FileText size={12} className="text-slate-400" />
+                    <span className="text-[10px] font-mono uppercase tracking-widest text-slate-400 font-bold">Detection Log</span>
+                  </div>
+                  <div className="flex-1 overflow-hidden min-h-0">
+                    <PanelContent
+                      id="log"
+                      detectionApi={detectionApi}
+                      panTilt={panTilt}
+                      onInspectIncident={handleInspectIncident}
+                      onShowVictimManifest={handleShowVictimManifest}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ══════════════════════ OPERATIONS SECTION ══════════════════════ */}
+          {activeSection === 'operations' && (
+            <div className="h-full flex flex-col overflow-hidden bg-[#070b11]">
+              <div className="bg-[#090e16] border-b border-white/10 px-4 py-2.5 shrink-0 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <FileText size={13} className="text-[#27b1ff]" />
+                  <span className="text-[11px] font-mono uppercase tracking-widest text-[#27b1ff] font-bold">Operations</span>
+                  {capturedPhotos.length > 0 && (
+                    <span className="ml-2 bg-[#27b1ff]/20 text-[#27b1ff] border border-[#27b1ff]/30 text-[9px] font-mono font-bold px-2 py-0.5 rounded-full">
+                      {capturedPhotos.length} photo{capturedPhotos.length !== 1 ? 's' : ''}
+                    </span>
+                  )}
+                </div>
+
+                {capturedPhotos.length > 0 && (
+                  <button
+                    onClick={() => setCapturedPhotos([])}
+                    className="text-[10px] font-mono text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 px-2.5 py-1 rounded transition-colors cursor-pointer flex items-center gap-1"
+                  >
+                    <Trash2 size={11} /> Clear All
+                  </button>
+                )}
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-6">
+                {capturedPhotos.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center text-white/30 gap-4 select-none">
+                    <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/40 shadow-inner">
+                      <Camera size={32} />
+                    </div>
+                    <div className="text-center max-w-sm">
+                      <p className="font-mono text-sm font-bold uppercase tracking-widest text-white/70">
+                        No Operations Media Captured
+                      </p>
+                      <p className="text-xs text-white/40 mt-1.5 font-mono leading-relaxed">
+                        Click the <strong className="text-[#27b1ff]">"Take Photo"</strong> button in the Camera section to capture live mission snapshots into this operations gallery.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                    {capturedPhotos.map((photo, i) => (
+                      <div key={i} className="bg-[#0b121e] border border-white/10 rounded-xl overflow-hidden group hover:border-[#27b1ff]/50 transition-all flex flex-col shadow-lg">
+                        <div
+                          onClick={() => setPhotoPreview(photo)}
+                          className="aspect-video bg-slate-950 relative overflow-hidden cursor-pointer"
+                        >
+                          <img src={photo.url} alt={photo.label} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                          <div className="absolute top-1.5 left-1.5 bg-black/70 backdrop-blur-sm text-[8px] font-mono text-white/80 px-1.5 py-0.5 rounded border border-white/10">
+                            {photo.label}
+                          </div>
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white">
+                            <ZoomIn size={20} />
+                          </div>
+                        </div>
+
+                        <div className="px-3 py-2 flex items-center justify-between bg-[#080d14] border-t border-white/5">
+                          <div className="text-[10px] font-mono text-white/50">{photo.time}</div>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              onClick={() => handleDownloadPhoto(photo)}
+                              className="text-white/60 hover:text-white p-1 rounded hover:bg-white/10 transition-colors cursor-pointer"
+                              title="Download Photo"
+                            >
+                              <Download size={12} />
+                            </button>
+                            <button
+                              onClick={() => handleDeletePhoto(i)}
+                              className="text-white/40 hover:text-rose-400 p-1 rounded hover:bg-rose-500/10 transition-colors cursor-pointer"
+                              title="Delete Photo"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+        </main>
       </div>
 
-      {/* Workspace */}
-      <main className="flex-1 overflow-hidden p-3 min-h-0 relative">
-        <SortableContext items={PANEL_DEFS.filter(p => hasPanel(layout, p.id)).map(p => p.id)} strategy={rectSortingStrategy}>
-          <div className="absolute inset-3">
-            <LayoutRenderer
-              node={layout}
-              dropIndicator={dropIndicator}
-              onClose={(id) => setLayout(prev => removeNode(prev, id))}
-              detectionApi={detectionApi}
-              panTilt={panTilt}
-              onInspectIncident={handleInspectIncident}
-              focusedLocation={focusedLocation}
-              onTrackPerson={handleTrackPerson}
-              onMaximize={handleMaximizePanel}
-              isMaximized={isPanelMaximized}
-              onShowVictimManifest={handleShowVictimManifest}
-            />
+      {/* ── PHOTO FULL-SCREEN PREVIEW MODAL ─────────────────────────── */}
+      {photoPreview && (
+        <div className="fixed inset-0 z-[1200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+          <div className="bg-[#0b121e] border border-white/20 rounded-xl shadow-2xl max-w-4xl w-full overflow-hidden flex flex-col">
+            <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Camera size={14} className="text-[#27b1ff]" />
+                <span className="font-mono text-xs font-bold uppercase">{photoPreview.label}</span>
+                <span className="text-[10px] font-mono text-white/40 ml-2">{photoPreview.time}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleDownloadPhoto(photoPreview)}
+                  className="px-2.5 py-1 rounded bg-[#27b1ff] hover:bg-[#1a9fe6] text-white text-xs font-mono font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                >
+                  <Download size={12} /> Download
+                </button>
+                <button
+                  onClick={() => setPhotoPreview(null)}
+                  className="text-white/60 hover:text-white p-1 rounded hover:bg-white/10 transition-colors cursor-pointer"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+            <div className="bg-black flex items-center justify-center max-h-[70vh] p-2">
+              <img src={photoPreview.url} alt={photoPreview.label} className="max-h-[68vh] max-w-full object-contain" />
+            </div>
           </div>
-        </SortableContext>
-      </main>
+        </div>
+      )}
 
-      {/* Incident Inspector Modal */}
+      {/* ── INCIDENT MODAL ─────────────────────────────────────────── */}
       {inspectedIncident && (
         <IncidentModal
           incident={inspectedIncident}
           targetPersonId={inspectedPersonId}
           allIncidents={detectionApi.incidents}
           apiBaseUrl={detectionApi.apiBaseUrl}
-          onClose={() => {
-            setInspectedIncident(null);
-            setInspectedPersonId(null);
-          }}
+          onClose={() => { setInspectedIncident(null); setInspectedPersonId(null); }}
         />
       )}
 
-      {/* Connection & HTTPS Backend Settings Modal */}
+      {/* ── CONNECTION SETTINGS MODAL ──────────────────────────────── */}
       {showConnectionModal && (
-        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-[#183451] text-[#F3ECDE] border border-[#1d3a5f] rounded-xl shadow-2xl w-full max-w-lg overflow-hidden">
-            <div className="px-5 py-4 border-b border-[#1d3a5f] flex items-center justify-between">
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-[#0b121e] text-white border border-white/10 rounded-xl shadow-2xl w-full max-w-lg overflow-hidden">
+            <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Settings size={18} className="text-white" />
-                <h3 className="font-bold text-sm tracking-wider uppercase text-white">Connection &amp; Backend Settings</h3>
+                <Settings size={16} className="text-white" />
+                <h3 className="font-bold text-sm tracking-wider uppercase">Connection &amp; Backend Settings</h3>
               </div>
-              <button
-                type="button"
-                onClick={() => setShowConnectionModal(false)}
-                className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
-              >
-                <X size={18} />
+              <button type="button" onClick={() => setShowConnectionModal(false)} className="text-white/60 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer">
+                <X size={16} />
               </button>
             </div>
-
             <form onSubmit={handleSaveConnection} className="p-5 space-y-4 text-xs">
-              {/* Alert message if saved */}
               {connSavedMsg && (
                 <div className="p-2.5 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 flex items-center gap-2 font-mono">
-                  <Check size={14} /> {connSavedMsg}
+                  <Check size={13} /> {connSavedMsg}
                 </div>
               )}
-
-              {/* Mobile HTTPS Note */}
-              <div className="p-3 rounded-lg bg-[#0284C7]/15 border border-[#0284C7]/30 text-white space-y-1.5">
-                <div className="font-semibold text-white flex items-center gap-1.5">
-                  <Globe size={14} className="text-white" /> Mobile Phone / HTTPS Notice
-                </div>
-                <p className="leading-relaxed text-[11px]">
-                  When opening on a mobile phone over HTTPS (e.g. Vercel), mobile browsers block plain <code className="text-amber-300 font-mono">http://</code> backends. Run Cloudflare Tunnel on your laptop to get a secure HTTPS link:
-                </p>
-                <div className="font-mono bg-black/40 text-emerald-300 px-2.5 py-1.5 rounded select-all text-[11px] border border-white/5">
-                  cloudflared tunnel --url http://localhost:8000
-                </div>
-              </div>
-
-              {/* AI Backend URL */}
               <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <label className="font-semibold text-white uppercase tracking-wider text-[11px]">
-                    AI Detection Backend URL (HTTPS / HTTP)
-                  </label>
-                  <span className={`font-mono text-[10px] px-2 py-0.5 rounded-full ${
-                    detectionApi.backendOnline ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'
-                  }`}>
-                    {detectionApi.backendOnline ? 'CONNECTED' : 'DISCONNECTED'}
-                  </span>
-                </div>
+                <label className="font-semibold text-white uppercase tracking-wider text-[11px]">AI Detection Backend URL</label>
                 <input
-                  type="text"
-                  value={backendInput}
-                  onChange={(e) => setBackendInput(e.target.value)}
-                  placeholder="e.g. https://xxx.trycloudflare.com or http://localhost:8000"
-                  className="w-full bg-[#0E172C] border border-[#1d3a5f] rounded-lg px-3 py-2 text-white font-mono text-xs focus:outline-none focus:border-white/40"
+                  type="text" value={backendInput} onChange={e => setBackendInput(e.target.value)}
+                  placeholder="https://xxx.trycloudflare.com or http://localhost:8000"
+                  className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-white font-mono text-xs focus:outline-none focus:border-white/30"
                 />
-                <p className="text-[10px] text-white/50">
-                  Current: <code className="text-white font-mono">{detectionApi.apiBaseUrl}</code>
-                </p>
               </div>
-
-              {/* ESP32 URL */}
               <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <label className="font-semibold text-white uppercase tracking-wider text-[11px]">
-                    ESP32 Pan/Tilt Wi-Fi URL
-                  </label>
-                  <span className={`font-mono text-[10px] px-2 py-0.5 rounded-full ${
-                    panTilt.connected ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'
-                  }`}>
-                    {panTilt.connected ? 'ESP32 ONLINE' : 'ESP32 OFFLINE'}
-                  </span>
-                </div>
+                <label className="font-semibold text-white uppercase tracking-wider text-[11px]">ESP32 Pan/Tilt Wi-Fi URL</label>
                 <input
-                  type="text"
-                  value={esp32Input}
-                  onChange={(e) => setEsp32Input(e.target.value)}
-                  placeholder="e.g. http://10.133.81.149"
-                  className="w-full bg-[#0E172C] border border-[#1d3a5f] rounded-lg px-3 py-2 text-white font-mono text-xs focus:outline-none focus:border-white/40"
+                  type="text" value={esp32Input} onChange={e => setEsp32Input(e.target.value)}
+                  placeholder="http://10.133.81.149"
+                  className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-white font-mono text-xs focus:outline-none focus:border-white/30"
                 />
-                <p className="text-[10px] text-white/50">
-                  Current: <code className="text-white font-mono">{panTilt.esp32Url}</code> (proxied securely on HTTPS)
-                </p>
               </div>
-
-              {/* Actions */}
               <div className="pt-2 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowConnectionModal(false)}
-                  className="px-3.5 py-1.5 rounded-lg border border-[#1d3a5f] hover:bg-white/5 text-white/70 transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-1.5 rounded-lg bg-[#0284C7] hover:bg-[#0284C7]/80 text-white font-semibold transition-colors flex items-center gap-1.5 shadow-md shadow-[#0284C7]/20 cursor-pointer"
-                >
-                  <RefreshCw size={13} /> Save &amp; Reconnect
+                <button type="button" onClick={() => setShowConnectionModal(false)} className="px-3.5 py-1.5 rounded-lg border border-white/10 hover:bg-white/5 text-white/70 transition-colors cursor-pointer">Cancel</button>
+                <button type="submit" className="px-4 py-1.5 rounded-lg bg-[#27b1ff] hover:bg-[#1a9fe6] text-white font-semibold transition-colors flex items-center gap-1.5 cursor-pointer">
+                  <RefreshCw size={12} /> Save &amp; Reconnect
                 </button>
               </div>
             </form>
@@ -2702,18 +3566,15 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Drag ghost overlay */}
-      <DragOverlay>
-        {activeDragDef && (
-          <div className="bg-white border-2 border-[#183451] rounded-sm shadow-2xl px-4 py-2 flex items-center gap-2 opacity-90 rotate-2 pointer-events-none">
-            <GripVertical size={14} className="text-[#183451]/50" />
-            <activeDragDef.icon size={14} className="text-[#183451]" />
-            <span className="text-xs font-bold tracking-wider uppercase text-[#183451]">{activeDragDef.label}</span>
-          </div>
-        )}
-      </DragOverlay>
+      {/* ── WI-FI CAMERA MODAL ─────────────────────────────────────── */}
+      <WifiCameraModal
+        open={showWifiCameraModal}
+        onClose={() => setShowWifiCameraModal(false)}
+        cameraStreamUrl={detectionApi.cameraStreamUrl}
+        onSave={async (url) => { await detectionApi.setCameraStreamUrl(url); }}
+        isUpdating={detectionApi.isUpdatingCameraUrl}
+      />
 
     </div>
-    </DndContext>
   );
 }

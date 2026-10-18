@@ -63,6 +63,7 @@ export interface UsePanTiltReturn {
   esp32Url: string;
   setEsp32Url: (newUrl: string) => void;
   sendCommand: (command: PanTiltCommand | string) => Promise<PanTiltResponse | null>;
+  setAngles: (pan: number, tilt: number) => void;
   fetchStatus: () => Promise<void>;
   resetError: () => void;
 }
@@ -236,8 +237,8 @@ export async function fetchPanTiltStatus(customBaseUrl?: string): Promise<PanTil
 }
 
 export function usePanTilt(): UsePanTiltReturn {
-  const [panAngle, setPanAngle] = useState<number>(90);
-  const [tiltAngle, setTiltAngle] = useState<number>(90);
+  const [panAngle, setPanAngle] = useState<number>(180);
+  const [tiltAngle, setTiltAngle] = useState<number>(45);
   const [connected, setConnected] = useState<boolean>(false);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [lastCommand, setLastCommand] = useState<string | null>(null);
@@ -299,6 +300,20 @@ export function usePanTilt(): UsePanTiltReturn {
       const normalizedCmd = command.toLowerCase().trim();
       setLastCommand(normalizedCmd);
 
+      // Always update angles immediately when arrow buttons are clicked
+      if (normalizedCmd === 'left') {
+        setPanAngle(prev => Math.max(0, prev - 10));
+      } else if (normalizedCmd === 'right') {
+        setPanAngle(prev => Math.min(360, prev + 10));
+      } else if (normalizedCmd === 'up') {
+        setTiltAngle(prev => Math.min(90, prev + 5));
+      } else if (normalizedCmd === 'down') {
+        setTiltAngle(prev => Math.max(0, prev - 5));
+      } else if (normalizedCmd === 'center') {
+        setPanAngle(180);
+        setTiltAngle(45);
+      }
+
       try {
         const data = await sendPanTiltCommand(normalizedCmd, esp32Url);
         if (data && (data.connected === false || data.success === false)) {
@@ -307,24 +322,12 @@ export function usePanTilt(): UsePanTiltReturn {
         setConnected(true);
         setError(null);
 
-        // Update angles if returned by ESP32 or step estimation
+        // Sync with exact ESP32 servo feedback if provided
         if (typeof data.panAngle === 'number') {
-          setPanAngle(data.panAngle);
-        } else if (normalizedCmd === 'left') {
-          setPanAngle(prev => Math.max(0, prev - 5));
-        } else if (normalizedCmd === 'right') {
-          setPanAngle(prev => Math.min(180, prev + 5));
+          setPanAngle(Math.max(0, Math.min(360, data.panAngle)));
         }
-
         if (typeof data.tiltAngle === 'number') {
-          setTiltAngle(data.tiltAngle);
-        } else if (normalizedCmd === 'up') {
-          setTiltAngle(prev => Math.min(180, prev + 5));
-        } else if (normalizedCmd === 'down') {
-          setTiltAngle(prev => Math.max(0, prev - 5));
-        } else if (normalizedCmd === 'center') {
-          setPanAngle(90);
-          setTiltAngle(90);
+          setTiltAngle(Math.max(0, Math.min(90, data.tiltAngle)));
         }
 
         return data;
@@ -347,6 +350,11 @@ export function usePanTilt(): UsePanTiltReturn {
     },
     [esp32Url, setErrorWithTimeout]
   );
+
+  const setAngles = useCallback((pan: number, tilt: number) => {
+    setPanAngle(Math.max(0, Math.min(360, pan)));
+    setTiltAngle(Math.max(0, Math.min(90, tilt)));
+  }, []);
 
   // Periodically check status (heartbeat)
   useEffect(() => {
@@ -375,6 +383,7 @@ export function usePanTilt(): UsePanTiltReturn {
     esp32Url,
     setEsp32Url: updateEsp32Url,
     sendCommand,
+    setAngles,
     fetchStatus,
     resetError,
   };
